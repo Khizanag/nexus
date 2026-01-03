@@ -35,7 +35,6 @@ struct NexusTabBar: View {
                 }
         }
         .padding(.horizontal, 24)
-        .padding(.bottom, 8)
     }
 
     private func tabButton(for tab: Tab) -> some View {
