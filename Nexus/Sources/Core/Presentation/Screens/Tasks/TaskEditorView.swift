@@ -1,0 +1,173 @@
+import SwiftUI
+import SwiftData
+
+struct TaskEditorView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+
+    let task: TaskModel?
+
+    @State private var title: String
+    @State private var notes: String
+    @State private var priority: TaskPriority
+    @State private var dueDate: Date?
+    @State private var hasDueDate: Bool
+    @State private var hasReminder: Bool
+    @State private var reminderDate: Date?
+
+    @FocusState private var isTitleFocused: Bool
+
+    init(task: TaskModel?) {
+        self.task = task
+        _title = State(initialValue: task?.title ?? "")
+        _notes = State(initialValue: task?.notes ?? "")
+        _priority = State(initialValue: task?.priority ?? .medium)
+        _dueDate = State(initialValue: task?.dueDate)
+        _hasDueDate = State(initialValue: task?.dueDate != nil)
+        _hasReminder = State(initialValue: task?.reminderDate != nil)
+        _reminderDate = State(initialValue: task?.reminderDate)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("Task title", text: $title)
+                        .font(.nexusHeadline)
+                        .focused($isTitleFocused)
+
+                    TextField("Notes", text: $notes, axis: .vertical)
+                        .font(.nexusBody)
+                        .lineLimit(3...6)
+                }
+
+                Section {
+                    Picker("Priority", selection: $priority) {
+                        ForEach(TaskPriority.allCases, id: \.self) { priority in
+                            HStack {
+                                Circle()
+                                    .fill(colorForPriority(priority))
+                                    .frame(width: 8, height: 8)
+                                Text(priority.rawValue.capitalized)
+                            }
+                            .tag(priority)
+                        }
+                    }
+                }
+
+                Section {
+                    Toggle("Due Date", isOn: $hasDueDate.animation())
+
+                    if hasDueDate {
+                        DatePicker(
+                            "Date",
+                            selection: Binding(
+                                get: { dueDate ?? Date() },
+                                set: { dueDate = $0 }
+                            ),
+                            displayedComponents: [.date]
+                        )
+                    }
+                }
+
+                Section {
+                    Toggle("Reminder", isOn: $hasReminder.animation())
+
+                    if hasReminder {
+                        DatePicker(
+                            "Remind at",
+                            selection: Binding(
+                                get: { reminderDate ?? Date() },
+                                set: { reminderDate = $0 }
+                            ),
+                            displayedComponents: [.date, .hourAndMinute]
+                        )
+                    }
+                }
+
+                if task != nil {
+                    Section {
+                        Button(role: .destructive) {
+                            deleteTask()
+                        } label: {
+                            HStack {
+                                Image(systemName: "trash")
+                                Text("Delete Task")
+                            }
+                        }
+                    }
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(Color.nexusBackground)
+            .navigationTitle(task == nil ? "New Task" : "Edit Task")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Save") {
+                        saveTask()
+                    }
+                    .fontWeight(.semibold)
+                    .disabled(title.isEmpty)
+                }
+            }
+            .onAppear {
+                if task == nil {
+                    isTitleFocused = true
+                }
+            }
+        }
+    }
+
+    private func colorForPriority(_ priority: TaskPriority) -> Color {
+        switch priority {
+        case .low: .secondary
+        case .medium: .nexusBlue
+        case .high: .nexusOrange
+        case .urgent: .nexusRed
+        }
+    }
+
+    private func saveTask() {
+        let finalDueDate = hasDueDate ? dueDate : nil
+        let finalReminder = hasReminder ? reminderDate : nil
+
+        if let existingTask = task {
+            existingTask.title = title
+            existingTask.notes = notes
+            existingTask.priority = priority
+            existingTask.dueDate = finalDueDate
+            existingTask.reminderDate = finalReminder
+            existingTask.updatedAt = .now
+        } else {
+            let newTask = TaskModel(
+                title: title,
+                notes: notes,
+                priority: priority,
+                dueDate: finalDueDate,
+                reminderDate: finalReminder
+            )
+            modelContext.insert(newTask)
+        }
+
+        dismiss()
+    }
+
+    private func deleteTask() {
+        if let task {
+            modelContext.delete(task)
+        }
+        dismiss()
+    }
+}
+
+#Preview {
+    TaskEditorView(task: nil)
+        .preferredColorScheme(.dark)
+}
