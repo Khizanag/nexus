@@ -2,6 +2,8 @@ import SwiftUI
 import SwiftData
 
 struct HomeView: View {
+    @Environment(\.modelContext) private var modelContext
+
     @Query(sort: \NoteModel.updatedAt, order: .reverse)
     private var recentNotes: [NoteModel]
 
@@ -10,6 +12,13 @@ struct HomeView: View {
 
     @State private var greeting: String = ""
     @State private var showSettings = false
+    @State private var showNewNote = false
+    @State private var showNewTask = false
+    @State private var showNewTransaction = false
+    @State private var showHealthEntry = false
+    @State private var showInsights = false
+    @State private var selectedNote: NoteModel?
+    @State private var selectedTask: TaskModel?
 
     var body: some View {
         NavigationStack {
@@ -37,6 +46,27 @@ struct HomeView: View {
             }
             .sheet(isPresented: $showSettings) {
                 SettingsView()
+            }
+            .sheet(isPresented: $showNewNote) {
+                NoteEditorView(note: nil)
+            }
+            .sheet(isPresented: $showNewTask) {
+                TaskEditorView(task: nil)
+            }
+            .sheet(isPresented: $showNewTransaction) {
+                TransactionEditorView(transaction: nil)
+            }
+            .sheet(isPresented: $showHealthEntry) {
+                HealthEntryEditorView()
+            }
+            .sheet(isPresented: $showInsights) {
+                InsightsView()
+            }
+            .sheet(item: $selectedNote) { note in
+                NoteEditorView(note: note)
+            }
+            .sheet(item: $selectedTask) { task in
+                TaskEditorView(task: task)
             }
         }
         .onAppear {
@@ -72,25 +102,33 @@ struct HomeView: View {
                     title: "New Note",
                     icon: "square.and.pencil",
                     color: .notesColor
-                ) {}
+                ) {
+                    showNewNote = true
+                }
 
                 QuickActionCard(
                     title: "Add Task",
                     icon: "plus.circle",
                     color: .tasksColor
-                ) {}
+                ) {
+                    showNewTask = true
+                }
 
                 QuickActionCard(
                     title: "Log Expense",
                     icon: "creditcard",
                     color: .financeColor
-                ) {}
+                ) {
+                    showNewTransaction = true
+                }
 
                 QuickActionCard(
                     title: "Track Health",
                     icon: "heart",
                     color: .healthColor
-                ) {}
+                ) {
+                    showHealthEntry = true
+                }
             }
         }
     }
@@ -106,16 +144,18 @@ struct HomeView: View {
 
                 Spacer()
 
-                Button("View All") {}
-                    .font(.nexusSubheadline)
-                    .foregroundStyle(Color.nexusPurple)
+                Button("View All") {
+                    showInsights = true
+                }
+                .font(.nexusSubheadline)
+                .foregroundStyle(Color.nexusPurple)
             }
 
             NexusGlassCard {
                 HStack(spacing: 16) {
                     InsightItem(
                         title: "Tasks",
-                        value: "\(upcomingTasks.prefix(5).count)",
+                        value: "\(upcomingTasks.count)",
                         subtitle: "pending",
                         color: .tasksColor
                     )
@@ -135,7 +175,7 @@ struct HomeView: View {
 
                     InsightItem(
                         title: "Streak",
-                        value: "0",
+                        value: "\(calculateStreak())",
                         subtitle: "days",
                         color: .nexusGreen
                     )
@@ -168,6 +208,9 @@ struct HomeView: View {
                             subtitle: task.dueDate?.formatted(date: .abbreviated, time: .omitted) ?? "No due date",
                             color: .tasksColor
                         )
+                        .onTapGesture {
+                            selectedTask = task
+                        }
                     }
 
                     ForEach(recentNotes.prefix(3)) { note in
@@ -177,6 +220,9 @@ struct HomeView: View {
                             subtitle: note.updatedAt.formatted(date: .abbreviated, time: .shortened),
                             color: .notesColor
                         )
+                        .onTapGesture {
+                            selectedNote = note
+                        }
                     }
                 }
             }
@@ -211,6 +257,32 @@ struct HomeView: View {
         case 17..<21: greeting = "Good Evening"
         default: greeting = "Good Night"
         }
+    }
+
+    private func calculateStreak() -> Int {
+        let calendar = Calendar.current
+        var streak = 0
+        var currentDate = calendar.startOfDay(for: Date())
+
+        while true {
+            let hasActivity = recentNotes.contains { note in
+                calendar.isDate(note.updatedAt, inSameDayAs: currentDate)
+            } || upcomingTasks.contains { task in
+                if let completedAt = task.completedAt {
+                    return calendar.isDate(completedAt, inSameDayAs: currentDate)
+                }
+                return false
+            }
+
+            if hasActivity {
+                streak += 1
+                currentDate = calendar.date(byAdding: .day, value: -1, to: currentDate)!
+            } else {
+                break
+            }
+        }
+
+        return streak
     }
 }
 
