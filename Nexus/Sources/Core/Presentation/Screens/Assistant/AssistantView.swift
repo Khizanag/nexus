@@ -9,12 +9,14 @@ struct AssistantView: View {
     @Query(sort: \TaskModel.createdAt, order: .reverse) private var tasks: [TaskModel]
     @Query(sort: \TransactionModel.date, order: .reverse) private var transactions: [TransactionModel]
     @Query(sort: \HealthEntryModel.date, order: .reverse) private var healthEntries: [HealthEntryModel]
+    @Query(sort: \ChatMessageModel.timestamp, order: .forward) private var savedMessages: [ChatMessageModel]
 
     @State private var messages: [ChatMessage] = []
     @State private var inputText: String = ""
     @State private var isLoading: Bool = false
     @State private var showCapabilities = false
 
+    @State private var speechService = SpeechRecognitionService()
     @FocusState private var isInputFocused: Bool
 
     var body: some View {
@@ -47,9 +49,7 @@ struct AssistantView: View {
                             showCapabilities = true
                         }
                         Button("Clear Chat", systemImage: "trash", role: .destructive) {
-                            withAnimation {
-                                messages.removeAll()
-                            }
+                            clearAllMessages()
                         }
                     } label: {
                         Image(systemName: "ellipsis.circle")
@@ -59,6 +59,44 @@ struct AssistantView: View {
             .sheet(isPresented: $showCapabilities) {
                 CapabilitiesView()
             }
+            .onAppear {
+                loadSavedMessages()
+            }
+            .onChange(of: speechService.transcribedText) { _, newValue in
+                if !newValue.isEmpty {
+                    inputText = newValue
+                }
+            }
+        }
+    }
+
+    private func loadSavedMessages() {
+        messages = savedMessages.map { saved in
+            ChatMessage(
+                id: saved.id,
+                role: saved.role == "user" ? .user : .assistant,
+                content: saved.content,
+                timestamp: saved.timestamp
+            )
+        }
+    }
+
+    private func saveMessage(_ message: ChatMessage) {
+        let savedMessage = ChatMessageModel(
+            id: message.id,
+            role: message.role == .user ? "user" : "assistant",
+            content: message.content,
+            timestamp: message.timestamp
+        )
+        modelContext.insert(savedMessage)
+    }
+
+    private func clearAllMessages() {
+        withAnimation {
+            messages.removeAll()
+        }
+        for saved in savedMessages {
+            modelContext.delete(saved)
         }
     }
 
@@ -218,8 +256,35 @@ struct AssistantView: View {
     // MARK: - Input Bar
 
     private var inputBar: some View {
-        HStack(spacing: 12) {
-            TextField("Ask me anything...", text: $inputText, axis: .vertical)
+        HStack(spacing: 8) {
+            // Microphone button
+            Button {
+                speechService.toggleRecording()
+            } label: {
+                ZStack {
+                    Circle()
+                        .fill(speechService.isRecording ? Color.nexusRed : Color.nexusSurface)
+                        .frame(width: 44, height: 44)
+
+                    Image(systemName: speechService.isRecording ? "stop.fill" : "mic.fill")
+                        .font(.system(size: 18))
+                        .foregroundStyle(speechService.isRecording ? Color.white : Color.nexusPurple)
+                        .scaleEffect(speechService.isRecording ? 0.8 : 1.0)
+                }
+                .overlay {
+                    if speechService.isRecording {
+                        Circle()
+                            .stroke(Color.nexusRed.opacity(0.5), lineWidth: 2)
+                            .scaleEffect(1.2)
+                            .opacity(speechService.isRecording ? 1 : 0)
+                            .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: speechService.isRecording)
+                    }
+                }
+            }
+            .animation(.spring(response: 0.3), value: speechService.isRecording)
+
+            // Text field
+            TextField(speechService.isRecording ? "Listening..." : "Ask me anything...", text: $inputText, axis: .vertical)
                 .lineLimit(1...5)
                 .padding(12)
                 .background {
@@ -228,13 +293,16 @@ struct AssistantView: View {
                         .overlay {
                             RoundedRectangle(cornerRadius: 20)
                                 .strokeBorder(
+                                    speechService.isRecording ? Color.nexusRed.opacity(0.5) :
                                     isInputFocused ? Color.nexusPurple.opacity(0.5) : Color.nexusBorder,
-                                    lineWidth: isInputFocused ? 2 : 1
+                                    lineWidth: (isInputFocused || speechService.isRecording) ? 2 : 1
                                 )
                         }
                 }
                 .focused($isInputFocused)
+                .disabled(speechService.isRecording)
 
+            // Send button
             Button(action: sendMessage) {
                 ZStack {
                     Circle()
@@ -246,11 +314,11 @@ struct AssistantView: View {
                         .foregroundStyle(inputText.isEmpty ? Color.secondary : Color.white)
                 }
             }
-            .disabled(inputText.isEmpty || isLoading)
+            .disabled(inputText.isEmpty || isLoading || speechService.isRecording)
             .scaleEffect(inputText.isEmpty ? 1 : 1.05)
             .animation(.spring(response: 0.3), value: inputText.isEmpty)
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 12)
         .padding(.vertical, 12)
         .background {
             Rectangle()
@@ -268,6 +336,8 @@ struct AssistantView: View {
         withAnimation {
             messages.append(userMessage)
         }
+        saveMessage(userMessage)
+
         let currentInput = inputText
         inputText = ""
         isLoading = true
@@ -280,6 +350,7 @@ struct AssistantView: View {
             await MainActor.run {
                 withAnimation {
                     messages.append(response)
+                    saveMessage(response)
                     isLoading = false
                 }
             }
@@ -569,11 +640,25 @@ struct AssistantView: View {
 // MARK: - Chat Message Model
 
 struct ChatMessage: Identifiable {
-    let id = UUID()
+    let id: UUID
     let role: Role
     let content: String
-    let timestamp: Date = .now
+    let timestamp: Date
     var type: MessageType = .text
+
+    init(
+        id: UUID = UUID(),
+        role: Role,
+        content: String,
+        timestamp: Date = .now,
+        type: MessageType = .text
+    ) {
+        self.id = id
+        self.role = role
+        self.content = content
+        self.timestamp = timestamp
+        self.type = type
+    }
 
     enum Role {
         case user, assistant

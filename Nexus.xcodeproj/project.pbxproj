@@ -18,7 +18,6 @@
 		A10000030000000000000001 /* Exceptions for "Nexus" folder in "Nexus" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				Nexus.entitlements,
 				Package.swift,
 				Sources/App/Info.plist,
 			);
