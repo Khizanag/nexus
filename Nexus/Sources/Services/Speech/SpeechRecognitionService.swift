@@ -10,6 +10,13 @@ final class SpeechRecognitionService {
     var isRecording: Bool = false
     var isAuthorized: Bool = false
     var errorMessage: String?
+    var isSimulator: Bool {
+        #if targetEnvironment(simulator)
+        return true
+        #else
+        return false
+        #endif
+    }
 
     private var audioEngine: AVAudioEngine?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
@@ -37,6 +44,11 @@ final class SpeechRecognitionService {
     }
 
     func startRecording() {
+        #if targetEnvironment(simulator)
+        errorMessage = "Voice input requires a physical device. Simulator does not support microphone."
+        return
+        #endif
+
         guard let speechRecognizer, speechRecognizer.isAvailable else {
             errorMessage = "Speech recognition not available"
             return
@@ -88,6 +100,10 @@ final class SpeechRecognitionService {
 
         let inputNode = audioEngine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
+
+        guard recordingFormat.channelCount > 0 else {
+            throw SpeechError.audioEngineUnavailable
+        }
 
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
             self?.recognitionRequest?.append(buffer)
