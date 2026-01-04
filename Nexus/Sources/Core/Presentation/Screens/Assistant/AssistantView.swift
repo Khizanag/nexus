@@ -67,6 +67,18 @@ struct AssistantView: View {
                     inputText = newValue
                 }
             }
+            .alert("Voice Input", isPresented: .init(
+                get: { speechService.errorMessage != nil },
+                set: { if !$0 { speechService.errorMessage = nil } }
+            )) {
+                Button("OK") {
+                    speechService.errorMessage = nil
+                }
+            } message: {
+                if let error = speechService.errorMessage {
+                    Text(error)
+                }
+            }
         }
     }
 
