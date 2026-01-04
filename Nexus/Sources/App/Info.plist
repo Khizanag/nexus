@@ -49,5 +49,9 @@
 	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Nexus uses your health data to display your daily activity metrics like steps, calories, heart rate, and sleep. This helps you track your wellness goals in one place.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Nexus can save health entries you manually log to Apple Health for a unified health tracking experience.</string>
 </dict>
 </plist>
