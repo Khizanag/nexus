@@ -46,6 +46,7 @@ struct FinanceView: View {
             ScrollView {
                 VStack(spacing: 20) {
                     periodSelector
+                    CurrencyCalculatorCard()
                     summaryCard
                     transactionsList
                 }
