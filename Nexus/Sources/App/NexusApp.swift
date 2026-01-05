@@ -15,29 +15,42 @@ struct NexusApp: App {
         let auth = AuthenticationService(keychainService: keychainService)
         _authService = State(initialValue: auth)
 
-        do {
-            let schema = Schema([
-                NoteModel.self,
-                TaskModel.self,
-                SubtaskModel.self,
-                TransactionModel.self,
-                HealthEntryModel.self,
-                TagModel.self,
-                ChatMessageModel.self,
-                CurrencyRateCacheModel.self,
-                CurrencyPreferenceModel.self
-            ])
+        let schema = Schema([
+            NoteModel.self,
+            TaskModel.self,
+            SubtaskModel.self,
+            TransactionModel.self,
+            HealthEntryModel.self,
+            TagModel.self,
+            ChatMessageModel.self,
+            CurrencyRateCacheModel.self,
+            CurrencyPreferenceModel.self
+        ])
 
-            let cloudKitConfig = ModelConfiguration(
+        modelContainer = Self.createModelContainer(schema: schema)
+    }
+
+    private static func createModelContainer(schema: Schema) -> ModelContainer {
+        // Try CloudKit first if entitlements are configured
+        if let cloudContainer = try? ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(
                 "Nexus",
                 schema: schema,
                 cloudKitDatabase: .private("iCloud.com.nexus.app")
             )
+        ) {
+            return cloudContainer
+        }
 
-            modelContainer = try ModelContainer(
-                for: schema,
-                configurations: cloudKitConfig
+        // Fall back to local storage
+        do {
+            let localConfig = ModelConfiguration(
+                "Nexus",
+                schema: schema,
+                isStoredInMemoryOnly: false
             )
+            return try ModelContainer(for: schema, configurations: localConfig)
         } catch {
             fatalError("Failed to initialize ModelContainer: \(error)")
         }
