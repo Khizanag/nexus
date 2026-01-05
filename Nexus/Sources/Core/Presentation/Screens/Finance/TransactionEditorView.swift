@@ -4,6 +4,7 @@ import SwiftData
 struct TransactionEditorView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("currency") private var preferredCurrency = "USD"
 
     let transaction: TransactionModel?
 
@@ -13,6 +14,7 @@ struct TransactionEditorView: View {
     @State private var category: TransactionCategory
     @State private var date: Date
     @State private var notes: String
+    @State private var currency: Currency
 
     @FocusState private var isAmountFocused: Bool
 
@@ -24,6 +26,7 @@ struct TransactionEditorView: View {
         _category = State(initialValue: transaction?.category ?? .other)
         _date = State(initialValue: transaction?.date ?? .now)
         _notes = State(initialValue: transaction?.notes ?? "")
+        _currency = State(initialValue: transaction.flatMap { Currency(rawValue: $0.currency) } ?? .usd)
     }
 
     var body: some View {
@@ -41,10 +44,28 @@ struct TransactionEditorView: View {
                 }
 
                 Section {
-                    HStack {
-                        Text("$")
-                            .font(.nexusLargeTitle)
-                            .foregroundStyle(.secondary)
+                    HStack(spacing: 12) {
+                        Menu {
+                            ForEach(Currency.allCases) { curr in
+                                Button {
+                                    currency = curr
+                                } label: {
+                                    HStack {
+                                        Text(curr.flag)
+                                        Text(curr.rawValue)
+                                        Text(curr.symbol)
+                                            .foregroundStyle(.secondary)
+                                        if curr == currency {
+                                            Image(systemName: "checkmark")
+                                        }
+                                    }
+                                }
+                            }
+                        } label: {
+                            Text(currency.symbol)
+                                .font(.system(size: 32, weight: .bold, design: .rounded))
+                                .foregroundStyle(Color.nexusGreen)
+                        }
 
                         TextField("0.00", text: $amount)
                             .font(.system(size: 40, weight: .bold, design: .rounded))
@@ -107,6 +128,9 @@ struct TransactionEditorView: View {
             .onAppear {
                 if transaction == nil {
                     isAmountFocused = true
+                    if let defaultCurrency = Currency(rawValue: preferredCurrency) {
+                        currency = defaultCurrency
+                    }
                 }
             }
         }
@@ -118,6 +142,7 @@ struct TransactionEditorView: View {
         if let existingTransaction = transaction {
             existingTransaction.title = title
             existingTransaction.amount = amountValue
+            existingTransaction.currency = currency.rawValue
             existingTransaction.type = type
             existingTransaction.category = category
             existingTransaction.date = date
@@ -125,6 +150,7 @@ struct TransactionEditorView: View {
         } else {
             let newTransaction = TransactionModel(
                 amount: amountValue,
+                currency: currency.rawValue,
                 title: title,
                 notes: notes,
                 category: category,
