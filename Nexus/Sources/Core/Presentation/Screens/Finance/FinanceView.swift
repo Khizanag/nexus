@@ -498,7 +498,7 @@ private struct TransactionRow: View {
         }
     }
 
-    private var categoryColor: Color {
+    var categoryColor: Color {
         switch transaction.category.color {
         case "orange": .nexusOrange
         case "blue": .nexusBlue
@@ -516,7 +516,7 @@ private struct TransactionRow: View {
         }
     }
 
-    private var amountText: String {
+    var amountText: String {
         let prefix = transaction.type == .income ? "+" : "-"
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
@@ -555,7 +555,7 @@ private struct DateRangePickerSheet: View {
         }
     }
 
-    private var dateSelectionRow: some View {
+    var dateSelectionRow: some View {
         VStack(spacing: 16) {
             HStack {
                 VStack(alignment: .leading, spacing: 8) {
@@ -607,7 +607,7 @@ private struct DateRangePickerSheet: View {
         }
     }
 
-    private var quickSelectSection: some View {
+    var quickSelectSection: some View {
         VStack(spacing: 12) {
             Text("Quick Select")
                 .font(.nexusCaption)
@@ -626,13 +626,13 @@ private struct DateRangePickerSheet: View {
         }
     }
 
-    private func daysBetween() -> Int {
+    func daysBetween() -> Int {
         let calendar = Calendar.current
         let components = calendar.dateComponents([.day], from: startDate, to: endDate)
         return (components.day ?? 0) + 1
     }
 
-    private func quickSelectButton(_ title: String, days: Int) -> some View {
+    func quickSelectButton(_ title: String, days: Int) -> some View {
         Button {
             endDate = Date()
             startDate = Calendar.current.date(byAdding: .day, value: -(days - 1), to: endDate) ?? endDate
