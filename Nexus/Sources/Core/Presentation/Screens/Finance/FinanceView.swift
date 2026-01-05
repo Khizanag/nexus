@@ -8,6 +8,9 @@ struct FinanceView: View {
     @State private var showAddTransaction = false
     @State private var selectedTransaction: TransactionModel?
     @State private var selectedPeriod: TimePeriod = .month
+    @State private var rangeStartDate: Date = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
+    @State private var rangeEndDate: Date = Date()
+    @State private var showDateRangePicker = false
 
     private var periodTransactions: [TransactionModel] {
         let calendar = Calendar.current
@@ -15,12 +18,18 @@ struct FinanceView: View {
 
         return transactions.filter { transaction in
             switch selectedPeriod {
+            case .day:
+                return calendar.isDateInToday(transaction.date)
             case .week:
                 return calendar.isDate(transaction.date, equalTo: now, toGranularity: .weekOfYear)
             case .month:
                 return calendar.isDate(transaction.date, equalTo: now, toGranularity: .month)
             case .year:
                 return calendar.isDate(transaction.date, equalTo: now, toGranularity: .year)
+            case .range:
+                let startOfDay = calendar.startOfDay(for: rangeStartDate)
+                let endOfDay = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: rangeEndDate) ?? rangeEndDate
+                return transaction.date >= startOfDay && transaction.date <= endOfDay
             }
         }
     }
@@ -70,38 +79,90 @@ struct FinanceView: View {
             .sheet(item: $selectedTransaction) { transaction in
                 TransactionEditorView(transaction: transaction)
             }
+            .sheet(isPresented: $showDateRangePicker) {
+                DateRangePickerSheet(
+                    startDate: $rangeStartDate,
+                    endDate: $rangeEndDate
+                )
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
+            }
         }
     }
 
     private var periodSelector: some View {
-        HStack(spacing: 8) {
-            ForEach(TimePeriod.allCases) { period in
-                Button {
-                    withAnimation(.spring(response: 0.3)) {
-                        selectedPeriod = period
-                    }
-                } label: {
-                    Text(period.title)
-                        .font(.nexusSubheadline)
-                        .fontWeight(selectedPeriod == period ? .semibold : .regular)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background {
-                            if selectedPeriod == period {
-                                Capsule()
-                                    .fill(Color.nexusGreen)
+        VStack(spacing: 12) {
+            HStack(spacing: 6) {
+                ForEach(TimePeriod.allCases) { period in
+                    Button {
+                        withAnimation(.spring(response: 0.3)) {
+                            selectedPeriod = period
+                            if period == .range {
+                                showDateRangePicker = true
                             }
                         }
-                        .foregroundStyle(selectedPeriod == period ? .white : .secondary)
+                    } label: {
+                        Text(period.title)
+                            .font(.nexusCaption)
+                            .fontWeight(selectedPeriod == period ? .semibold : .regular)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background {
+                                if selectedPeriod == period {
+                                    Capsule()
+                                        .fill(Color.nexusGreen)
+                                }
+                            }
+                            .foregroundStyle(selectedPeriod == period ? .white : .secondary)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
+            }
+            .padding(4)
+            .background {
+                Capsule()
+                    .fill(Color.nexusSurface)
+            }
+
+            if selectedPeriod == .range {
+                dateRangeDisplay
             }
         }
-        .padding(4)
-        .background {
-            Capsule()
-                .fill(Color.nexusSurface)
+    }
+
+    private var dateRangeDisplay: some View {
+        Button {
+            showDateRangePicker = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "calendar")
+                    .foregroundStyle(Color.nexusGreen)
+                Text(formatDateRange())
+                    .font(.nexusSubheadline)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.nexusSurface)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 12)
+                            .strokeBorder(Color.nexusBorder, lineWidth: 1)
+                    }
+            }
         }
+        .buttonStyle(.plain)
+    }
+
+    private func formatDateRange() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d"
+        let start = formatter.string(from: rangeStartDate)
+        let end = formatter.string(from: rangeEndDate)
+        return "\(start) - \(end)"
     }
 
     private var summaryCard: some View {
@@ -210,12 +271,15 @@ struct FinanceView: View {
 // MARK: - Time Period
 
 private enum TimePeriod: String, CaseIterable, Identifiable {
-    case week, month, year
+    case day, week, month, year, range
 
     var id: String { rawValue }
 
     var title: String {
-        rawValue.capitalized
+        switch self {
+        case .range: "Range"
+        default: rawValue.capitalized
+        }
     }
 }
 
@@ -288,6 +352,62 @@ private struct TransactionRow: View {
         formatter.currencyCode = transaction.currency
         let amount = formatter.string(from: NSNumber(value: transaction.amount)) ?? "$0.00"
         return "\(prefix)\(amount)"
+    }
+}
+
+// MARK: - Date Range Picker Sheet
+
+private struct DateRangePickerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var startDate: Date
+    @Binding var endDate: Date
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Start Date")
+                        .font(.nexusSubheadline)
+                        .foregroundStyle(.secondary)
+                    DatePicker(
+                        "",
+                        selection: $startDate,
+                        in: ...endDate,
+                        displayedComponents: .date
+                    )
+                    .datePickerStyle(.graphical)
+                    .tint(Color.nexusGreen)
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("End Date")
+                        .font(.nexusSubheadline)
+                        .foregroundStyle(.secondary)
+                    DatePicker(
+                        "",
+                        selection: $endDate,
+                        in: startDate...,
+                        displayedComponents: .date
+                    )
+                    .datePickerStyle(.compact)
+                    .tint(Color.nexusGreen)
+                }
+
+                Spacer()
+            }
+            .padding(20)
+            .background(Color.nexusBackground)
+            .navigationTitle("Select Date Range")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+        }
     }
 }
 
