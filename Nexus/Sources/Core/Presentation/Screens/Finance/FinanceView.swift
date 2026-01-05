@@ -475,32 +475,71 @@ private struct DateRangePickerSheet: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 24) {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Start Date")
-                        .font(.nexusSubheadline)
+                VStack(spacing: 16) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Start Date")
+                                .font(.nexusCaption)
+                                .foregroundStyle(.secondary)
+                            DatePicker(
+                                "",
+                                selection: $startDate,
+                                in: ...endDate,
+                                displayedComponents: .date
+                            )
+                            .datePickerStyle(.compact)
+                            .labelsHidden()
+                            .tint(Color.nexusGreen)
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "arrow.right")
+                            .foregroundStyle(.tertiary)
+
+                        Spacer()
+
+                        VStack(alignment: .trailing, spacing: 8) {
+                            Text("End Date")
+                                .font(.nexusCaption)
+                                .foregroundStyle(.secondary)
+                            DatePicker(
+                                "",
+                                selection: $endDate,
+                                in: startDate...,
+                                displayedComponents: .date
+                            )
+                            .datePickerStyle(.compact)
+                            .labelsHidden()
+                            .tint(Color.nexusGreen)
+                        }
+                    }
+                    .padding(16)
+                    .background {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.nexusSurface)
+                    }
+
+                    Text("Selected: \(daysBetween()) days")
+                        .font(.nexusCaption)
                         .foregroundStyle(.secondary)
-                    DatePicker(
-                        "",
-                        selection: $startDate,
-                        in: ...endDate,
-                        displayedComponents: .date
-                    )
-                    .datePickerStyle(.graphical)
-                    .tint(Color.nexusGreen)
                 }
 
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("End Date")
-                        .font(.nexusSubheadline)
+                VStack(spacing: 12) {
+                    Text("Quick Select")
+                        .font(.nexusCaption)
                         .foregroundStyle(.secondary)
-                    DatePicker(
-                        "",
-                        selection: $endDate,
-                        in: startDate...,
-                        displayedComponents: .date
-                    )
-                    .datePickerStyle(.compact)
-                    .tint(Color.nexusGreen)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    LazyVGrid(columns: [
+                        GridItem(.flexible()),
+                        GridItem(.flexible())
+                    ], spacing: 12) {
+                        quickSelectButton("Last 7 Days", days: 7)
+                        quickSelectButton("Last 14 Days", days: 14)
+                        quickSelectButton("Last 30 Days", days: 30)
+                        quickSelectButton("Last 90 Days", days: 90)
+                    }
                 }
 
                 Spacer()
@@ -518,6 +557,31 @@ private struct DateRangePickerSheet: View {
                 }
             }
         }
+    }
+
+    private func daysBetween() -> Int {
+        let calendar = Calendar.current
+        let components = calendar.dateComponents([.day], from: startDate, to: endDate)
+        return (components.day ?? 0) + 1
+    }
+
+    private func quickSelectButton(_ title: String, days: Int) -> some View {
+        Button {
+            endDate = Date()
+            startDate = Calendar.current.date(byAdding: .day, value: -(days - 1), to: endDate) ?? endDate
+        } label: {
+            Text(title)
+                .font(.nexusSubheadline)
+                .fontWeight(.medium)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.nexusSurfaceSecondary)
+                }
+                .foregroundStyle(.primary)
+        }
+        .buttonStyle(.plain)
     }
 }
 
