@@ -30,8 +30,20 @@ private extension DependencyContainer {
         }
         .inObjectScope(.container)
 
-        container.register(SyncServiceProtocol.self) { _ in
-            SyncService()
+        container.register(KeychainServiceProtocol.self) { _ in
+            KeychainService()
+        }
+        .inObjectScope(.container)
+
+        container.register(AuthenticationServiceProtocol.self) { resolver in
+            let keychainService = resolver.resolve(KeychainServiceProtocol.self)!
+            return AuthenticationService(keychainService: keychainService)
+        }
+        .inObjectScope(.container)
+
+        container.register(SyncServiceProtocol.self) { resolver in
+            let authService = resolver.resolve(AuthenticationServiceProtocol.self)!
+            return SyncService(authService: authService)
         }
         .inObjectScope(.container)
 
