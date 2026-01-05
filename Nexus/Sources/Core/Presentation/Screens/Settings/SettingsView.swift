@@ -94,6 +94,7 @@ struct SettingsView: View {
                 Text("EUR (€)").tag("EUR")
                 Text("GBP (£)").tag("GBP")
                 Text("JPY (¥)").tag("JPY")
+                Text("GEL (₾)").tag("GEL")
             }
 
             NavigationLink {
