@@ -59,10 +59,10 @@ struct CurrencyCalculatorCard: View {
     var body: some View {
         VStack(spacing: 0) {
             headerView
-            if isExpanded {
-                expandedContent
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
+            expandedContent
+                .frame(height: isExpanded ? nil : 0, alignment: .top)
+                .clipped()
+                .opacity(isExpanded ? 1 : 0)
         }
         .background {
             RoundedRectangle(cornerRadius: 20)
@@ -79,7 +79,8 @@ struct CurrencyCalculatorCard: View {
                         )
                 }
         }
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: isExpanded)
+        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .animation(.spring(response: 0.4, dampingFraction: 0.85), value: isExpanded)
         .animation(.spring(response: 0.3), value: showAllCurrencies)
         .task {
             await fetchRates()
