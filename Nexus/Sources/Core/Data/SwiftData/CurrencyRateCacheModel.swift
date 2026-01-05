@@ -3,7 +3,7 @@ import SwiftData
 
 @Model
 final class CurrencyRateCacheModel {
-    @Attribute(.unique) var baseCurrency: String
+    var baseCurrency: String
     var ratesData: Data
     var timestamp: Date
 

@@ -3,7 +3,7 @@ import SwiftData
 
 @Model
 final class TagModel {
-    @Attribute(.unique) var id: UUID
+    var id: UUID
     var name: String
     var color: String
     var createdAt: Date
