@@ -4,6 +4,7 @@ import SwiftData
 struct FinanceView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \TransactionModel.date, order: .reverse) private var transactions: [TransactionModel]
+    @AppStorage("currency") private var preferredCurrency = "USD"
 
     @State private var showAddTransaction = false
     @State private var selectedTransaction: TransactionModel?
@@ -263,8 +264,8 @@ struct FinanceView: View {
     private func formatCurrency(_ amount: Double) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
-        formatter.currencyCode = "USD"
-        return formatter.string(from: NSNumber(value: amount)) ?? "$0.00"
+        formatter.currencyCode = preferredCurrency
+        return formatter.string(from: NSNumber(value: amount)) ?? "\(Currency(rawValue: preferredCurrency)?.symbol ?? "$")0.00"
     }
 }
 

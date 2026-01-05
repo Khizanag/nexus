@@ -4,19 +4,25 @@ import SwiftData
 struct CurrencyCalculatorCard: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var preferences: [CurrencyPreferenceModel]
+    @AppStorage("currency") private var preferredCurrency = "USD"
 
     @State private var isExpanded = false
     @State private var amount = "1000"
-    @State private var baseCurrency: Currency = .usd
+    @State private var baseCurrency: Currency?
     @State private var rates: ExchangeRates?
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var lastUpdated: Date?
     @State private var showAllCurrencies = false
     @State private var isUsingCachedData = false
+    @State private var hasInitialized = false
 
     private let currencyService: CurrencyServiceProtocol
     private let inputHeight: CGFloat = 52
+
+    private var effectiveBaseCurrency: Currency {
+        baseCurrency ?? Currency(rawValue: preferredCurrency) ?? .usd
+    }
 
     init(currencyService: CurrencyServiceProtocol = CurrencyService()) {
         self.currencyService = currencyService
@@ -40,7 +46,7 @@ struct CurrencyCalculatorCard: View {
     }
 
     private var displayedCurrencies: [Currency] {
-        let others = Currency.allCases.filter { $0 != baseCurrency }
+        let others = Currency.allCases.filter { $0 != effectiveBaseCurrency }
         let favorites = others.filter { favoriteCurrencies.contains($0) }
         let nonFavorites = others.filter { !favoriteCurrencies.contains($0) }
 
@@ -52,7 +58,7 @@ struct CurrencyCalculatorCard: View {
     }
 
     private var hasMoreCurrencies: Bool {
-        let others = Currency.allCases.filter { $0 != baseCurrency }
+        let others = Currency.allCases.filter { $0 != effectiveBaseCurrency }
         return others.count > 4
     }
 
@@ -159,7 +165,7 @@ struct CurrencyCalculatorCard: View {
     private var amountInputSection: some View {
         HStack(spacing: 12) {
             HStack(spacing: 8) {
-                Text(baseCurrency.symbol)
+                Text(effectiveBaseCurrency.symbol)
                     .font(.system(size: 22, weight: .bold, design: .rounded))
                     .foregroundStyle(Color.nexusGreen)
 
@@ -194,9 +200,9 @@ struct CurrencyCalculatorCard: View {
             }
         } label: {
             HStack(spacing: 6) {
-                Text(baseCurrency.flag)
+                Text(effectiveBaseCurrency.flag)
                     .font(.system(size: 20))
-                Text(baseCurrency.rawValue)
+                Text(effectiveBaseCurrency.rawValue)
                     .font(.nexusSubheadline)
                     .fontWeight(.semibold)
                 Image(systemName: "chevron.up.chevron.down")
@@ -225,7 +231,7 @@ struct CurrencyCalculatorCard: View {
                 Text(currency.rawValue)
                 Text(currency.name)
                     .foregroundStyle(.secondary)
-                if currency == baseCurrency {
+                if currency == effectiveBaseCurrency {
                     Image(systemName: "checkmark")
                 }
             }
@@ -306,7 +312,7 @@ struct CurrencyCalculatorCard: View {
         guard let rates else { return 0 }
         return currencyService.convert(
             amount: parsedAmount,
-            from: baseCurrency,
+            from: effectiveBaseCurrency,
             to: currency,
             rates: rates
         )
@@ -336,7 +342,9 @@ struct CurrencyCalculatorCard: View {
         errorMessage = nil
         isUsingCachedData = false
 
-        if let cached = CurrencyCache.getCachedRates(base: baseCurrency, context: modelContext), !cached.isStale {
+        let currency = effectiveBaseCurrency
+
+        if let cached = CurrencyCache.getCachedRates(base: currency, context: modelContext), !cached.isStale {
             rates = cached
             lastUpdated = cached.timestamp
             isLoading = false
@@ -344,12 +352,12 @@ struct CurrencyCalculatorCard: View {
         }
 
         do {
-            let fetchedRates = try await currencyService.fetchRatesFromAPI(base: baseCurrency)
+            let fetchedRates = try await currencyService.fetchRatesFromAPI(base: currency)
             rates = fetchedRates
             lastUpdated = fetchedRates.timestamp
             CurrencyCache.saveCachedRates(fetchedRates, context: modelContext)
         } catch {
-            if let cached = CurrencyCache.getCachedRates(base: baseCurrency, context: modelContext) {
+            if let cached = CurrencyCache.getCachedRates(base: currency, context: modelContext) {
                 rates = cached
                 lastUpdated = cached.timestamp
                 isUsingCachedData = true
