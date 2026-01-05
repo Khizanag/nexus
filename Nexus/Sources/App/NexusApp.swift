@@ -18,7 +18,9 @@ struct NexusApp: App {
                     TransactionModel.self,
                     HealthEntryModel.self,
                     TagModel.self,
-                    ChatMessageModel.self
+                    ChatMessageModel.self,
+                    CurrencyRateCacheModel.self,
+                    CurrencyPreferenceModel.self
                 ]),
                 configurations: ModelConfiguration(isStoredInMemoryOnly: false)
             )
