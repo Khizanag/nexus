@@ -3,9 +3,9 @@ import SwiftUI
 enum Tab: String, CaseIterable, Identifiable {
     case home
     case notes
+    case assistant
     case tasks
     case finance
-    case health
 
     var id: String { rawValue }
 
@@ -13,9 +13,9 @@ enum Tab: String, CaseIterable, Identifiable {
         switch self {
         case .home: "Home"
         case .notes: "Notes"
+        case .assistant: "AI"
         case .tasks: "Tasks"
         case .finance: "Finance"
-        case .health: "Health"
         }
     }
 
@@ -23,10 +23,14 @@ enum Tab: String, CaseIterable, Identifiable {
         switch self {
         case .home: "house.fill"
         case .notes: "doc.text.fill"
+        case .assistant: "sparkles"
         case .tasks: "checkmark.circle.fill"
         case .finance: "creditcard.fill"
-        case .health: "heart.fill"
         }
+    }
+
+    var isContent: Bool {
+        self != .assistant
     }
 
     @MainActor @ViewBuilder
@@ -34,9 +38,9 @@ enum Tab: String, CaseIterable, Identifiable {
         switch self {
         case .home: HomeView()
         case .notes: NotesView()
+        case .assistant: EmptyView()
         case .tasks: TasksView()
         case .finance: FinanceView()
-        case .health: HealthView()
         }
     }
 }
