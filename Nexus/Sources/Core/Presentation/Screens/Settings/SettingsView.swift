@@ -1,13 +1,14 @@
 import SwiftUI
 import SwiftData
+import AuthenticationServices
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(AuthenticationService.self) private var authService
 
     @AppStorage("hapticFeedback") private var hapticFeedback = true
     @AppStorage("notifications") private var notifications = true
-    @AppStorage("syncEnabled") private var syncEnabled = false
     @AppStorage("currency") private var currency = "USD"
 
     @State private var showClearDataAlert = false
@@ -15,6 +16,9 @@ struct SettingsView: View {
     @State private var showImportSheet = false
     @State private var exportedFileURL: URL?
     @State private var showShareSheet = false
+    @State private var showSignOutAlert = false
+    @State private var isSigningIn = false
+    @State private var signInError: String?
 
     var body: some View {
         NavigationStack {
@@ -43,6 +47,14 @@ struct SettingsView: View {
             } message: {
                 Text("This will permanently delete all your notes, tasks, transactions, and health entries. This action cannot be undone.")
             }
+            .alert("Sign Out", isPresented: $showSignOutAlert) {
+                Button("Cancel", role: .cancel) { }
+                Button("Sign Out", role: .destructive) {
+                    signOut()
+                }
+            } message: {
+                Text("Your data will remain on this device but will no longer sync to iCloud.")
+            }
             .sheet(isPresented: $showShareSheet) {
                 if let url = exportedFileURL {
                     ShareSheet(items: [url])
@@ -53,33 +65,146 @@ struct SettingsView: View {
 
     private var accountSection: some View {
         Section {
+            if authService.isSignedIn, let user = authService.currentUser {
+                signedInView(user: user)
+            } else {
+                signedOutView
+            }
+        } header: {
+            Text("Account")
+        } footer: {
+            if !authService.isSignedIn {
+                Text("Sign in to sync your data across all your devices with iCloud.")
+                    .font(.nexusCaption)
+            }
+        }
+    }
+
+    private func signedInView(user: UserAccount) -> some View {
+        VStack(spacing: 16) {
             HStack(spacing: 16) {
                 Circle()
                     .fill(Color.nexusGradient)
                     .frame(width: 60, height: 60)
                     .overlay {
-                        Text("N")
+                        Text(user.initials)
                             .font(.nexusTitle)
                             .foregroundStyle(.white)
                     }
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Nexus User")
+                    Text(user.displayName)
                         .font(.nexusHeadline)
 
-                    Text("Free Plan")
-                        .font(.nexusSubheadline)
-                        .foregroundStyle(.secondary)
+                    if let email = user.email {
+                        Text(email)
+                            .font(.nexusSubheadline)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    HStack(spacing: 4) {
+                        Image(systemName: "checkmark.icloud.fill")
+                            .foregroundStyle(Color.nexusGreen)
+                        Text("Synced with iCloud")
+                            .foregroundStyle(Color.nexusGreen)
+                    }
+                    .font(.nexusCaption)
                 }
 
                 Spacer()
-
-                Image(systemName: "chevron.right")
-                    .foregroundStyle(.tertiary)
             }
             .padding(.vertical, 8)
-        } header: {
-            Text("Account")
+
+            Button(role: .destructive) {
+                showSignOutAlert = true
+            } label: {
+                HStack {
+                    Spacer()
+                    Text("Sign Out")
+                        .font(.nexusSubheadline)
+                        .fontWeight(.medium)
+                    Spacer()
+                }
+                .padding(.vertical, 12)
+                .background {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.nexusRed.opacity(0.15))
+                }
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var signedOutView: some View {
+        VStack(spacing: 16) {
+            if isSigningIn {
+                HStack {
+                    Spacer()
+                    ProgressView()
+                        .padding(.vertical, 20)
+                    Spacer()
+                }
+            } else {
+                SignInWithAppleButton(.signIn) { request in
+                    request.requestedScopes = [.fullName, .email]
+                } onCompletion: { _ in }
+                .signInWithAppleButtonStyle(.white)
+                .frame(height: 50)
+                .cornerRadius(10)
+                .onTapGesture {
+                    signInWithApple()
+                }
+                .allowsHitTesting(false)
+                .overlay {
+                    Button {
+                        signInWithApple()
+                    } label: {
+                        Color.clear
+                    }
+                }
+            }
+
+            if let error = signInError {
+                Text(error)
+                    .font(.nexusCaption)
+                    .foregroundStyle(Color.nexusRed)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .padding(.vertical, 8)
+    }
+
+    private func signInWithApple() {
+        guard !isSigningIn else { return }
+
+        isSigningIn = true
+        signInError = nil
+
+        Task {
+            do {
+                guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                      let window = scene.windows.first else {
+                    throw AuthenticationError.failed
+                }
+
+                _ = try await authService.signInWithApple(presentationAnchor: window)
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            } catch AuthenticationError.canceled {
+                // User cancelled, no error message needed
+            } catch {
+                signInError = error.localizedDescription
+            }
+
+            isSigningIn = false
+        }
+    }
+
+    private func signOut() {
+        do {
+            try authService.signOut()
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        } catch {
+            signInError = error.localizedDescription
         }
     }
 
@@ -109,8 +234,6 @@ struct SettingsView: View {
 
     private var dataSection: some View {
         Section {
-            Toggle("Sync Enabled", isOn: $syncEnabled)
-
             NavigationLink {
                 ExportDataView()
             } label: {
