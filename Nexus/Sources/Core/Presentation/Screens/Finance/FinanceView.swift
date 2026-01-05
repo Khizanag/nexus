@@ -12,6 +12,13 @@ struct FinanceView: View {
     @State private var rangeStartDate: Date = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
     @State private var rangeEndDate: Date = Date()
     @State private var showDateRangePicker = false
+    @State private var exchangeRates: ExchangeRates?
+
+    private let currencyService: CurrencyServiceProtocol = CurrencyService()
+
+    private var baseCurrency: Currency {
+        Currency(rawValue: preferredCurrency) ?? .usd
+    }
 
     private var periodTransactions: [TransactionModel] {
         let calendar = Calendar.current
@@ -35,20 +42,54 @@ struct FinanceView: View {
         }
     }
 
+    private var usedCurrencies: Set<String> {
+        Set(periodTransactions.map { $0.currency })
+    }
+
+    private var hasMultipleCurrencies: Bool {
+        usedCurrencies.count > 1
+    }
+
+    private func convertToBase(_ amount: Double, from currencyCode: String) -> Double {
+        guard let fromCurrency = Currency(rawValue: currencyCode),
+              let rates = exchangeRates else {
+            return amount
+        }
+        return currencyService.convert(amount: amount, from: fromCurrency, to: baseCurrency, rates: rates)
+    }
+
     private var totalIncome: Double {
         periodTransactions
             .filter { $0.type == .income }
-            .reduce(0) { $0 + $1.amount }
+            .reduce(0) { $0 + convertToBase($1.amount, from: $1.currency) }
     }
 
     private var totalExpense: Double {
         periodTransactions
             .filter { $0.type == .expense }
-            .reduce(0) { $0 + $1.amount }
+            .reduce(0) { $0 + convertToBase($1.amount, from: $1.currency) }
     }
 
     private var balance: Double {
         totalIncome - totalExpense
+    }
+
+    private var currencyBreakdown: [(currency: Currency, income: Double, expense: Double)] {
+        var breakdown: [String: (income: Double, expense: Double)] = [:]
+
+        for transaction in periodTransactions {
+            let current = breakdown[transaction.currency] ?? (income: 0, expense: 0)
+            if transaction.type == .income {
+                breakdown[transaction.currency] = (income: current.income + transaction.amount, expense: current.expense)
+            } else if transaction.type == .expense {
+                breakdown[transaction.currency] = (income: current.income, expense: current.expense + transaction.amount)
+            }
+        }
+
+        return breakdown.compactMap { key, value in
+            guard let currency = Currency(rawValue: key) else { return nil }
+            return (currency: currency, income: value.income, expense: value.expense)
+        }.sorted { $0.currency.rawValue < $1.currency.rawValue }
     }
 
     var body: some View {
@@ -87,6 +128,29 @@ struct FinanceView: View {
                 )
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
+            }
+            .task {
+                await fetchExchangeRates()
+            }
+            .onChange(of: preferredCurrency) {
+                Task { await fetchExchangeRates() }
+            }
+        }
+    }
+
+    private func fetchExchangeRates() async {
+        if let cached = CurrencyCache.getCachedRates(base: baseCurrency, context: modelContext), !cached.isStale {
+            exchangeRates = cached
+            return
+        }
+
+        do {
+            let rates = try await currencyService.fetchRatesFromAPI(base: baseCurrency)
+            exchangeRates = rates
+            CurrencyCache.saveCachedRates(rates, context: modelContext)
+        } catch {
+            if let cached = CurrencyCache.getCachedRates(base: baseCurrency, context: modelContext) {
+                exchangeRates = cached
             }
         }
     }
@@ -169,9 +233,16 @@ struct FinanceView: View {
     private var summaryCard: some View {
         VStack(spacing: 16) {
             VStack(spacing: 4) {
-                Text("Balance")
-                    .font(.nexusSubheadline)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Text("Balance")
+                        .font(.nexusSubheadline)
+                        .foregroundStyle(.secondary)
+                    if hasMultipleCurrencies {
+                        Text("(\(baseCurrency.rawValue))")
+                            .font(.nexusCaption)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
 
                 Text(formatCurrency(balance))
                     .font(.system(size: 36, weight: .bold, design: .rounded))
@@ -210,6 +281,10 @@ struct FinanceView: View {
                         .foregroundStyle(Color.nexusRed)
                 }
             }
+
+            if hasMultipleCurrencies {
+                currencyBreakdownView
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(20)
@@ -220,6 +295,40 @@ struct FinanceView: View {
                     RoundedRectangle(cornerRadius: 20)
                         .strokeBorder(Color.nexusBorder, lineWidth: 1)
                 }
+        }
+    }
+
+    @ViewBuilder
+    private var currencyBreakdownView: some View {
+        VStack(spacing: 12) {
+            Divider()
+                .background(Color.nexusBorder)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("By Currency")
+                    .font(.nexusCaption)
+                    .foregroundStyle(.secondary)
+
+                ForEach(currencyBreakdown, id: \.currency) { item in
+                    HStack {
+                        HStack(spacing: 6) {
+                            Text(item.currency.flag)
+                                .font(.system(size: 16))
+                            Text(item.currency.rawValue)
+                                .font(.nexusSubheadline)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+
+                        let currencyBalance = item.income - item.expense
+                        Text(item.currency.format(currencyBalance))
+                            .font(.nexusSubheadline)
+                            .fontWeight(.medium)
+                            .foregroundStyle(currencyBalance >= 0 ? Color.nexusGreen : Color.nexusRed)
+                    }
+                }
+            }
         }
     }
 
