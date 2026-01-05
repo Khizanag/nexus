@@ -189,45 +189,90 @@ struct FinanceView: View {
                     .fill(Color.nexusSurface)
             }
 
-            if selectedPeriod == .range {
-                dateRangeDisplay
-            }
+            dateRangeDisplay
+        }
+    }
+
+    private var currentPeriodDates: (start: Date, end: Date) {
+        let calendar = Calendar.current
+        let now = Date()
+
+        switch selectedPeriod {
+        case .day:
+            let start = calendar.startOfDay(for: now)
+            let end = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: now) ?? now
+            return (start, end)
+        case .week:
+            let start = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)) ?? now
+            let end = calendar.date(byAdding: .day, value: 6, to: start) ?? now
+            return (start, end)
+        case .month:
+            let start = calendar.date(from: calendar.dateComponents([.year, .month], from: now)) ?? now
+            let end = calendar.date(byAdding: DateComponents(month: 1, day: -1), to: start) ?? now
+            return (start, end)
+        case .year:
+            let start = calendar.date(from: calendar.dateComponents([.year], from: now)) ?? now
+            let end = calendar.date(byAdding: DateComponents(year: 1, day: -1), to: start) ?? now
+            return (start, end)
+        case .range:
+            return (rangeStartDate, rangeEndDate)
         }
     }
 
     private var dateRangeDisplay: some View {
-        Button {
-            showDateRangePicker = true
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "calendar")
-                    .foregroundStyle(Color.nexusGreen)
-                Text(formatDateRange())
-                    .font(.nexusSubheadline)
+        let dates = currentPeriodDates
+        let isCustomRange = selectedPeriod == .range
+
+        return Group {
+            if isCustomRange {
+                Button {
+                    showDateRangePicker = true
+                } label: {
+                    dateRangeContent(start: dates.start, end: dates.end, showChevron: true)
+                }
+                .buttonStyle(.plain)
+            } else {
+                dateRangeContent(start: dates.start, end: dates.end, showChevron: false)
+            }
+        }
+    }
+
+    private func dateRangeContent(start: Date, end: Date, showChevron: Bool) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "calendar")
+                .foregroundStyle(Color.nexusGreen)
+            Text(formatDateRange(start: start, end: end))
+                .font(.nexusSubheadline)
+            if showChevron {
                 Image(systemName: "chevron.down")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(.secondary)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.nexusSurface)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 12)
-                            .strokeBorder(Color.nexusBorder, lineWidth: 1)
-                    }
-            }
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background {
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.nexusSurface)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder(Color.nexusBorder, lineWidth: 1)
+                }
+        }
     }
 
-    private func formatDateRange() -> String {
+    private func formatDateRange(start: Date, end: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMM d"
-        let start = formatter.string(from: rangeStartDate)
-        let end = formatter.string(from: rangeEndDate)
-        return "\(start) - \(end)"
+        let startStr = formatter.string(from: start)
+        let endStr = formatter.string(from: end)
+
+        if Calendar.current.isDate(start, inSameDayAs: end) {
+            formatter.dateFormat = "EEEE, MMM d"
+            return formatter.string(from: start)
+        }
+
+        return "\(startStr) - \(endStr)"
     }
 
     private var summaryCard: some View {
