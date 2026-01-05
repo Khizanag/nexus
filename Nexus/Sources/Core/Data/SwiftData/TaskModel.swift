@@ -3,7 +3,7 @@ import SwiftData
 
 @Model
 final class TaskModel {
-    @Attribute(.unique) var id: UUID
+    var id: UUID
     var title: String
     var notes: String
     var isCompleted: Bool
@@ -67,7 +67,7 @@ enum TaskPriority: String, Codable, CaseIterable {
 
 @Model
 final class SubtaskModel {
-    @Attribute(.unique) var id: UUID
+    var id: UUID
     var title: String
     var isCompleted: Bool
     var order: Int

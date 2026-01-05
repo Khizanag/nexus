@@ -3,7 +3,7 @@ import SwiftData
 
 @Model
 final class HealthEntryModel {
-    @Attribute(.unique) var id: UUID
+    var id: UUID
     var type: HealthMetricType
     var value: Double
     var unit: String

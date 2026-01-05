@@ -3,7 +3,7 @@ import SwiftData
 
 @Model
 final class CurrencyPreferenceModel {
-    @Attribute(.unique) var id: String = "currency_preferences"
+    var id: String = "currency_preferences"
     var favoriteCurrenciesData: Data
 
     init() {

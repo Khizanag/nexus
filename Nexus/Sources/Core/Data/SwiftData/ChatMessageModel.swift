@@ -3,15 +3,15 @@ import SwiftData
 
 @Model
 final class ChatMessageModel {
-    @Attribute(.unique) var id: UUID
+    var id: UUID
     var role: String
     var content: String
     var timestamp: Date
 
     init(
         id: UUID = UUID(),
-        role: String,
-        content: String,
+        role: String = "user",
+        content: String = "",
         timestamp: Date = .now
     ) {
         self.id = id
