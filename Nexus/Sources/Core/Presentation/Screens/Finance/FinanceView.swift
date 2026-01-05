@@ -16,82 +16,6 @@ struct FinanceView: View {
 
     private let currencyService: CurrencyServiceProtocol = CurrencyService()
 
-    private var baseCurrency: Currency {
-        Currency(rawValue: preferredCurrency) ?? .usd
-    }
-
-    private var periodTransactions: [TransactionModel] {
-        let calendar = Calendar.current
-        let now = Date()
-
-        return transactions.filter { transaction in
-            switch selectedPeriod {
-            case .day:
-                return calendar.isDateInToday(transaction.date)
-            case .week:
-                return calendar.isDate(transaction.date, equalTo: now, toGranularity: .weekOfYear)
-            case .month:
-                return calendar.isDate(transaction.date, equalTo: now, toGranularity: .month)
-            case .year:
-                return calendar.isDate(transaction.date, equalTo: now, toGranularity: .year)
-            case .range:
-                let startOfDay = calendar.startOfDay(for: rangeStartDate)
-                let endOfDay = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: rangeEndDate) ?? rangeEndDate
-                return transaction.date >= startOfDay && transaction.date <= endOfDay
-            }
-        }
-    }
-
-    private var usedCurrencies: Set<String> {
-        Set(periodTransactions.map { $0.currency })
-    }
-
-    private var hasMultipleCurrencies: Bool {
-        usedCurrencies.count > 1
-    }
-
-    private func convertToBase(_ amount: Double, from currencyCode: String) -> Double {
-        guard let fromCurrency = Currency(rawValue: currencyCode),
-              let rates = exchangeRates else {
-            return amount
-        }
-        return currencyService.convert(amount: amount, from: fromCurrency, to: baseCurrency, rates: rates)
-    }
-
-    private var totalIncome: Double {
-        periodTransactions
-            .filter { $0.type == .income }
-            .reduce(0) { $0 + convertToBase($1.amount, from: $1.currency) }
-    }
-
-    private var totalExpense: Double {
-        periodTransactions
-            .filter { $0.type == .expense }
-            .reduce(0) { $0 + convertToBase($1.amount, from: $1.currency) }
-    }
-
-    private var balance: Double {
-        totalIncome - totalExpense
-    }
-
-    private var currencyBreakdown: [(currency: Currency, income: Double, expense: Double)] {
-        var breakdown: [String: (income: Double, expense: Double)] = [:]
-
-        for transaction in periodTransactions {
-            let current = breakdown[transaction.currency] ?? (income: 0, expense: 0)
-            if transaction.type == .income {
-                breakdown[transaction.currency] = (income: current.income + transaction.amount, expense: current.expense)
-            } else if transaction.type == .expense {
-                breakdown[transaction.currency] = (income: current.income, expense: current.expense + transaction.amount)
-            }
-        }
-
-        return breakdown.compactMap { key, value in
-            guard let currency = Currency(rawValue: key) else { return nil }
-            return (currency: currency, income: value.income, expense: value.expense)
-        }.sorted { $0.currency.rawValue < $1.currency.rawValue }
-    }
-
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -137,25 +61,110 @@ struct FinanceView: View {
             }
         }
     }
+}
 
-    private func fetchExchangeRates() async {
-        if let cached = CurrencyCache.getCachedRates(base: baseCurrency, context: modelContext), !cached.isStale {
-            exchangeRates = cached
-            return
-        }
+// MARK: - Computed Properties
 
-        do {
-            let rates = try await currencyService.fetchRatesFromAPI(base: baseCurrency)
-            exchangeRates = rates
-            CurrencyCache.saveCachedRates(rates, context: modelContext)
-        } catch {
-            if let cached = CurrencyCache.getCachedRates(base: baseCurrency, context: modelContext) {
-                exchangeRates = cached
+private extension FinanceView {
+    var baseCurrency: Currency {
+        Currency(rawValue: preferredCurrency) ?? .usd
+    }
+
+    var periodTransactions: [TransactionModel] {
+        let calendar = Calendar.current
+        let now = Date()
+
+        return transactions.filter { transaction in
+            switch selectedPeriod {
+            case .day:
+                return calendar.isDateInToday(transaction.date)
+            case .week:
+                return calendar.isDate(transaction.date, equalTo: now, toGranularity: .weekOfYear)
+            case .month:
+                return calendar.isDate(transaction.date, equalTo: now, toGranularity: .month)
+            case .year:
+                return calendar.isDate(transaction.date, equalTo: now, toGranularity: .year)
+            case .range:
+                let startOfDay = calendar.startOfDay(for: rangeStartDate)
+                let endOfDay = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: rangeEndDate) ?? rangeEndDate
+                return transaction.date >= startOfDay && transaction.date <= endOfDay
             }
         }
     }
 
-    private var periodSelector: some View {
+    var usedCurrencies: Set<String> {
+        Set(periodTransactions.map { $0.currency })
+    }
+
+    var hasMultipleCurrencies: Bool {
+        usedCurrencies.count > 1
+    }
+
+    var totalIncome: Double {
+        periodTransactions
+            .filter { $0.type == .income }
+            .reduce(0) { $0 + convertToBase($1.amount, from: $1.currency) }
+    }
+
+    var totalExpense: Double {
+        periodTransactions
+            .filter { $0.type == .expense }
+            .reduce(0) { $0 + convertToBase($1.amount, from: $1.currency) }
+    }
+
+    var balance: Double {
+        totalIncome - totalExpense
+    }
+
+    var currencyBreakdown: [(currency: Currency, income: Double, expense: Double)] {
+        var breakdown: [String: (income: Double, expense: Double)] = [:]
+
+        for transaction in periodTransactions {
+            let current = breakdown[transaction.currency] ?? (income: 0, expense: 0)
+            if transaction.type == .income {
+                breakdown[transaction.currency] = (income: current.income + transaction.amount, expense: current.expense)
+            } else if transaction.type == .expense {
+                breakdown[transaction.currency] = (income: current.income, expense: current.expense + transaction.amount)
+            }
+        }
+
+        return breakdown.compactMap { key, value in
+            guard let currency = Currency(rawValue: key) else { return nil }
+            return (currency: currency, income: value.income, expense: value.expense)
+        }.sorted { $0.currency.rawValue < $1.currency.rawValue }
+    }
+
+    var currentPeriodDates: (start: Date, end: Date) {
+        let calendar = Calendar.current
+        let now = Date()
+
+        switch selectedPeriod {
+        case .day:
+            let start = calendar.startOfDay(for: now)
+            let end = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: now) ?? now
+            return (start, end)
+        case .week:
+            let start = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)) ?? now
+            let end = calendar.date(byAdding: .day, value: 6, to: start) ?? now
+            return (start, end)
+        case .month:
+            let start = calendar.date(from: calendar.dateComponents([.year, .month], from: now)) ?? now
+            let end = calendar.date(byAdding: DateComponents(month: 1, day: -1), to: start) ?? now
+            return (start, end)
+        case .year:
+            let start = calendar.date(from: calendar.dateComponents([.year], from: now)) ?? now
+            let end = calendar.date(byAdding: DateComponents(year: 1, day: -1), to: start) ?? now
+            return (start, end)
+        case .range:
+            return (rangeStartDate, rangeEndDate)
+        }
+    }
+}
+
+// MARK: - View Components
+
+private extension FinanceView {
+    var periodSelector: some View {
         VStack(spacing: 12) {
             HStack(spacing: 6) {
                 ForEach(TimePeriod.allCases) { period in
@@ -193,33 +202,7 @@ struct FinanceView: View {
         }
     }
 
-    private var currentPeriodDates: (start: Date, end: Date) {
-        let calendar = Calendar.current
-        let now = Date()
-
-        switch selectedPeriod {
-        case .day:
-            let start = calendar.startOfDay(for: now)
-            let end = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: now) ?? now
-            return (start, end)
-        case .week:
-            let start = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)) ?? now
-            let end = calendar.date(byAdding: .day, value: 6, to: start) ?? now
-            return (start, end)
-        case .month:
-            let start = calendar.date(from: calendar.dateComponents([.year, .month], from: now)) ?? now
-            let end = calendar.date(byAdding: DateComponents(month: 1, day: -1), to: start) ?? now
-            return (start, end)
-        case .year:
-            let start = calendar.date(from: calendar.dateComponents([.year], from: now)) ?? now
-            let end = calendar.date(byAdding: DateComponents(year: 1, day: -1), to: start) ?? now
-            return (start, end)
-        case .range:
-            return (rangeStartDate, rangeEndDate)
-        }
-    }
-
-    private var dateRangeDisplay: some View {
+    var dateRangeDisplay: some View {
         let dates = currentPeriodDates
         let isCustomRange = selectedPeriod == .range
 
@@ -237,45 +220,7 @@ struct FinanceView: View {
         }
     }
 
-    private func dateRangeContent(start: Date, end: Date, showChevron: Bool) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: "calendar")
-                .foregroundStyle(Color.nexusGreen)
-            Text(formatDateRange(start: start, end: end))
-                .font(.nexusSubheadline)
-            if showChevron {
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.nexusSurface)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 12)
-                        .strokeBorder(Color.nexusBorder, lineWidth: 1)
-                }
-        }
-    }
-
-    private func formatDateRange(start: Date, end: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM d"
-        let startStr = formatter.string(from: start)
-        let endStr = formatter.string(from: end)
-
-        if Calendar.current.isDate(start, inSameDayAs: end) {
-            formatter.dateFormat = "EEEE, MMM d"
-            return formatter.string(from: start)
-        }
-
-        return "\(startStr) - \(endStr)"
-    }
-
-    private var summaryCard: some View {
+    var summaryCard: some View {
         VStack(spacing: 16) {
             VStack(spacing: 4) {
                 HStack(spacing: 6) {
@@ -344,7 +289,7 @@ struct FinanceView: View {
     }
 
     @ViewBuilder
-    private var currencyBreakdownView: some View {
+    var currencyBreakdownView: some View {
         VStack(spacing: 12) {
             Divider()
                 .background(Color.nexusBorder)
@@ -377,7 +322,7 @@ struct FinanceView: View {
         }
     }
 
-    private var transactionsList: some View {
+    var transactionsList: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Transactions")
                 .font(.nexusHeadline)
@@ -398,7 +343,7 @@ struct FinanceView: View {
         }
     }
 
-    private var emptyState: some View {
+    var emptyState: some View {
         VStack(spacing: 12) {
             Image(systemName: "creditcard")
                 .font(.system(size: 40))
@@ -415,11 +360,82 @@ struct FinanceView: View {
         .padding(.vertical, 40)
     }
 
-    private func formatCurrency(_ amount: Double) -> String {
+    func dateRangeContent(start: Date, end: Date, showChevron: Bool) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "calendar")
+                .foregroundStyle(Color.nexusGreen)
+            Text(formatDateRange(start: start, end: end))
+                .font(.nexusSubheadline)
+            if showChevron {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background {
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.nexusSurface)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder(Color.nexusBorder, lineWidth: 1)
+                }
+        }
+    }
+}
+
+// MARK: - Helper Methods
+
+private extension FinanceView {
+    func convertToBase(_ amount: Double, from currencyCode: String) -> Double {
+        guard let fromCurrency = Currency(rawValue: currencyCode),
+              let rates = exchangeRates else {
+            return amount
+        }
+        return currencyService.convert(amount: amount, from: fromCurrency, to: baseCurrency, rates: rates)
+    }
+
+    func formatCurrency(_ amount: Double) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
         formatter.currencyCode = preferredCurrency
         return formatter.string(from: NSNumber(value: amount)) ?? "\(Currency(rawValue: preferredCurrency)?.symbol ?? "$")0.00"
+    }
+
+    func formatDateRange(start: Date, end: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d"
+        let startStr = formatter.string(from: start)
+        let endStr = formatter.string(from: end)
+
+        if Calendar.current.isDate(start, inSameDayAs: end) {
+            formatter.dateFormat = "EEEE, MMM d"
+            return formatter.string(from: start)
+        }
+
+        return "\(startStr) - \(endStr)"
+    }
+}
+
+// MARK: - Actions
+
+private extension FinanceView {
+    func fetchExchangeRates() async {
+        if let cached = CurrencyCache.getCachedRates(base: baseCurrency, context: modelContext), !cached.isStale {
+            exchangeRates = cached
+            return
+        }
+
+        do {
+            let rates = try await currencyService.fetchRatesFromAPI(base: baseCurrency)
+            exchangeRates = rates
+            CurrencyCache.saveCachedRates(rates, context: modelContext)
+        } catch {
+            if let cached = CurrencyCache.getCachedRates(base: baseCurrency, context: modelContext) {
+                exchangeRates = cached
+            }
+        }
     }
 }
 
@@ -520,73 +536,8 @@ private struct DateRangePickerSheet: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 24) {
-                VStack(spacing: 16) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Start Date")
-                                .font(.nexusCaption)
-                                .foregroundStyle(.secondary)
-                            DatePicker(
-                                "",
-                                selection: $startDate,
-                                in: ...endDate,
-                                displayedComponents: .date
-                            )
-                            .datePickerStyle(.compact)
-                            .labelsHidden()
-                            .tint(Color.nexusGreen)
-                        }
-
-                        Spacer()
-
-                        Image(systemName: "arrow.right")
-                            .foregroundStyle(.tertiary)
-
-                        Spacer()
-
-                        VStack(alignment: .trailing, spacing: 8) {
-                            Text("End Date")
-                                .font(.nexusCaption)
-                                .foregroundStyle(.secondary)
-                            DatePicker(
-                                "",
-                                selection: $endDate,
-                                in: startDate...,
-                                displayedComponents: .date
-                            )
-                            .datePickerStyle(.compact)
-                            .labelsHidden()
-                            .tint(Color.nexusGreen)
-                        }
-                    }
-                    .padding(16)
-                    .background {
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.nexusSurface)
-                    }
-
-                    Text("Selected: \(daysBetween()) days")
-                        .font(.nexusCaption)
-                        .foregroundStyle(.secondary)
-                }
-
-                VStack(spacing: 12) {
-                    Text("Quick Select")
-                        .font(.nexusCaption)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    LazyVGrid(columns: [
-                        GridItem(.flexible()),
-                        GridItem(.flexible())
-                    ], spacing: 12) {
-                        quickSelectButton("Last 7 Days", days: 7)
-                        quickSelectButton("Last 14 Days", days: 14)
-                        quickSelectButton("Last 30 Days", days: 30)
-                        quickSelectButton("Last 90 Days", days: 90)
-                    }
-                }
-
+                dateSelectionRow
+                quickSelectSection
                 Spacer()
             }
             .padding(20)
@@ -600,6 +551,77 @@ private struct DateRangePickerSheet: View {
                     }
                     .fontWeight(.semibold)
                 }
+            }
+        }
+    }
+
+    private var dateSelectionRow: some View {
+        VStack(spacing: 16) {
+            HStack {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Start Date")
+                        .font(.nexusCaption)
+                        .foregroundStyle(.secondary)
+                    DatePicker(
+                        "",
+                        selection: $startDate,
+                        in: ...endDate,
+                        displayedComponents: .date
+                    )
+                    .datePickerStyle(.compact)
+                    .labelsHidden()
+                    .tint(Color.nexusGreen)
+                }
+
+                Spacer()
+
+                Image(systemName: "arrow.right")
+                    .foregroundStyle(.tertiary)
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 8) {
+                    Text("End Date")
+                        .font(.nexusCaption)
+                        .foregroundStyle(.secondary)
+                    DatePicker(
+                        "",
+                        selection: $endDate,
+                        in: startDate...,
+                        displayedComponents: .date
+                    )
+                    .datePickerStyle(.compact)
+                    .labelsHidden()
+                    .tint(Color.nexusGreen)
+                }
+            }
+            .padding(16)
+            .background {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.nexusSurface)
+            }
+
+            Text("Selected: \(daysBetween()) days")
+                .font(.nexusCaption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var quickSelectSection: some View {
+        VStack(spacing: 12) {
+            Text("Quick Select")
+                .font(.nexusCaption)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            LazyVGrid(columns: [
+                GridItem(.flexible()),
+                GridItem(.flexible())
+            ], spacing: 12) {
+                quickSelectButton("Last 7 Days", days: 7)
+                quickSelectButton("Last 14 Days", days: 14)
+                quickSelectButton("Last 30 Days", days: 30)
+                quickSelectButton("Last 90 Days", days: 90)
             }
         }
     }
