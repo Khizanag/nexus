@@ -34,6 +34,11 @@ private extension DependencyContainer {
             SyncService()
         }
         .inObjectScope(.container)
+
+        container.register(CurrencyServiceProtocol.self) { _ in
+            CurrencyService()
+        }
+        .inObjectScope(.container)
     }
 
     func registerRepositories() {
