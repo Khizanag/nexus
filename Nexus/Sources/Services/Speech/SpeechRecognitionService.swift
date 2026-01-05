@@ -4,12 +4,12 @@ import AVFoundation
 import Observation
 
 @Observable
-@MainActor
-final class SpeechRecognitionService {
-    var transcribedText: String = ""
-    var isRecording: Bool = false
-    var isAuthorized: Bool = false
-    var errorMessage: String?
+final class SpeechRecognitionService: @unchecked Sendable {
+    @MainActor var transcribedText: String = ""
+    @MainActor var isRecording: Bool = false
+    @MainActor var isAuthorized: Bool = false
+    @MainActor var errorMessage: String?
+
     var isSimulator: Bool {
         #if targetEnvironment(simulator)
         return true
@@ -18,17 +18,21 @@ final class SpeechRecognitionService {
         #endif
     }
 
-    private var audioEngine: AVAudioEngine?
-    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
-    private var recognitionTask: SFSpeechRecognitionTask?
+    @MainActor private var audioEngine: AVAudioEngine?
+    @MainActor private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
+    @MainActor private var recognitionTask: SFSpeechRecognitionTask?
     private let speechRecognizer: SFSpeechRecognizer?
+    private var hasCheckedAuthorization = false
 
-    init() {
+    nonisolated init() {
         speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
-        checkAuthorization()
     }
 
-    func checkAuthorization() {
+    @MainActor
+    func checkAuthorizationIfNeeded() {
+        guard !hasCheckedAuthorization else { return }
+        hasCheckedAuthorization = true
+
         SFSpeechRecognizer.requestAuthorization { [weak self] status in
             Task { @MainActor in
                 switch status {
@@ -43,11 +47,14 @@ final class SpeechRecognitionService {
         }
     }
 
+    @MainActor
     func startRecording() {
         #if targetEnvironment(simulator)
         errorMessage = "Voice input requires a physical device. Simulator does not support microphone."
         return
         #endif
+
+        checkAuthorizationIfNeeded()
 
         guard let speechRecognizer, speechRecognizer.isAvailable else {
             errorMessage = "Speech recognition not available"
@@ -65,6 +72,7 @@ final class SpeechRecognitionService {
         }
     }
 
+    @MainActor
     func stopRecording() {
         audioEngine?.stop()
         audioEngine?.inputNode.removeTap(onBus: 0)
@@ -83,6 +91,7 @@ final class SpeechRecognitionService {
         try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
     }
 
+    @MainActor
     private func setupRecognition() throws {
         recognitionTask?.cancel()
         recognitionTask = nil
@@ -106,7 +115,9 @@ final class SpeechRecognitionService {
         }
 
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
-            self?.recognitionRequest?.append(buffer)
+            Task { @MainActor in
+                self?.recognitionRequest?.append(buffer)
+            }
         }
 
         recognitionTask = speechRecognizer?.recognitionTask(with: recognitionRequest) { [weak self] result, error in
@@ -126,6 +137,7 @@ final class SpeechRecognitionService {
         transcribedText = ""
     }
 
+    @MainActor
     func toggleRecording() {
         if isRecording {
             stopRecording()
