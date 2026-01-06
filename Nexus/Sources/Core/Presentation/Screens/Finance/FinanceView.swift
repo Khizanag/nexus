@@ -46,16 +46,11 @@ struct FinanceView: View {
                 TransactionEditorView(transaction: transaction)
             }
             .sheet(isPresented: $showDateRangePicker) {
-                DateRangePickerSheet(
-                    startDate: $rangeStartDate,
-                    endDate: $rangeEndDate
-                )
-                .presentationDetents([.medium])
-                .presentationDragIndicator(.visible)
+                DateRangePickerSheet(startDate: $rangeStartDate, endDate: $rangeEndDate)
+                    .presentationDetents([.medium])
+                    .presentationDragIndicator(.visible)
             }
-            .task {
-                await fetchExchangeRates()
-            }
+            .task { await fetchExchangeRates() }
             .onChange(of: preferredCurrency) {
                 Task { await fetchExchangeRates() }
             }
@@ -92,12 +87,8 @@ private extension FinanceView {
         }
     }
 
-    var usedCurrencies: Set<String> {
-        Set(periodTransactions.map { $0.currency })
-    }
-
     var hasMultipleCurrencies: Bool {
-        usedCurrencies.count > 1
+        Set(periodTransactions.map { $0.currency }).count > 1
     }
 
     var totalIncome: Double {
@@ -122,15 +113,15 @@ private extension FinanceView {
         for transaction in periodTransactions {
             let current = breakdown[transaction.currency] ?? (income: 0, expense: 0)
             if transaction.type == .income {
-                breakdown[transaction.currency] = (income: current.income + transaction.amount, expense: current.expense)
+                breakdown[transaction.currency] = (current.income + transaction.amount, current.expense)
             } else if transaction.type == .expense {
-                breakdown[transaction.currency] = (income: current.income, expense: current.expense + transaction.amount)
+                breakdown[transaction.currency] = (current.income, current.expense + transaction.amount)
             }
         }
 
         return breakdown.compactMap { key, value in
             guard let currency = Currency(rawValue: key) else { return nil }
-            return (currency: currency, income: value.income, expense: value.expense)
+            return (currency, value.income, value.expense)
         }.sorted { $0.currency.rawValue < $1.currency.rawValue }
     }
 
@@ -161,45 +152,46 @@ private extension FinanceView {
     }
 }
 
-// MARK: - View Components
+// MARK: - Period Selector
 
 private extension FinanceView {
     var periodSelector: some View {
         VStack(spacing: 12) {
-            HStack(spacing: 6) {
-                ForEach(TimePeriod.allCases) { period in
-                    Button {
-                        withAnimation(.spring(response: 0.3)) {
-                            selectedPeriod = period
-                            if period == .range {
-                                showDateRangePicker = true
-                            }
-                        }
-                    } label: {
-                        Text(period.title)
-                            .font(.nexusCaption)
-                            .fontWeight(selectedPeriod == period ? .semibold : .regular)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background {
-                                if selectedPeriod == period {
-                                    Capsule()
-                                        .fill(Color.nexusGreen)
-                                }
-                            }
-                            .foregroundStyle(selectedPeriod == period ? .white : .secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(4)
-            .background {
-                Capsule()
-                    .fill(Color.nexusSurface)
-            }
-
+            periodButtons
             dateRangeDisplay
         }
+    }
+
+    var periodButtons: some View {
+        HStack(spacing: 6) {
+            ForEach(TimePeriod.allCases) { period in
+                periodButton(for: period)
+            }
+        }
+        .padding(4)
+        .background { Capsule().fill(Color.nexusSurface) }
+    }
+
+    func periodButton(for period: TimePeriod) -> some View {
+        Button {
+            withAnimation(.spring(response: 0.3)) {
+                selectedPeriod = period
+                if period == .range { showDateRangePicker = true }
+            }
+        } label: {
+            Text(period.title)
+                .font(.nexusCaption)
+                .fontWeight(selectedPeriod == period ? .semibold : .regular)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background {
+                    if selectedPeriod == period {
+                        Capsule().fill(Color.nexusGreen)
+                    }
+                }
+                .foregroundStyle(selectedPeriod == period ? .white : .secondary)
+        }
+        .buttonStyle(.plain)
     }
 
     var dateRangeDisplay: some View {
@@ -208,159 +200,17 @@ private extension FinanceView {
 
         return Group {
             if isCustomRange {
-                Button {
-                    showDateRangePicker = true
-                } label: {
-                    dateRangeContent(start: dates.start, end: dates.end, showChevron: true)
+                Button { showDateRangePicker = true } label: {
+                    dateRangeBadge(start: dates.start, end: dates.end, showChevron: true)
                 }
                 .buttonStyle(.plain)
             } else {
-                dateRangeContent(start: dates.start, end: dates.end, showChevron: false)
+                dateRangeBadge(start: dates.start, end: dates.end, showChevron: false)
             }
         }
     }
 
-    var summaryCard: some View {
-        VStack(spacing: 16) {
-            VStack(spacing: 4) {
-                HStack(spacing: 6) {
-                    Text("Balance")
-                        .font(.nexusSubheadline)
-                        .foregroundStyle(.secondary)
-                    if hasMultipleCurrencies {
-                        Text("(\(baseCurrency.rawValue))")
-                            .font(.nexusCaption)
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-
-                Text(formatCurrency(balance))
-                    .font(.system(size: 36, weight: .bold, design: .rounded))
-                    .foregroundStyle(balance >= 0 ? Color.nexusGreen : Color.nexusRed)
-            }
-
-            HStack(spacing: 24) {
-                VStack(spacing: 4) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.down.circle.fill")
-                            .foregroundStyle(Color.nexusGreen)
-                        Text("Income")
-                            .foregroundStyle(.secondary)
-                    }
-                    .font(.nexusCaption)
-
-                    Text(formatCurrency(totalIncome))
-                        .font(.nexusHeadline)
-                        .foregroundStyle(Color.nexusGreen)
-                }
-
-                Divider()
-                    .frame(height: 40)
-
-                VStack(spacing: 4) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .foregroundStyle(Color.nexusRed)
-                        Text("Expenses")
-                            .foregroundStyle(.secondary)
-                    }
-                    .font(.nexusCaption)
-
-                    Text(formatCurrency(totalExpense))
-                        .font(.nexusHeadline)
-                        .foregroundStyle(Color.nexusRed)
-                }
-            }
-
-            if hasMultipleCurrencies {
-                currencyBreakdownView
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(20)
-        .background {
-            RoundedRectangle(cornerRadius: 20)
-                .fill(Color.nexusSurface)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 20)
-                        .strokeBorder(Color.nexusBorder, lineWidth: 1)
-                }
-        }
-    }
-
-    @ViewBuilder
-    var currencyBreakdownView: some View {
-        VStack(spacing: 12) {
-            Divider()
-                .background(Color.nexusBorder)
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("By Currency")
-                    .font(.nexusCaption)
-                    .foregroundStyle(.secondary)
-
-                ForEach(currencyBreakdown, id: \.currency) { item in
-                    HStack {
-                        HStack(spacing: 6) {
-                            Text(item.currency.flag)
-                                .font(.system(size: 16))
-                            Text(item.currency.rawValue)
-                                .font(.nexusSubheadline)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Spacer()
-
-                        let currencyBalance = item.income - item.expense
-                        Text(item.currency.format(currencyBalance))
-                            .font(.nexusSubheadline)
-                            .fontWeight(.medium)
-                            .foregroundStyle(currencyBalance >= 0 ? Color.nexusGreen : Color.nexusRed)
-                    }
-                }
-            }
-        }
-    }
-
-    var transactionsList: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Transactions")
-                .font(.nexusHeadline)
-                .foregroundStyle(.secondary)
-
-            if periodTransactions.isEmpty {
-                emptyState
-            } else {
-                LazyVStack(spacing: 8) {
-                    ForEach(periodTransactions) { transaction in
-                        TransactionRow(transaction: transaction)
-                            .onTapGesture {
-                                selectedTransaction = transaction
-                            }
-                    }
-                }
-            }
-        }
-    }
-
-    var emptyState: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "creditcard")
-                .font(.system(size: 40))
-                .foregroundStyle(.secondary)
-
-            Text("No Transactions")
-                .font(.nexusHeadline)
-
-            Text("Tap + to add your first transaction")
-                .font(.nexusSubheadline)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 40)
-    }
-
-    func dateRangeContent(start: Date, end: Date, showChevron: Bool) -> some View {
+    func dateRangeBadge(start: Date, end: Date, showChevron: Bool) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "calendar")
                 .foregroundStyle(Color.nexusGreen)
@@ -385,14 +235,160 @@ private extension FinanceView {
     }
 }
 
+// MARK: - Summary Card
+
+private extension FinanceView {
+    var summaryCard: some View {
+        VStack(spacing: 16) {
+            balanceHeader
+            incomeExpenseRow
+            if hasMultipleCurrencies {
+                currencyBreakdownSection
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(20)
+        .background {
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color.nexusSurface)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 20)
+                        .strokeBorder(Color.nexusBorder, lineWidth: 1)
+                }
+        }
+    }
+
+    var balanceHeader: some View {
+        VStack(spacing: 4) {
+            HStack(spacing: 6) {
+                Text("Balance")
+                    .font(.nexusSubheadline)
+                    .foregroundStyle(.secondary)
+                if hasMultipleCurrencies {
+                    Text("(\(baseCurrency.rawValue))")
+                        .font(.nexusCaption)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            Text(formatCurrency(balance))
+                .font(.system(size: 36, weight: .bold, design: .rounded))
+                .foregroundStyle(balance >= 0 ? Color.nexusGreen : Color.nexusRed)
+        }
+    }
+
+    var incomeExpenseRow: some View {
+        HStack(spacing: 24) {
+            summaryItem(
+                icon: "arrow.down.circle.fill",
+                label: "Income",
+                amount: totalIncome,
+                color: .nexusGreen
+            )
+            Divider().frame(height: 40)
+            summaryItem(
+                icon: "arrow.up.circle.fill",
+                label: "Expenses",
+                amount: totalExpense,
+                color: .nexusRed
+            )
+        }
+    }
+
+    func summaryItem(icon: String, label: String, amount: Double, color: Color) -> some View {
+        VStack(spacing: 4) {
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                    .foregroundStyle(color)
+                Text(label)
+                    .foregroundStyle(.secondary)
+            }
+            .font(.nexusCaption)
+
+            Text(formatCurrency(amount))
+                .font(.nexusHeadline)
+                .foregroundStyle(color)
+        }
+    }
+
+    var currencyBreakdownSection: some View {
+        VStack(spacing: 12) {
+            Divider().background(Color.nexusBorder)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("By Currency")
+                    .font(.nexusCaption)
+                    .foregroundStyle(.secondary)
+
+                ForEach(currencyBreakdown, id: \.currency) { item in
+                    currencyBreakdownRow(item: item)
+                }
+            }
+        }
+    }
+
+    func currencyBreakdownRow(item: (currency: Currency, income: Double, expense: Double)) -> some View {
+        let currencyBalance = item.income - item.expense
+        return HStack {
+            HStack(spacing: 6) {
+                Text(item.currency.flag)
+                    .font(.system(size: 16))
+                Text(item.currency.rawValue)
+                    .font(.nexusSubheadline)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Text(item.currency.format(currencyBalance))
+                .font(.nexusSubheadline)
+                .fontWeight(.medium)
+                .foregroundStyle(currencyBalance >= 0 ? Color.nexusGreen : Color.nexusRed)
+        }
+    }
+}
+
+// MARK: - Transactions List
+
+private extension FinanceView {
+    var transactionsList: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Transactions")
+                .font(.nexusHeadline)
+                .foregroundStyle(.secondary)
+
+            if periodTransactions.isEmpty {
+                emptyTransactionsState
+            } else {
+                LazyVStack(spacing: 8) {
+                    ForEach(periodTransactions) { transaction in
+                        TransactionRow(transaction: transaction)
+                            .onTapGesture { selectedTransaction = transaction }
+                    }
+                }
+            }
+        }
+    }
+
+    var emptyTransactionsState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "creditcard")
+                .font(.system(size: 40))
+                .foregroundStyle(.secondary)
+            Text("No Transactions")
+                .font(.nexusHeadline)
+            Text("Tap + to add your first transaction")
+                .font(.nexusSubheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 40)
+    }
+}
+
 // MARK: - Helper Methods
 
 private extension FinanceView {
     func convertToBase(_ amount: Double, from currencyCode: String) -> Double {
         guard let fromCurrency = Currency(rawValue: currencyCode),
-              let rates = exchangeRates else {
-            return amount
-        }
+              let rates = exchangeRates else { return amount }
         return currencyService.convert(amount: amount, from: fromCurrency, to: baseCurrency, rates: rates)
     }
 
@@ -400,27 +396,19 @@ private extension FinanceView {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
         formatter.currencyCode = preferredCurrency
-        return formatter.string(from: NSNumber(value: amount)) ?? "\(Currency(rawValue: preferredCurrency)?.symbol ?? "$")0.00"
+        return formatter.string(from: NSNumber(value: amount)) ?? "\(baseCurrency.symbol)0.00"
     }
 
     func formatDateRange(start: Date, end: Date) -> String {
         let formatter = DateFormatter()
-        formatter.dateFormat = "MMM d"
-        let startStr = formatter.string(from: start)
-        let endStr = formatter.string(from: end)
-
         if Calendar.current.isDate(start, inSameDayAs: end) {
             formatter.dateFormat = "EEEE, MMM d"
             return formatter.string(from: start)
         }
-
-        return "\(startStr) - \(endStr)"
+        formatter.dateFormat = "MMM d"
+        return "\(formatter.string(from: start)) - \(formatter.string(from: end))"
     }
-}
 
-// MARK: - Actions
-
-private extension FinanceView {
     func fetchExchangeRates() async {
         if let cached = CurrencyCache.getCachedRates(base: baseCurrency, context: modelContext), !cached.isStale {
             exchangeRates = cached
@@ -434,6 +422,8 @@ private extension FinanceView {
         } catch {
             if let cached = CurrencyCache.getCachedRates(base: baseCurrency, context: modelContext) {
                 exchangeRates = cached
+            } else {
+                print("Currency fetch error: \((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)")
             }
         }
     }
@@ -461,40 +451,46 @@ private struct TransactionRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: transaction.category.icon)
-                .font(.system(size: 16))
-                .foregroundStyle(categoryColor)
-                .frame(width: 40, height: 40)
-                .background {
-                    Circle()
-                        .fill(categoryColor.opacity(0.15))
-                }
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(transaction.title)
-                    .font(.nexusSubheadline)
-
-                Text(transaction.category.rawValue.capitalized)
-                    .font(.nexusCaption)
-                    .foregroundStyle(.secondary)
-            }
-
+            categoryIcon
+            titleAndCategory
             Spacer()
-
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(amountText)
-                    .font(.nexusHeadline)
-                    .foregroundStyle(transaction.type == .income ? Color.nexusGreen : Color.primary)
-
-                Text(transaction.date.formatted(date: .abbreviated, time: .omitted))
-                    .font(.nexusCaption)
-                    .foregroundStyle(.secondary)
-            }
+            amountAndDate
         }
         .padding(12)
         .background {
             RoundedRectangle(cornerRadius: 12)
                 .fill(Color.nexusSurface)
+        }
+    }
+
+    var categoryIcon: some View {
+        Image(systemName: transaction.category.icon)
+            .font(.system(size: 16))
+            .foregroundStyle(categoryColor)
+            .frame(width: 40, height: 40)
+            .background {
+                Circle().fill(categoryColor.opacity(0.15))
+            }
+    }
+
+    var titleAndCategory: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(transaction.title)
+                .font(.nexusSubheadline)
+            Text(transaction.category.rawValue.capitalized)
+                .font(.nexusCaption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    var amountAndDate: some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            Text(formattedAmount)
+                .font(.nexusHeadline)
+                .foregroundStyle(transaction.type == .income ? Color.nexusGreen : Color.primary)
+            Text(transaction.date.formatted(date: .abbreviated, time: .omitted))
+                .font(.nexusCaption)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -516,7 +512,7 @@ private struct TransactionRow: View {
         }
     }
 
-    var amountText: String {
+    var formattedAmount: String {
         let prefix = transaction.type == .income ? "+" : "-"
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
@@ -536,8 +532,9 @@ private struct DateRangePickerSheet: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 24) {
-                dateSelectionRow
-                quickSelectSection
+                datePickersRow
+                daysSelectedLabel
+                quickSelectGrid
                 Spacer()
             }
             .padding(20)
@@ -546,90 +543,72 @@ private struct DateRangePickerSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                    .fontWeight(.semibold)
+                    Button("Done") { dismiss() }
+                        .fontWeight(.semibold)
                 }
             }
         }
     }
 
-    var dateSelectionRow: some View {
-        VStack(spacing: 16) {
-            HStack {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Start Date")
-                        .font(.nexusCaption)
-                        .foregroundStyle(.secondary)
-                    DatePicker(
-                        "",
-                        selection: $startDate,
-                        in: ...endDate,
-                        displayedComponents: .date
-                    )
-                    .datePickerStyle(.compact)
-                    .labelsHidden()
-                    .tint(Color.nexusGreen)
-                }
+    var datePickersRow: some View {
+        HStack {
+            datePicker(label: "Start Date", selection: $startDate, range: ...endDate, alignment: .leading)
+            Spacer()
+            Image(systemName: "arrow.right").foregroundStyle(.tertiary)
+            Spacer()
+            datePicker(label: "End Date", selection: $endDate, range: startDate..., alignment: .trailing)
+        }
+        .padding(16)
+        .background {
+            RoundedRectangle(cornerRadius: 12).fill(Color.nexusSurface)
+        }
+    }
 
-                Spacer()
-
-                Image(systemName: "arrow.right")
-                    .foregroundStyle(.tertiary)
-
-                Spacer()
-
-                VStack(alignment: .trailing, spacing: 8) {
-                    Text("End Date")
-                        .font(.nexusCaption)
-                        .foregroundStyle(.secondary)
-                    DatePicker(
-                        "",
-                        selection: $endDate,
-                        in: startDate...,
-                        displayedComponents: .date
-                    )
-                    .datePickerStyle(.compact)
-                    .labelsHidden()
-                    .tint(Color.nexusGreen)
-                }
-            }
-            .padding(16)
-            .background {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.nexusSurface)
-            }
-
-            Text("Selected: \(daysBetween()) days")
+    func datePicker(label: String, selection: Binding<Date>, range: PartialRangeThrough<Date>, alignment: HorizontalAlignment) -> some View {
+        VStack(alignment: alignment, spacing: 8) {
+            Text(label)
                 .font(.nexusCaption)
                 .foregroundStyle(.secondary)
+            DatePicker("", selection: selection, in: range, displayedComponents: .date)
+                .datePickerStyle(.compact)
+                .labelsHidden()
+                .tint(Color.nexusGreen)
         }
     }
 
-    var quickSelectSection: some View {
+    func datePicker(label: String, selection: Binding<Date>, range: PartialRangeFrom<Date>, alignment: HorizontalAlignment) -> some View {
+        VStack(alignment: alignment, spacing: 8) {
+            Text(label)
+                .font(.nexusCaption)
+                .foregroundStyle(.secondary)
+            DatePicker("", selection: selection, in: range, displayedComponents: .date)
+                .datePickerStyle(.compact)
+                .labelsHidden()
+                .tint(Color.nexusGreen)
+        }
+    }
+
+    var daysSelectedLabel: some View {
+        let days = Calendar.current.dateComponents([.day], from: startDate, to: endDate).day ?? 0
+        return Text("Selected: \(days + 1) days")
+            .font(.nexusCaption)
+            .foregroundStyle(.secondary)
+    }
+
+    var quickSelectGrid: some View {
         VStack(spacing: 12) {
             Text("Quick Select")
                 .font(.nexusCaption)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            LazyVGrid(columns: [
-                GridItem(.flexible()),
-                GridItem(.flexible())
-            ], spacing: 12) {
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                 quickSelectButton("Last 7 Days", days: 7)
                 quickSelectButton("Last 14 Days", days: 14)
                 quickSelectButton("Last 30 Days", days: 30)
                 quickSelectButton("Last 90 Days", days: 90)
             }
         }
-    }
-
-    func daysBetween() -> Int {
-        let calendar = Calendar.current
-        let components = calendar.dateComponents([.day], from: startDate, to: endDate)
-        return (components.day ?? 0) + 1
     }
 
     func quickSelectButton(_ title: String, days: Int) -> some View {
@@ -643,8 +622,7 @@ private struct DateRangePickerSheet: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
                 .background {
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.nexusSurfaceSecondary)
+                    RoundedRectangle(cornerRadius: 10).fill(Color.nexusSurfaceSecondary)
                 }
                 .foregroundStyle(.primary)
         }
