@@ -7,6 +7,8 @@ struct RootView: View {
     @State private var previousTab: Tab = .home
     @State private var showAssistant = false
 
+    private var assistantLauncher = AssistantLauncher.shared
+
     var body: some View {
         TabView(selection: $selectedTab) {
             ForEach(Tab.allCases) { tab in
@@ -30,6 +32,12 @@ struct RootView: View {
                 selectedTab = previousTab
             } else {
                 previousTab = newValue
+            }
+        }
+        .onChange(of: assistantLauncher.shouldOpenAssistant) { _, shouldOpen in
+            if shouldOpen {
+                showAssistant = true
+                assistantLauncher.shouldOpenAssistant = false
             }
         }
         .sheet(isPresented: $showAssistant) {
