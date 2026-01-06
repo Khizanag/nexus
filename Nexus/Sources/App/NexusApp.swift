@@ -32,25 +32,19 @@ struct NexusApp: App {
 
     private static func createModelContainer(schema: Schema) -> ModelContainer {
         // Try CloudKit first if entitlements are configured
-        if let cloudContainer = try? ModelContainer(
-            for: schema,
-            configurations: ModelConfiguration(
-                "Nexus",
+        do {
+            let cloudConfig = ModelConfiguration(
                 schema: schema,
                 cloudKitDatabase: .private("iCloud.com.khizanag.nexus-app")
             )
-        ) {
-            return cloudContainer
+            return try ModelContainer(for: schema, configurations: cloudConfig)
+        } catch {
+            print("CloudKit container failed: \(error). Falling back to local storage.")
         }
 
         // Fall back to local storage
         do {
-            let localConfig = ModelConfiguration(
-                "Nexus",
-                schema: schema,
-                isStoredInMemoryOnly: false
-            )
-            return try ModelContainer(for: schema, configurations: localConfig)
+            return try ModelContainer(for: schema)
         } catch {
             fatalError("Failed to initialize ModelContainer: \(error)")
         }
