@@ -37,7 +37,7 @@ struct NexusApp: App {
             configurations: ModelConfiguration(
                 "Nexus",
                 schema: schema,
-                cloudKitDatabase: .private("iCloud.com.nexus.app")
+                cloudKitDatabase: .private("iCloud.com.khizanag.nexus-app")
             )
         ) {
             return cloudContainer
