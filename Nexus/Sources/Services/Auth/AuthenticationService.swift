@@ -21,6 +21,14 @@ struct UserAccount: Codable, Sendable {
     }
 }
 
+// MARK: - iCloud Key-Value Storage for User Profile
+
+private enum CloudKeys {
+    static let userName = "user_full_name"
+    static let userEmail = "user_email"
+    static let userId = "user_id"
+}
+
 @MainActor
 protocol AuthenticationServiceProtocol: Sendable {
     var isSignedIn: Bool { get }
@@ -102,6 +110,39 @@ final class AuthenticationService: NSObject, AuthenticationServiceProtocol {
         let data = try JSONEncoder().encode(user)
         try keychainService.save(data, forKey: KeychainKey.userAccount)
         try keychainService.saveString(user.id, forKey: KeychainKey.appleUserID)
+
+        // Save to iCloud for persistence across app deletions
+        let cloud = NSUbiquitousKeyValueStore.default
+        cloud.set(user.id, forKey: CloudKeys.userId)
+        if let name = user.fullName {
+            cloud.set(name, forKey: CloudKeys.userName)
+        }
+        if let email = user.email {
+            cloud.set(email, forKey: CloudKeys.userEmail)
+        }
+        cloud.synchronize()
+    }
+
+    private func loadCloudUserProfile(for userId: String) -> (name: String?, email: String?) {
+        let cloud = NSUbiquitousKeyValueStore.default
+        cloud.synchronize()
+
+        guard cloud.string(forKey: CloudKeys.userId) == userId else {
+            return (nil, nil)
+        }
+
+        return (
+            cloud.string(forKey: CloudKeys.userName),
+            cloud.string(forKey: CloudKeys.userEmail)
+        )
+    }
+
+    private func clearCloudUserProfile() {
+        let cloud = NSUbiquitousKeyValueStore.default
+        cloud.removeObject(forKey: CloudKeys.userId)
+        cloud.removeObject(forKey: CloudKeys.userName)
+        cloud.removeObject(forKey: CloudKeys.userEmail)
+        cloud.synchronize()
     }
 }
 
@@ -119,7 +160,10 @@ extension AuthenticationService: ASAuthorizationControllerDelegate {
                 return
             }
 
+            // Try to get name from credential (only available on first sign in)
             var fullName: String?
+            var email: String? = credential.email
+
             if let nameComponents = credential.fullName {
                 let formatter = PersonNameComponentsFormatter()
                 let name = formatter.string(from: nameComponents)
@@ -128,10 +172,26 @@ extension AuthenticationService: ASAuthorizationControllerDelegate {
                 }
             }
 
+            // If name not provided, try to get from iCloud (persists across app deletions)
+            if fullName == nil || email == nil {
+                let cloudProfile = loadCloudUserProfile(for: credential.user)
+                if fullName == nil {
+                    fullName = cloudProfile.name
+                }
+                if email == nil {
+                    email = cloudProfile.email
+                }
+            }
+
+            // Last resort: try current user (same session)
+            if fullName == nil {
+                fullName = currentUser?.fullName
+            }
+
             let user = UserAccount(
                 id: credential.user,
-                email: credential.email,
-                fullName: fullName ?? currentUser?.fullName,
+                email: email,
+                fullName: fullName,
                 signInDate: Date()
             )
 
