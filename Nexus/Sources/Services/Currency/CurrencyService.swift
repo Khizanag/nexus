@@ -25,20 +25,45 @@ final class CurrencyService: CurrencyServiceProtocol, Sendable {
     private let baseURL = "https://api.exchangerate-api.com/v4/latest"
 
     func fetchRatesFromAPI(base: Currency) async throws -> ExchangeRates {
-        let url = URL(string: "\(baseURL)/\(base.rawValue)")!
-        let (data, response) = try await URLSession.shared.data(from: url)
-
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
-            throw CurrencyServiceError.requestFailed
+        guard let url = URL(string: "\(baseURL)/\(base.rawValue)") else {
+            throw CurrencyServiceError.invalidURL
         }
 
-        let apiResponse = try JSONDecoder().decode(ExchangeRateAPIResponse.self, from: data)
-        return ExchangeRates(
-            base: base,
-            rates: parseRates(apiResponse.rates),
-            timestamp: Date()
-        )
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 15
+
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch let error as URLError {
+            switch error.code {
+            case .notConnectedToInternet, .networkConnectionLost:
+                throw CurrencyServiceError.networkUnavailable
+            case .timedOut:
+                throw CurrencyServiceError.timeout
+            default:
+                throw CurrencyServiceError.requestFailed
+            }
+        }
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw CurrencyServiceError.invalidResponse
+        }
+
+        guard httpResponse.statusCode == 200 else {
+            throw CurrencyServiceError.serverError(httpResponse.statusCode)
+        }
+
+        do {
+            let apiResponse = try JSONDecoder().decode(ExchangeRateAPIResponse.self, from: data)
+            return ExchangeRates(
+                base: base,
+                rates: parseRates(apiResponse.rates),
+                timestamp: Date()
+            )
+        } catch {
+            throw CurrencyServiceError.decodingFailed
+        }
     }
 
     func convert(amount: Double, from: Currency, to: Currency, rates: ExchangeRates) -> Double {
@@ -78,18 +103,30 @@ private struct ExchangeRateAPIResponse: Codable {
 // MARK: - Errors
 
 enum CurrencyServiceError: Error, LocalizedError {
+    case invalidURL
     case requestFailed
     case invalidResponse
     case networkUnavailable
+    case timeout
+    case serverError(Int)
+    case decodingFailed
 
     var errorDescription: String? {
         switch self {
+        case .invalidURL:
+            "Invalid URL"
         case .requestFailed:
             "Failed to fetch exchange rates"
         case .invalidResponse:
             "Invalid response from server"
         case .networkUnavailable:
-            "Network unavailable"
+            "No internet connection"
+        case .timeout:
+            "Request timed out"
+        case .serverError(let code):
+            "Server error (\(code))"
+        case .decodingFailed:
+            "Failed to parse rates"
         }
     }
 }

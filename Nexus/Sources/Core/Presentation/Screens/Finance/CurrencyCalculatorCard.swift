@@ -53,7 +53,8 @@ struct CurrencyCalculatorCard: View {
         if showAllCurrencies {
             return favorites + nonFavorites
         } else {
-            return Array(favorites.prefix(4))
+            let combined = favorites + nonFavorites
+            return Array(combined.prefix(4))
         }
     }
 
@@ -362,7 +363,7 @@ struct CurrencyCalculatorCard: View {
                 lastUpdated = cached.timestamp
                 isUsingCachedData = true
             } else {
-                errorMessage = "Couldn't fetch rates"
+                errorMessage = (error as? LocalizedError)?.errorDescription ?? "Couldn't fetch rates"
             }
         }
 
