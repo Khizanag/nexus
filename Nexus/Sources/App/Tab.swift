@@ -2,9 +2,9 @@ import SwiftUI
 
 enum Tab: String, CaseIterable, Identifiable {
     case home
-    case notes
-    case assistant
     case tasks
+    case assistant
+    case health
     case finance
 
     var id: String { rawValue }
@@ -12,9 +12,9 @@ enum Tab: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .home: "Home"
-        case .notes: "Notes"
-        case .assistant: "AI"
         case .tasks: "Tasks"
+        case .assistant: "AI"
+        case .health: "Health"
         case .finance: "Finance"
         }
     }
@@ -22,9 +22,9 @@ enum Tab: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .home: "house.fill"
-        case .notes: "doc.text.fill"
-        case .assistant: "sparkles"
         case .tasks: "checkmark.circle.fill"
+        case .assistant: "sparkles"
+        case .health: "heart.fill"
         case .finance: "creditcard.fill"
         }
     }
@@ -37,9 +37,9 @@ enum Tab: String, CaseIterable, Identifiable {
     var view: some View {
         switch self {
         case .home: HomeView()
-        case .notes: NotesView()
-        case .assistant: EmptyView()
         case .tasks: TasksView()
+        case .assistant: EmptyView()
+        case .health: HealthView()
         case .finance: FinanceView()
         }
     }
