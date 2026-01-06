@@ -31,22 +31,38 @@ struct NexusApp: App {
     }
 
     private static func createModelContainer(schema: Schema) -> ModelContainer {
-        // Try CloudKit first if entitlements are configured
+        // Get app's document directory for the store
+        let storeURL = URL.documentsDirectory.appending(path: "Nexus.sqlite")
+
+        // Try CloudKit first
         do {
-            let cloudConfig = ModelConfiguration(
+            let config = ModelConfiguration(
                 schema: schema,
-                cloudKitDatabase: .private("iCloud.com.khizanag.nexus-app")
+                url: storeURL,
+                cloudKitDatabase: .automatic
             )
-            return try ModelContainer(for: schema, configurations: cloudConfig)
+            return try ModelContainer(for: schema, configurations: config)
         } catch {
-            print("CloudKit container failed: \(error). Falling back to local storage.")
+            print("CloudKit failed: \(error)")
         }
 
-        // Fall back to local storage
+        // Try local storage with explicit URL
+        do {
+            let localConfig = ModelConfiguration(
+                schema: schema,
+                url: storeURL,
+                cloudKitDatabase: .none
+            )
+            return try ModelContainer(for: schema, configurations: localConfig)
+        } catch {
+            print("Local storage failed: \(error)")
+        }
+
+        // Last resort: default container
         do {
             return try ModelContainer(for: schema)
         } catch {
-            fatalError("Failed to initialize ModelContainer: \(error)")
+            fatalError("All ModelContainer attempts failed: \(error)")
         }
     }
 
