@@ -226,8 +226,15 @@ struct AssistantView: View {
             }
         }
 
+        // Add health suggestions
+        let healthSuggestions = [
+            "Log 8 hours of sleep",
+            "Drank 500ml water",
+            "Walked 5000 steps"
+        ]
+
         if suggestions.count < 4 {
-            suggestions.append("Remind me to call mom tomorrow")
+            suggestions.append(healthSuggestions.randomElement() ?? "Log 8 hours of sleep")
         }
 
         return Array(suggestions.prefix(4))
@@ -392,6 +399,11 @@ struct AssistantView: View {
             return completeAction
         }
 
+        // Log health data
+        if let healthAction = parseHealthAction(input: input, lowercased: lowercased) {
+            return healthAction
+        }
+
         // Tasks queries
         if lowercased.contains("task") || lowercased.contains("due") || lowercased.contains("todo") {
             return generateTasksResponse(for: lowercased)
@@ -424,13 +436,15 @@ struct AssistantView: View {
                 📝 **Notes** - Create, summarize, and organize your notes
                 ✅ **Tasks** - Create tasks, track deadlines, mark complete
                 💰 **Finance** - Analyze spending, income, and budgets
-                ❤️ **Health** - Monitor sleep, steps, weight, and more
+                ❤️ **Health** - Log and track your health metrics
 
                 **Quick Actions:**
-                • "Create task Buy groceries"
+                • "Create task Buy groceries tomorrow"
                 • "Add note Meeting notes: ..."
                 • "Complete task Buy groceries"
-                • "Remind me to call mom tomorrow"
+                • "Log 8 hours of sleep"
+                • "Drank 500ml water"
+                • "Weight 75 kg"
                 """,
                 type: .capabilities
             )
@@ -912,6 +926,164 @@ private extension AssistantView {
             type: .text
         )
     }
+
+    // MARK: - Health Actions
+
+    func parseHealthAction(input: String, lowercased: String) -> ChatMessage? {
+        // Log patterns
+        let logPatterns = ["log ", "logged ", "track ", "tracked ", "record ", "recorded ", "add health ", "drank ", "slept ", "walked ", "weigh ", "weight "]
+
+        for pattern in logPatterns {
+            if lowercased.contains(pattern) {
+                if let result = parseHealthEntry(from: input, lowercased: lowercased) {
+                    return result
+                }
+            }
+        }
+
+        // Direct metric mentions with numbers
+        let metricKeywords: [(keywords: [String], metric: HealthMetricType)] = [
+            (["water", "ml", "liter", "litre", "hydrat"], .waterIntake),
+            (["sleep", "slept", "hour of sleep", "hours of sleep"], .sleep),
+            (["step", "walked"], .steps),
+            (["calorie", "kcal", "cal burned"], .calories),
+            (["weight", "weigh", "kg", "pound", "lb"], .weight),
+            (["heart rate", "bpm", "pulse", "heartbeat"], .heartRate),
+            (["mood", "feeling", "feel "], .mood),
+            (["energy", "energetic", "tired"], .energy),
+            (["blood pressure", "bp "], .bloodPressure)
+        ]
+
+        for (keywords, metric) in metricKeywords {
+            for keyword in keywords {
+                if lowercased.contains(keyword) {
+                    if let value = extractNumber(from: lowercased) {
+                        return logHealthEntry(metric: metric, value: value)
+                    }
+                }
+            }
+        }
+
+        return nil
+    }
+
+    func extractNumber(from text: String) -> Double? {
+        let pattern = #"(\d+\.?\d*)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+              let range = Range(match.range(at: 1), in: text) else {
+            return nil
+        }
+        return Double(text[range])
+    }
+
+    func parseHealthEntry(from input: String, lowercased: String) -> ChatMessage? {
+        // Water intake patterns
+        if lowercased.contains("water") || lowercased.contains("drank") || lowercased.contains("ml") || lowercased.contains("liter") {
+            if let value = extractNumber(from: lowercased) {
+                var amount = value
+                if lowercased.contains("liter") || lowercased.contains("litre") || lowercased.contains("l ") {
+                    amount = value * 1000
+                } else if lowercased.contains("glass") || lowercased.contains("cup") {
+                    amount = value * 250
+                }
+                return logHealthEntry(metric: .waterIntake, value: amount)
+            }
+        }
+
+        // Sleep patterns
+        if lowercased.contains("sleep") || lowercased.contains("slept") {
+            if let value = extractNumber(from: lowercased) {
+                return logHealthEntry(metric: .sleep, value: value)
+            }
+        }
+
+        // Steps patterns
+        if lowercased.contains("step") || lowercased.contains("walked") {
+            if let value = extractNumber(from: lowercased) {
+                return logHealthEntry(metric: .steps, value: value)
+            }
+        }
+
+        // Calories patterns
+        if lowercased.contains("calorie") || lowercased.contains("kcal") {
+            if let value = extractNumber(from: lowercased) {
+                return logHealthEntry(metric: .calories, value: value)
+            }
+        }
+
+        // Weight patterns
+        if lowercased.contains("weight") || lowercased.contains("weigh") {
+            if let value = extractNumber(from: lowercased) {
+                var weight = value
+                if lowercased.contains("lb") || lowercased.contains("pound") {
+                    weight = value * 0.453592
+                }
+                return logHealthEntry(metric: .weight, value: weight)
+            }
+        }
+
+        // Heart rate patterns
+        if lowercased.contains("heart rate") || lowercased.contains("bpm") || lowercased.contains("pulse") {
+            if let value = extractNumber(from: lowercased) {
+                return logHealthEntry(metric: .heartRate, value: value)
+            }
+        }
+
+        // Mood patterns
+        if lowercased.contains("mood") || (lowercased.contains("feeling") && extractNumber(from: lowercased) != nil) {
+            if let value = extractNumber(from: lowercased) {
+                let clampedValue = min(max(value, 1), 10)
+                return logHealthEntry(metric: .mood, value: clampedValue)
+            }
+        }
+
+        // Energy patterns
+        if lowercased.contains("energy") {
+            if let value = extractNumber(from: lowercased) {
+                let clampedValue = min(max(value, 1), 10)
+                return logHealthEntry(metric: .energy, value: clampedValue)
+            }
+        }
+
+        return nil
+    }
+
+    func logHealthEntry(metric: HealthMetricType, value: Double) -> ChatMessage {
+        let entry = HealthEntryModel(
+            type: metric,
+            value: value,
+            unit: metric.defaultUnit,
+            date: Date()
+        )
+        modelContext.insert(entry)
+
+        let formattedValue: String
+        if value.truncatingRemainder(dividingBy: 1) == 0 {
+            formattedValue = String(format: "%.0f", value)
+        } else {
+            formattedValue = String(format: "%.1f", value)
+        }
+
+        let emoji: String
+        switch metric {
+        case .weight: emoji = "⚖️"
+        case .waterIntake: emoji = "💧"
+        case .sleep: emoji = "😴"
+        case .steps: emoji = "🚶"
+        case .calories: emoji = "🔥"
+        case .heartRate: emoji = "❤️"
+        case .bloodPressure: emoji = "🩺"
+        case .mood: emoji = "😊"
+        case .energy: emoji = "⚡"
+        }
+
+        return ChatMessage(
+            role: .assistant,
+            content: "\(emoji) **\(metric.displayName) Logged!**\n\n**\(formattedValue) \(metric.defaultUnit)**\n\nKeep tracking for better insights!",
+            type: .healthLogged(metric: metric.displayName, value: "\(formattedValue) \(metric.defaultUnit)")
+        )
+    }
 }
 
 // MARK: - Chat Message Model
@@ -954,6 +1126,7 @@ struct ChatMessage: Identifiable {
         case noteCreated(title: String)
         case taskCompleted(title: String)
         case taskModified(title: String)
+        case healthLogged(metric: String, value: String)
     }
 }
 
@@ -1098,7 +1271,7 @@ private struct MessageBubble: View {
         }
 
         switch message.type {
-        case .taskCreated, .noteCreated, .taskCompleted:
+        case .taskCreated, .noteCreated, .taskCompleted, .healthLogged:
             return Color.nexusGreen.opacity(0.15)
         case .stats, .taskList, .notesSummary, .financeSummary, .healthSummary:
             return Color.nexusSurface
@@ -1244,10 +1417,15 @@ private struct CapabilitiesView: View {
 
                         CapabilityCard(
                             icon: "heart.fill",
-                            title: "Health Insights",
-                            description: "Monitor sleep, steps, weight, and wellness trends",
+                            title: "Health Tracking",
+                            description: "Log and track sleep, steps, weight, water, and more",
                             color: .healthColor,
-                            examples: ["How's my health?", "Show my sleep data"]
+                            examples: [
+                                "Log 8 hours of sleep",
+                                "Drank 500ml water",
+                                "Weight 75 kg",
+                                "How's my health?"
+                            ]
                         )
                     }
                     .padding(.horizontal, 20)
