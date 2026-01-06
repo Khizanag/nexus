@@ -113,17 +113,23 @@ final class SpeechRecognitionService {
 
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
+        request.requiresOnDeviceRecognition = false
         recognitionRequest = request
 
-        let inputNode = engine.inputNode
-        let format = inputNode.outputFormat(forBus: 0)
+        // Prepare engine first to initialize audio hardware
+        engine.prepare()
 
-        guard format.sampleRate > 0, format.channelCount > 0 else {
+        let inputNode = engine.inputNode
+
+        // Use native hardware format - must get AFTER prepare()
+        let nativeFormat = inputNode.inputFormat(forBus: 0)
+
+        guard nativeFormat.sampleRate > 0, nativeFormat.channelCount > 0 else {
             throw SpeechError.audioEngineUnavailable
         }
 
-        // Capture request locally to avoid accessing self from audio thread
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
+        // Install tap with nil format to use native hardware format
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { buffer, _ in
             request.append(buffer)
         }
 
@@ -141,7 +147,6 @@ final class SpeechRecognitionService {
             }
         }
 
-        engine.prepare()
         try engine.start()
         transcribedText = ""
     }
