@@ -171,10 +171,14 @@ struct HealthView: View {
                 GridItem(.flexible(), spacing: 12)
             ], spacing: 12) {
                 ForEach(metrics, id: \.self) { metric in
-                    MetricCard(metric: metric, latestValue: latestValue(for: metric))
-                        .onTapGesture {
-                            selectedMetric = metric
-                        }
+                    MetricCard(
+                        metric: metric,
+                        latestValue: combinedValue(for: metric),
+                        isFromHealthKit: isHealthKitValue(for: metric)
+                    )
+                    .onTapGesture {
+                        selectedMetric = metric
+                    }
                 }
             }
         }
@@ -220,6 +224,34 @@ struct HealthView: View {
             .filter { $0.type == type && Calendar.current.isDateInToday($0.date) }
             .first?
             .value
+    }
+
+    private func combinedValue(for type: HealthMetricType) -> Double? {
+        switch type {
+        case .steps:
+            return healthKitSteps ?? latestValue(for: type)
+        case .calories:
+            return healthKitCalories ?? latestValue(for: type)
+        case .sleep:
+            return healthKitSleep ?? latestValue(for: type)
+        case .heartRate:
+            return healthKitHeartRate ?? latestValue(for: type)
+        case .weight:
+            return healthKitWeight ?? latestValue(for: type)
+        default:
+            return latestValue(for: type)
+        }
+    }
+
+    private func isHealthKitValue(for type: HealthMetricType) -> Bool {
+        switch type {
+        case .steps: return healthKitSteps != nil
+        case .calories: return healthKitCalories != nil
+        case .sleep: return healthKitSleep != nil
+        case .heartRate: return healthKitHeartRate != nil
+        case .weight: return healthKitWeight != nil
+        default: return false
+        }
     }
 }
 
@@ -374,13 +406,23 @@ private struct TodayMetricCard: View {
 private struct MetricCard: View {
     let metric: HealthMetricType
     let latestValue: Double?
+    var isFromHealthKit: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Image(systemName: metric.icon)
-                    .font(.system(size: 18))
-                    .foregroundStyle(metricColor)
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: metric.icon)
+                        .font(.system(size: 18))
+                        .foregroundStyle(metricColor)
+
+                    if isFromHealthKit {
+                        Image(systemName: "heart.fill")
+                            .font(.system(size: 8))
+                            .foregroundStyle(Color.nexusRed)
+                            .offset(x: 6, y: -4)
+                    }
+                }
 
                 Spacer()
 
