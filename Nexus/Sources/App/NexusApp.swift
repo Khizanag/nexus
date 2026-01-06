@@ -24,7 +24,7 @@ struct NexusApp: App {
             TagModel.self,
             ChatMessageModel.self,
             CurrencyRateCacheModel.self,
-            CurrencyPreferenceModel.self
+            CurrencyPreferenceModel.self,
         ])
 
         modelContainer = Self.createModelContainer(schema: schema)

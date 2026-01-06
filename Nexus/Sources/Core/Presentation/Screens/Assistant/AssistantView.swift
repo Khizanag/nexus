@@ -205,26 +205,29 @@ struct AssistantView: View {
             suggestions.append("What tasks are due today?")
         } else if pendingTasks.count > 0 {
             suggestions.append("Show my pending tasks")
+        } else {
+            suggestions.append("Create task Buy groceries tomorrow")
         }
 
         if !notes.isEmpty {
             suggestions.append("Summarize my recent notes")
+        } else {
+            suggestions.append("Create note Meeting ideas")
         }
 
         if !transactions.isEmpty {
             suggestions.append("How much did I spend this month?")
         }
 
-        if !healthEntries.isEmpty {
-            suggestions.append("How's my health tracking going?")
+        if pendingTasks.count > 0 {
+            if let firstTask = pendingTasks.first {
+                let shortTitle = firstTask.title.prefix(20)
+                suggestions.append("Complete task \(shortTitle)")
+            }
         }
 
-        if suggestions.isEmpty {
-            suggestions = [
-                "What can you help me with?",
-                "Create a new task",
-                "Start tracking my health"
-            ]
+        if suggestions.count < 4 {
+            suggestions.append("Remind me to call mom tomorrow")
         }
 
         return Array(suggestions.prefix(4))
@@ -374,12 +377,27 @@ struct AssistantView: View {
     private func generateResponse(for input: String) -> ChatMessage {
         let lowercased = input.lowercased()
 
-        // Tasks
+        // Create/Add task actions
+        if let taskAction = parseTaskAction(input: input, lowercased: lowercased) {
+            return taskAction
+        }
+
+        // Create/Add note actions
+        if let noteAction = parseNoteAction(input: input, lowercased: lowercased) {
+            return noteAction
+        }
+
+        // Complete/finish task
+        if let completeAction = parseCompleteAction(lowercased: lowercased) {
+            return completeAction
+        }
+
+        // Tasks queries
         if lowercased.contains("task") || lowercased.contains("due") || lowercased.contains("todo") {
             return generateTasksResponse(for: lowercased)
         }
 
-        // Notes
+        // Notes queries
         if lowercased.contains("note") || lowercased.contains("summarize") || lowercased.contains("written") {
             return generateNotesResponse(for: lowercased)
         }
@@ -403,38 +421,25 @@ struct AssistantView: View {
                 content: """
                 I can help you with:
 
-                📝 **Notes** - Summarize, search, and organize your notes
-                ✅ **Tasks** - Track deadlines, priorities, and completion
+                📝 **Notes** - Create, summarize, and organize your notes
+                ✅ **Tasks** - Create tasks, track deadlines, mark complete
                 💰 **Finance** - Analyze spending, income, and budgets
                 ❤️ **Health** - Monitor sleep, steps, weight, and more
 
-                Just ask me anything about your data!
+                **Quick Actions:**
+                • "Create task Buy groceries"
+                • "Add note Meeting notes: ..."
+                • "Complete task Buy groceries"
+                • "Remind me to call mom tomorrow"
                 """,
                 type: .capabilities
             )
         }
 
-        // Create actions
-        if lowercased.contains("create") || lowercased.contains("add") || lowercased.contains("new") {
-            if lowercased.contains("task") {
-                return ChatMessage(
-                    role: .assistant,
-                    content: "I'd love to help you create a task! Tap the + button on the Tasks tab to add a new task with title, due date, and priority.",
-                    type: .action(icon: "plus.circle", label: "Go to Tasks")
-                )
-            } else if lowercased.contains("note") {
-                return ChatMessage(
-                    role: .assistant,
-                    content: "Ready to capture your thoughts! Head to the Notes tab and tap + to create a new note.",
-                    type: .action(icon: "square.and.pencil", label: "Go to Notes")
-                )
-            }
-        }
-
         // Default response
         return ChatMessage(
             role: .assistant,
-            content: "I'm here to help you manage your personal life! You can ask me about your tasks, notes, spending, or health data. For example, try asking \"What tasks are due today?\" or \"How much did I spend this month?\"",
+            content: "I'm here to help you manage your personal life! You can ask me about your tasks, notes, spending, or health data. I can also **create tasks and notes** for you - just say \"Create task...\" or \"Add note...\"",
             type: .text
         )
     }
@@ -649,6 +654,266 @@ struct AssistantView: View {
     }
 }
 
+// MARK: - AI Actions
+
+private extension AssistantView {
+    func parseTaskAction(input: String, lowercased: String) -> ChatMessage? {
+        let createPatterns = ["create task", "add task", "new task", "make task", "remind me to", "reminder to", "todo:"]
+
+        for pattern in createPatterns {
+            if lowercased.contains(pattern) {
+                let extracted = extractContent(from: input, after: pattern)
+                if !extracted.isEmpty {
+                    return createTask(title: extracted, fromInput: lowercased)
+                }
+            }
+        }
+
+        return nil
+    }
+
+    func parseNoteAction(input: String, lowercased: String) -> ChatMessage? {
+        let createPatterns = ["create note", "add note", "new note", "make note", "write note", "note:"]
+
+        for pattern in createPatterns {
+            if lowercased.contains(pattern) {
+                let extracted = extractContent(from: input, after: pattern)
+                if !extracted.isEmpty {
+                    return createNote(content: extracted)
+                }
+            }
+        }
+
+        return nil
+    }
+
+    func parseCompleteAction(lowercased: String) -> ChatMessage? {
+        let completePatterns = ["complete task", "finish task", "done with", "mark done", "mark complete", "completed"]
+
+        for pattern in completePatterns {
+            if lowercased.contains(pattern) {
+                let searchTerm = extractContent(from: lowercased, after: pattern)
+                if !searchTerm.isEmpty {
+                    return completeTask(matching: searchTerm)
+                }
+            }
+        }
+
+        return nil
+    }
+
+    func extractContent(from input: String, after pattern: String) -> String {
+        let lowercased = input.lowercased()
+        guard let range = lowercased.range(of: pattern) else { return "" }
+
+        let startIndex = input.index(input.startIndex, offsetBy: lowercased.distance(from: lowercased.startIndex, to: range.upperBound))
+        var content = String(input[startIndex...]).trimmingCharacters(in: .whitespaces)
+
+        // Remove common leading words
+        let wordsToRemove = ["to ", "a ", "an ", "the ", "called ", "named ", "titled "]
+        for word in wordsToRemove {
+            if content.lowercased().hasPrefix(word) {
+                content = String(content.dropFirst(word.count))
+            }
+        }
+
+        return content.trimmingCharacters(in: .whitespaces)
+    }
+
+    func createTask(title: String, fromInput input: String) -> ChatMessage {
+        let parsedTitle = parseTaskTitle(title)
+        let dueDate = parseDueDate(from: input)
+        let priority = parsePriority(from: input)
+
+        let task = TaskModel(
+            title: parsedTitle,
+            priority: priority,
+            dueDate: dueDate
+        )
+        modelContext.insert(task)
+
+        var confirmationParts = ["✅ **Task Created!**\n\n**\(parsedTitle)**"]
+
+        if let due = dueDate {
+            let formatter = DateFormatter()
+            formatter.dateStyle = .medium
+            confirmationParts.append("📅 Due: \(formatter.string(from: due))")
+        }
+
+        if priority != .medium {
+            confirmationParts.append("🏷️ Priority: \(priority.rawValue.capitalized)")
+        }
+
+        return ChatMessage(
+            role: .assistant,
+            content: confirmationParts.joined(separator: "\n"),
+            type: .taskCreated(title: parsedTitle)
+        )
+    }
+
+    func parseTaskTitle(_ input: String) -> String {
+        var title = input
+
+        // Remove time-related suffixes
+        let timePatterns = [
+            " tomorrow", " today", " tonight",
+            " next week", " next month",
+            " this week", " this weekend",
+            " on monday", " on tuesday", " on wednesday", " on thursday", " on friday", " on saturday", " on sunday",
+            " high priority", " low priority", " urgent", " important"
+        ]
+
+        for pattern in timePatterns {
+            if let range = title.lowercased().range(of: pattern) {
+                let startIndex = title.index(title.startIndex, offsetBy: title.lowercased().distance(from: title.lowercased().startIndex, to: range.lowerBound))
+                title = String(title[..<startIndex])
+            }
+        }
+
+        return title.trimmingCharacters(in: .whitespaces)
+    }
+
+    func parseDueDate(from input: String) -> Date? {
+        let calendar = Calendar.current
+        let now = Date()
+
+        if input.contains("today") || input.contains("tonight") {
+            return calendar.date(bySettingHour: 18, minute: 0, second: 0, of: now)
+        }
+
+        if input.contains("tomorrow") {
+            if let tomorrow = calendar.date(byAdding: .day, value: 1, to: now) {
+                return calendar.date(bySettingHour: 12, minute: 0, second: 0, of: tomorrow)
+            }
+        }
+
+        if input.contains("next week") {
+            return calendar.date(byAdding: .weekOfYear, value: 1, to: now)
+        }
+
+        if input.contains("this weekend") {
+            var components = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)
+            components.weekday = 7 // Saturday
+            return calendar.date(from: components)
+        }
+
+        let weekdays = ["sunday": 1, "monday": 2, "tuesday": 3, "wednesday": 4, "thursday": 5, "friday": 6, "saturday": 7]
+        for (dayName, dayNumber) in weekdays {
+            if input.contains(dayName) {
+                var components = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)
+                components.weekday = dayNumber
+                if let date = calendar.date(from: components), date <= now {
+                    return calendar.date(byAdding: .weekOfYear, value: 1, to: date)
+                }
+                return calendar.date(from: components)
+            }
+        }
+
+        return nil
+    }
+
+    func parsePriority(from input: String) -> TaskPriority {
+        if input.contains("urgent") || input.contains("asap") || input.contains("immediately") {
+            return .urgent
+        }
+        if input.contains("high priority") || input.contains("important") {
+            return .high
+        }
+        if input.contains("low priority") || input.contains("whenever") || input.contains("not urgent") {
+            return .low
+        }
+        return .medium
+    }
+
+    func createNote(content: String) -> ChatMessage {
+        let (title, body) = parseNoteContent(content)
+
+        let note = NoteModel(
+            title: title,
+            content: body
+        )
+        modelContext.insert(note)
+
+        let preview = body.isEmpty ? "" : "\n\n\(body.prefix(100))\(body.count > 100 ? "..." : "")"
+
+        return ChatMessage(
+            role: .assistant,
+            content: "📝 **Note Created!**\n\n**\(title)**\(preview)",
+            type: .noteCreated(title: title)
+        )
+    }
+
+    func parseNoteContent(_ content: String) -> (title: String, body: String) {
+        // Check for colon separator (e.g., "Meeting notes: discussed project timeline")
+        if let colonIndex = content.firstIndex(of: ":") {
+            let title = String(content[..<colonIndex]).trimmingCharacters(in: .whitespaces)
+            let bodyStart = content.index(after: colonIndex)
+            let body = String(content[bodyStart...]).trimmingCharacters(in: .whitespaces)
+            return (title.isEmpty ? "New Note" : title, body)
+        }
+
+        // Check for newline separator
+        if let newlineIndex = content.firstIndex(of: "\n") {
+            let title = String(content[..<newlineIndex]).trimmingCharacters(in: .whitespaces)
+            let bodyStart = content.index(after: newlineIndex)
+            let body = String(content[bodyStart...]).trimmingCharacters(in: .whitespaces)
+            return (title.isEmpty ? "New Note" : title, body)
+        }
+
+        // Use first few words as title if content is long
+        let words = content.split(separator: " ")
+        if words.count > 5 {
+            let title = words.prefix(4).joined(separator: " ")
+            return (title, content)
+        }
+
+        return (content, "")
+    }
+
+    func completeTask(matching searchTerm: String) -> ChatMessage {
+        let pendingTasks = tasks.filter { !$0.isCompleted }
+
+        // Find matching task
+        let matchingTask = pendingTasks.first { task in
+            task.title.lowercased().contains(searchTerm.lowercased())
+        }
+
+        if let task = matchingTask {
+            task.isCompleted = true
+            task.completedAt = Date()
+            task.updatedAt = Date()
+
+            return ChatMessage(
+                role: .assistant,
+                content: "🎉 **Task Completed!**\n\n~~\(task.title)~~\n\nGreat job! One less thing to worry about.",
+                type: .taskCompleted(title: task.title)
+            )
+        }
+
+        // No exact match - suggest similar tasks
+        let similarTasks = pendingTasks.filter { task in
+            let taskWords = Set(task.title.lowercased().split(separator: " ").map(String.init))
+            let searchWords = Set(searchTerm.lowercased().split(separator: " ").map(String.init))
+            return !taskWords.isDisjoint(with: searchWords)
+        }.prefix(3)
+
+        if !similarTasks.isEmpty {
+            let suggestions = similarTasks.map { "• \($0.title)" }.joined(separator: "\n")
+            return ChatMessage(
+                role: .assistant,
+                content: "I couldn't find a task matching \"\(searchTerm)\". Did you mean one of these?\n\n\(suggestions)\n\nTry saying \"Complete task [exact name]\"",
+                type: .text
+            )
+        }
+
+        return ChatMessage(
+            role: .assistant,
+            content: "I couldn't find a pending task matching \"\(searchTerm)\". You have \(pendingTasks.count) pending tasks. Try asking \"Show my tasks\" to see them.",
+            type: .text
+        )
+    }
+}
+
 // MARK: - Chat Message Model
 
 struct ChatMessage: Identifiable {
@@ -685,6 +950,10 @@ struct ChatMessage: Identifiable {
         case healthSummary
         case capabilities
         case action(icon: String, label: String)
+        case taskCreated(title: String)
+        case noteCreated(title: String)
+        case taskCompleted(title: String)
+        case taskModified(title: String)
     }
 }
 
@@ -829,6 +1098,8 @@ private struct MessageBubble: View {
         }
 
         switch message.type {
+        case .taskCreated, .noteCreated, .taskCompleted:
+            return Color.nexusGreen.opacity(0.15)
         case .stats, .taskList, .notesSummary, .financeSummary, .healthSummary:
             return Color.nexusSurface
         default:
@@ -941,17 +1212,26 @@ private struct CapabilitiesView: View {
                         CapabilityCard(
                             icon: "checkmark.circle.fill",
                             title: "Task Management",
-                            description: "View pending tasks, check due dates, track completion rates",
+                            description: "Create tasks, track due dates, mark complete",
                             color: .tasksColor,
-                            examples: ["What tasks are due today?", "Show overdue tasks", "How many tasks did I complete?"]
+                            examples: [
+                                "Create task Buy groceries tomorrow",
+                                "Remind me to call mom",
+                                "Complete task Buy groceries",
+                                "What tasks are due today?"
+                            ]
                         )
 
                         CapabilityCard(
                             icon: "doc.text.fill",
                             title: "Notes & Writing",
-                            description: "Summarize notes, find content, track writing activity",
+                            description: "Create notes, summarize content, organize thoughts",
                             color: .notesColor,
-                            examples: ["Summarize my notes", "How many notes this week?"]
+                            examples: [
+                                "Create note Meeting: discussed project",
+                                "Add note Ideas for the weekend",
+                                "Summarize my notes"
+                            ]
                         )
 
                         CapabilityCard(
