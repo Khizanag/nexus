@@ -20,8 +20,18 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Nexus uses your health data to display your daily activity metrics like steps, calories, heart rate, and sleep. This helps you track your wellness goals in one place.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Nexus can save health entries you manually log to Apple Health for a unified health tracking experience.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Nexus uses the microphone for voice input so you can speak to the AI assistant instead of typing.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Nexus uses speech recognition to convert your voice into text for the AI assistant.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -47,15 +57,5 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
-	<key>NSHealthShareUsageDescription</key>
-	<string>Nexus uses your health data to display your daily activity metrics like steps, calories, heart rate, and sleep. This helps you track your wellness goals in one place.</string>
-	<key>NSHealthUpdateUsageDescription</key>
-	<string>Nexus can save health entries you manually log to Apple Health for a unified health tracking experience.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Nexus uses the microphone for voice input so you can speak to the AI assistant instead of typing.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Nexus uses speech recognition to convert your voice into text for the AI assistant.</string>
 </dict>
 </plist>
