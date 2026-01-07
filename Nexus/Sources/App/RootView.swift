@@ -76,48 +76,89 @@ private struct QuickWaterLogView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
-                Image(systemName: "drop.fill")
-                    .font(.system(size: 60))
-                    .foregroundStyle(Color.nexusTeal)
+            VStack(spacing: 32) {
+                Spacer()
 
-                Text("\(Int(amount)) ml")
-                    .font(.system(size: 48, weight: .bold, design: .rounded))
+                ConcentricCard(color: .nexusTeal) {
+                    VStack(spacing: 16) {
+                        Image(systemName: "drop.fill")
+                            .font(.system(size: 48))
+                            .foregroundStyle(.white)
 
-                HStack(spacing: 16) {
+                        Text("\(Int(amount)) ml")
+                            .font(.system(size: 56, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 20)
+                }
+                .padding(.horizontal, 40)
+
+                HStack(spacing: 12) {
                     ForEach([150, 250, 500], id: \.self) { ml in
                         Button {
-                            amount = Double(ml)
+                            withAnimation(.spring(response: 0.3)) {
+                                amount = Double(ml)
+                            }
                         } label: {
                             Text("\(ml)")
                                 .font(.nexusHeadline)
-                                .padding(.horizontal, 20)
-                                .padding(.vertical, 12)
-                                .background(amount == Double(ml) ? Color.nexusTeal : Color.nexusSurface)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .background {
+                                    if amount == Double(ml) {
+                                        ConcentricRectangleBackground(
+                                            cornerRadius: 12,
+                                            layers: 4,
+                                            baseColor: .nexusTeal,
+                                            spacing: 3
+                                        )
+                                    } else {
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .fill(Color.nexusSurface)
+                                            .overlay {
+                                                RoundedRectangle(cornerRadius: 12)
+                                                    .strokeBorder(Color.nexusBorder, lineWidth: 1)
+                                            }
+                                    }
+                                }
                                 .foregroundStyle(amount == Double(ml) ? .white : .primary)
-                                .clipShape(Capsule())
                         }
                     }
                 }
+                .padding(.horizontal, 20)
 
-                Slider(value: $amount, in: 50...1000, step: 50)
-                    .tint(.nexusTeal)
-                    .padding(.horizontal, 32)
+                VStack(spacing: 8) {
+                    Slider(value: $amount, in: 50...1000, step: 50)
+                        .tint(Color.nexusTeal)
+
+                    HStack {
+                        Text("50 ml")
+                            .font(.nexusCaption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text("1000 ml")
+                            .font(.nexusCaption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.horizontal, 32)
+
+                Spacer()
+
+                ConcentricButton("Log Water", icon: "drop.fill", color: .nexusTeal) {
+                    logWater()
+                    dismiss()
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 20)
             }
-            .padding()
             .background(Color.nexusBackground)
             .navigationTitle("Log Water")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Log") {
-                        logWater()
-                        dismiss()
-                    }
-                    .fontWeight(.semibold)
                 }
             }
         }
