@@ -25,25 +25,25 @@ final class DependencyContainer: Sendable {
 
 private extension DependencyContainer {
     func registerServices() {
-        container.register(AIServiceProtocol.self) { _ in
-            AIService()
+        container.register(AIService.self) { _ in
+            DefaultAIService()
         }
         .inObjectScope(.container)
 
-        container.register(KeychainServiceProtocol.self) { _ in
-            KeychainService()
+        container.register(KeychainService.self) { _ in
+            DefaultKeychainService()
         }
         .inObjectScope(.container)
 
-        container.register(AuthenticationServiceProtocol.self) { resolver in
-            let keychainService = resolver.resolve(KeychainServiceProtocol.self)!
-            return AuthenticationService(keychainService: keychainService)
+        container.register(AuthenticationService.self) { resolver in
+            let keychainService = resolver.resolve(KeychainService.self)!
+            return DefaultAuthenticationService(keychainService: keychainService)
         }
         .inObjectScope(.container)
 
-        container.register(SyncServiceProtocol.self) { resolver in
-            let authService = resolver.resolve(AuthenticationServiceProtocol.self)!
-            return SyncService(authService: authService)
+        container.register(SyncService.self) { resolver in
+            let authService = resolver.resolve(AuthenticationService.self)!
+            return DefaultSyncService(authService: authService)
         }
         .inObjectScope(.container)
 

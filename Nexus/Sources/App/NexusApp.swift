@@ -5,14 +5,14 @@ import SwiftData
 struct NexusApp: App {
     private let container: DependencyContainer
     private let modelContainer: ModelContainer
-    @State private var authService: AuthenticationService
+    @State private var authService: DefaultAuthenticationService
 
     init() {
         container = DependencyContainer.shared
         container.registerAll()
 
-        let keychainService = KeychainService()
-        let auth = AuthenticationService(keychainService: keychainService)
+        let keychainService = DefaultKeychainService()
+        let auth = DefaultAuthenticationService(keychainService: keychainService)
         _authService = State(initialValue: auth)
 
         let schema = Schema([

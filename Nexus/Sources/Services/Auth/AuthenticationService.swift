@@ -30,7 +30,7 @@ private enum CloudKeys {
 }
 
 @MainActor
-protocol AuthenticationServiceProtocol: Sendable {
+protocol AuthenticationService: Sendable {
     var isSignedIn: Bool { get }
     var currentUser: UserAccount? { get }
     func signInWithApple(presentationAnchor: ASPresentationAnchor) async throws -> UserAccount
@@ -40,15 +40,15 @@ protocol AuthenticationServiceProtocol: Sendable {
 
 @MainActor
 @Observable
-final class AuthenticationService: NSObject, AuthenticationServiceProtocol {
+final class DefaultAuthenticationService: NSObject, AuthenticationService {
     private(set) var isSignedIn: Bool = false
     private(set) var currentUser: UserAccount?
 
-    private let keychainService: KeychainServiceProtocol
+    private let keychainService: KeychainService
     private var signInContinuation: CheckedContinuation<UserAccount, Error>?
     private var presentationWindow: ASPresentationAnchor?
 
-    nonisolated init(keychainService: KeychainServiceProtocol = KeychainService()) {
+    nonisolated init(keychainService: KeychainService = DefaultKeychainService()) {
         self.keychainService = keychainService
         super.init()
         Task { @MainActor in
@@ -148,7 +148,7 @@ final class AuthenticationService: NSObject, AuthenticationServiceProtocol {
 
 // MARK: - ASAuthorizationControllerDelegate
 
-extension AuthenticationService: ASAuthorizationControllerDelegate {
+extension DefaultAuthenticationService: ASAuthorizationControllerDelegate {
     nonisolated func authorizationController(
         controller: ASAuthorizationController,
         didCompleteWithAuthorization authorization: ASAuthorization
@@ -239,7 +239,7 @@ extension AuthenticationService: ASAuthorizationControllerDelegate {
 
 // MARK: - ASAuthorizationControllerPresentationContextProviding
 
-extension AuthenticationService: ASAuthorizationControllerPresentationContextProviding {
+extension DefaultAuthenticationService: ASAuthorizationControllerPresentationContextProviding {
     nonisolated func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
         MainActor.assumeIsolated {
             presentationWindow ?? ASPresentationAnchor()
