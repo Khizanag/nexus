@@ -1,6 +1,6 @@
 import Foundation
 
-protocol AIServiceProtocol {
+protocol AIService {
     func sendMessage(_ message: String) async throws -> String
     func analyzeNotes(_ notes: [String]) async throws -> String
     func suggestTasks(based context: String) async throws -> [String]
@@ -20,7 +20,7 @@ struct AIInsightResponse {
     let patterns: [String]
 }
 
-final class AIService: AIServiceProtocol {
+final class DefaultAIService: AIService {
     private let apiKey: String?
     private let baseURL = "https://api.anthropic.com/v1"
 
