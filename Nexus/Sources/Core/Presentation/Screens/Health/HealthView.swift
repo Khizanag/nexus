@@ -18,7 +18,7 @@ struct HealthView: View {
     @State private var isLoadingHealthKit = false
     @State private var healthKitError: String?
 
-    private let healthKitService = HealthKitService()
+    private let healthKitService = DefaultHealthKitService()
     private let metrics = HealthMetricType.allCases
 
     var body: some View {

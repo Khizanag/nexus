@@ -2,7 +2,7 @@ import Foundation
 import HealthKit
 
 @MainActor
-protocol HealthKitServiceProtocol: Sendable {
+protocol HealthKitService: Sendable {
     var isAvailable: Bool { get }
     var isAuthorized: Bool { get }
 
@@ -17,7 +17,7 @@ protocol HealthKitServiceProtocol: Sendable {
 }
 
 @MainActor
-final class HealthKitService: HealthKitServiceProtocol {
+final class DefaultHealthKitService: HealthKitService {
     private let healthStore = HKHealthStore()
 
     var isAvailable: Bool {
@@ -194,7 +194,7 @@ final class HealthKitService: HealthKitServiceProtocol {
 
 // MARK: - Private Helpers
 
-private extension HealthKitService {
+private extension DefaultHealthKitService {
     func fetchTodaySum(for type: HKQuantityType, unit: HKUnit) async throws -> Double {
         let calendar = Calendar.current
         let now = Date()
