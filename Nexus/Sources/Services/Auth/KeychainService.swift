@@ -1,7 +1,7 @@
 import Foundation
 import Security
 
-protocol KeychainServiceProtocol: Sendable {
+protocol KeychainService: Sendable {
     func save(_ data: Data, forKey key: String) throws
     func load(forKey key: String) throws -> Data?
     func delete(forKey key: String) throws
@@ -9,7 +9,7 @@ protocol KeychainServiceProtocol: Sendable {
     func loadString(forKey key: String) throws -> String?
 }
 
-final class KeychainService: KeychainServiceProtocol, Sendable {
+final class DefaultKeychainService: KeychainService, Sendable {
     private let serviceName = "com.nexus.app"
 
     enum KeychainError: Error, LocalizedError {
