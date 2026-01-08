@@ -38,7 +38,7 @@ enum SyncStatus: Equatable {
 }
 
 @MainActor
-protocol SyncServiceProtocol: Sendable {
+protocol SyncService: Sendable {
     var status: SyncStatus { get }
     var isSyncing: Bool { get }
     var lastSyncDate: Date? { get }
@@ -51,7 +51,7 @@ protocol SyncServiceProtocol: Sendable {
 
 @MainActor
 @Observable
-final class SyncService: SyncServiceProtocol {
+final class DefaultSyncService: SyncService {
     private(set) var status: SyncStatus = .idle
     private(set) var lastSyncDate: Date?
 
@@ -61,9 +61,9 @@ final class SyncService: SyncServiceProtocol {
 
     private var syncTimer: AnyCancellable?
     private let syncInterval: TimeInterval = 300
-    private let authService: AuthenticationServiceProtocol
+    private let authService: AuthenticationService
 
-    init(authService: AuthenticationServiceProtocol) {
+    init(authService: AuthenticationService) {
         self.authService = authService
     }
 
