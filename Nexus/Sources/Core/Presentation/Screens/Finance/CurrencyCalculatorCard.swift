@@ -17,14 +17,14 @@ struct CurrencyCalculatorCard: View {
     @State private var isUsingCachedData = false
     @State private var hasInitialized = false
 
-    private let currencyService: CurrencyServiceProtocol
+    private let currencyService: CurrencyService
     private let inputHeight: CGFloat = 52
 
     private var effectiveBaseCurrency: Currency {
         baseCurrency ?? Currency(rawValue: preferredCurrency) ?? .usd
     }
 
-    init(currencyService: CurrencyServiceProtocol = CurrencyService()) {
+    init(currencyService: CurrencyService = DefaultCurrencyService()) {
         self.currencyService = currencyService
     }
 

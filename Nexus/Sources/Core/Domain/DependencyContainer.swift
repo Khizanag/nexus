@@ -47,8 +47,8 @@ private extension DependencyContainer {
         }
         .inObjectScope(.container)
 
-        container.register(CurrencyServiceProtocol.self) { _ in
-            CurrencyService()
+        container.register(CurrencyService.self) { _ in
+            DefaultCurrencyService()
         }
         .inObjectScope(.container)
     }

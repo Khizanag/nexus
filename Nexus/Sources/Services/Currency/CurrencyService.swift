@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-protocol CurrencyServiceProtocol: Sendable {
+protocol CurrencyService: Sendable {
     func fetchRatesFromAPI(base: Currency) async throws -> ExchangeRates
     func convert(amount: Double, from: Currency, to: Currency, rates: ExchangeRates) -> Double
 }
@@ -21,7 +21,7 @@ struct ExchangeRates: Sendable {
     }
 }
 
-final class CurrencyService: CurrencyServiceProtocol, Sendable {
+final class DefaultCurrencyService: CurrencyService, Sendable {
     private let baseURL = "https://api.exchangerate-api.com/v4/latest"
 
     func fetchRatesFromAPI(base: Currency) async throws -> ExchangeRates {

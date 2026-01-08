@@ -8,7 +8,7 @@ struct BudgetView: View {
 
     @AppStorage("currency") private var preferredCurrency = "USD"
 
-    private let currencyService: CurrencyServiceProtocol = CurrencyService()
+    private let currencyService: CurrencyService = DefaultCurrencyService()
 
     @State private var showAddBudget = false
     @State private var selectedBudget: BudgetModel?

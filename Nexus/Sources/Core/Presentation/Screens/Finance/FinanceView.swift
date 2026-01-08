@@ -16,7 +16,7 @@ struct FinanceView: View {
     @State private var showBudgets = false
     @State private var exchangeRates: ExchangeRates?
 
-    private let currencyService: CurrencyServiceProtocol = CurrencyService()
+    private let currencyService: CurrencyService = DefaultCurrencyService()
 
     var body: some View {
         NavigationStack {
