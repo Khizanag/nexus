@@ -5,7 +5,7 @@ import AuthenticationServices
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @Environment(AuthenticationService.self) private var authService
+    @Environment(DefaultAuthenticationService.self) private var authService
 
     @AppStorage("hapticFeedback") private var hapticFeedback = true
     @AppStorage("notifications") private var notifications = true
