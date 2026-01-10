@@ -12,6 +12,8 @@ struct NoteEditorView: View {
     @State private var isPinned: Bool
     @State private var isFavorite: Bool
     @State private var selectedColor: String?
+    @State private var showColorPicker = false
+    @State private var previousContent: String = ""
 
     @FocusState private var focusedField: Field?
 
@@ -45,12 +47,17 @@ struct NoteEditorView: View {
                         .frame(minHeight: 300)
                         .scrollContentBackground(.hidden)
                         .focused($focusedField, equals: .content)
-
-                    colorPicker
+                        .onChange(of: content) { oldValue, newValue in
+                            handleContentChange(oldValue: oldValue, newValue: newValue)
+                        }
                 }
                 .padding(20)
+                .padding(.bottom, 80)
             }
-            .background(Color.nexusBackground)
+            .background(noteBackgroundColor)
+            .safeAreaInset(edge: .bottom) {
+                formattingToolbar
+            }
             .navigationTitle(note == nil ? "New Note" : "Edit Note")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -92,45 +99,139 @@ struct NoteEditorView: View {
         }
     }
 
-    private var colorPicker: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Color")
-                .font(.nexusSubheadline)
-                .foregroundStyle(.secondary)
+    private var noteBackgroundColor: Color {
+        guard let colorName = selectedColor else { return .nexusBackground }
+        switch colorName {
+        case "purple": return .nexusPurple.opacity(0.08)
+        case "blue": return .nexusBlue.opacity(0.08)
+        case "green": return .nexusGreen.opacity(0.08)
+        case "orange": return .nexusOrange.opacity(0.08)
+        case "red": return .nexusRed.opacity(0.08)
+        case "pink": return .nexusPink.opacity(0.08)
+        default: return .nexusBackground
+        }
+    }
 
-            HStack(spacing: 12) {
-                ForEach(colors, id: \.self) { color in
-                    Circle()
-                        .fill(colorValue(for: color))
-                        .frame(width: 32, height: 32)
-                        .overlay {
-                            if selectedColor == color {
-                                Circle()
-                                    .strokeBorder(.white, lineWidth: 2)
-                            }
+    private var formattingToolbar: some View {
+        VStack(spacing: 0) {
+            Divider()
+
+            if showColorPicker {
+                colorPickerRow
+                Divider()
+            }
+
+            HStack(spacing: 0) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 4) {
+                        FormatButton(icon: "list.bullet", tooltip: "Bullet List") {
+                            insertBulletList()
                         }
-                        .onTapGesture {
-                            selectedColor = selectedColor == color ? nil : color
+
+                        FormatButton(icon: "list.number", tooltip: "Numbered List") {
+                            insertNumberedList()
                         }
+
+                        FormatButton(icon: "checklist", tooltip: "Checklist") {
+                            insertChecklist()
+                        }
+
+                        Divider()
+                            .frame(height: 20)
+                            .padding(.horizontal, 8)
+
+                        FormatButton(icon: "arrow.right.to.line.compact", tooltip: "Indent") {
+                            insertIndent()
+                        }
+
+                        FormatButton(icon: "text.quote", tooltip: "Quote") {
+                            insertQuote()
+                        }
+
+                        FormatButton(icon: "minus", tooltip: "Separator") {
+                            insertSeparator()
+                        }
+                    }
+                    .padding(.horizontal, 12)
                 }
 
+                Divider()
+                    .frame(height: 24)
+
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showColorPicker.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(selectedColor != nil ? colorValue(for: selectedColor!) : Color.nexusSurface)
+                            .frame(width: 20, height: 20)
+                            .overlay {
+                                Circle()
+                                    .strokeBorder(Color.nexusBorder, lineWidth: 1)
+                            }
+
+                        Image(systemName: showColorPicker ? "chevron.down" : "chevron.up")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                }
+                .buttonStyle(.plain)
+            }
+            .frame(height: 44)
+            .background(Color.nexusSurface)
+        }
+    }
+
+    private var colorPickerRow: some View {
+        HStack(spacing: 16) {
+            ForEach(colors, id: \.self) { color in
                 Circle()
-                    .fill(Color.nexusSurface)
-                    .frame(width: 32, height: 32)
+                    .fill(colorValue(for: color))
+                    .frame(width: 28, height: 28)
                     .overlay {
-                        if selectedColor == nil {
+                        if selectedColor == color {
                             Circle()
                                 .strokeBorder(.white, lineWidth: 2)
-                        } else {
-                            Circle()
-                                .strokeBorder(Color.nexusBorder, lineWidth: 1)
                         }
                     }
                     .onTapGesture {
-                        selectedColor = nil
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            selectedColor = selectedColor == color ? nil : color
+                        }
                     }
             }
+
+            Circle()
+                .fill(Color.nexusSurface)
+                .frame(width: 28, height: 28)
+                .overlay {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .overlay {
+                    if selectedColor == nil {
+                        Circle()
+                            .strokeBorder(.white, lineWidth: 2)
+                    } else {
+                        Circle()
+                            .strokeBorder(Color.nexusBorder, lineWidth: 1)
+                    }
+                }
+                .onTapGesture {
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        selectedColor = nil
+                    }
+                }
         }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity)
+        .background(Color.nexusSurface.opacity(0.8))
     }
 
     private func colorValue(for name: String) -> Color {
@@ -142,6 +243,114 @@ struct NoteEditorView: View {
         case "red": .nexusRed
         case "pink": .nexusPink
         default: .nexusSurface
+        }
+    }
+
+    private func insertBulletList() {
+        if content.isEmpty || content.hasSuffix("\n") {
+            content += "• "
+        } else {
+            content += "\n• "
+        }
+        focusedField = .content
+    }
+
+    private func insertNumberedList() {
+        let lines = content.components(separatedBy: "\n")
+        var maxNumber = 0
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if let dotIndex = trimmed.firstIndex(of: "."),
+               let num = Int(trimmed[..<dotIndex]) {
+                maxNumber = max(maxNumber, num)
+            }
+        }
+        let nextNumber = maxNumber + 1
+
+        if content.isEmpty || content.hasSuffix("\n") {
+            content += "\(nextNumber). "
+        } else {
+            content += "\n\(nextNumber). "
+        }
+        focusedField = .content
+    }
+
+    private func insertChecklist() {
+        if content.isEmpty || content.hasSuffix("\n") {
+            content += "☐ "
+        } else {
+            content += "\n☐ "
+        }
+        focusedField = .content
+    }
+
+    private func insertIndent() {
+        if content.isEmpty || content.hasSuffix("\n") {
+            content += "    "
+        } else {
+            content += "\n    "
+        }
+        focusedField = .content
+    }
+
+    private func insertQuote() {
+        if content.isEmpty || content.hasSuffix("\n") {
+            content += "> "
+        } else {
+            content += "\n> "
+        }
+        focusedField = .content
+    }
+
+    private func insertSeparator() {
+        if content.isEmpty {
+            content = "---\n"
+        } else if content.hasSuffix("\n") {
+            content += "---\n"
+        } else {
+            content += "\n---\n"
+        }
+        focusedField = .content
+    }
+
+    private func handleContentChange(oldValue: String, newValue: String) {
+        guard newValue.count > oldValue.count else { return }
+        guard newValue.hasSuffix("\n") else { return }
+        guard !oldValue.hasSuffix("\n") else { return }
+
+        let lines = oldValue.components(separatedBy: "\n")
+        guard let lastLine = lines.last, !lastLine.isEmpty else { return }
+
+        let trimmedLine = lastLine.trimmingCharacters(in: .whitespaces)
+
+        if trimmedLine == "•" || trimmedLine == "☐" || trimmedLine == "☑" || trimmedLine == ">" {
+            content = oldValue.dropLast(lastLine.count).description + "\n"
+            return
+        }
+
+        if let dotIndex = trimmedLine.firstIndex(of: "."),
+           dotIndex != trimmedLine.startIndex,
+           let num = Int(trimmedLine[..<dotIndex]),
+           trimmedLine.dropFirst(trimmedLine.distance(from: trimmedLine.startIndex, to: dotIndex) + 1).trimmingCharacters(in: .whitespaces).isEmpty {
+            content = oldValue.dropLast(lastLine.count).description + "\n"
+            return
+        }
+
+        if trimmedLine.hasPrefix("• ") {
+            content = newValue + "• "
+        } else if trimmedLine.hasPrefix("☐ ") {
+            content = newValue + "☐ "
+        } else if trimmedLine.hasPrefix("☑ ") {
+            content = newValue + "☐ "
+        } else if trimmedLine.hasPrefix("> ") {
+            content = newValue + "> "
+        } else if let dotIndex = trimmedLine.firstIndex(of: "."),
+                  dotIndex != trimmedLine.startIndex,
+                  let num = Int(trimmedLine[..<dotIndex]) {
+            let afterDot = trimmedLine.index(after: dotIndex)
+            if afterDot < trimmedLine.endIndex && trimmedLine[afterDot] == " " {
+                content = newValue + "\(num + 1). "
+            }
         }
     }
 
@@ -165,6 +374,28 @@ struct NoteEditorView: View {
         }
 
         dismiss()
+    }
+}
+
+// MARK: - Format Button
+
+private struct FormatButton: View {
+    let icon: String
+    let tooltip: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 16))
+                .foregroundStyle(.primary)
+                .frame(width: 36, height: 36)
+                .background {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.nexusBackground.opacity(0.5))
+                }
+        }
+        .buttonStyle(.plain)
     }
 }
 
