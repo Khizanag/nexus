@@ -3,22 +3,22 @@ import SwiftData
 
 @Model
 final class TaskModel {
-    var id: UUID
-    var title: String
-    var notes: String
-    var isCompleted: Bool
-    var priority: TaskPriority
+    var id: UUID = UUID()
+    var title: String = ""
+    var notes: String = ""
+    var isCompleted: Bool = false
+    var priority: TaskPriority = TaskPriority.medium
     var dueDate: Date?
     var completedAt: Date?
-    var createdAt: Date
-    var updatedAt: Date
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
     var reminderDate: Date?
 
     @Relationship(deleteRule: .nullify, inverse: \TagModel.tasks)
-    var tags: [TagModel]
+    var tags: [TagModel]?
 
     @Relationship(deleteRule: .cascade)
-    var subtasks: [SubtaskModel]
+    var subtasks: [SubtaskModel]?
 
     init(
         id: UUID = UUID(),
@@ -31,8 +31,8 @@ final class TaskModel {
         createdAt: Date = .now,
         updatedAt: Date = .now,
         reminderDate: Date? = nil,
-        tags: [TagModel] = [],
-        subtasks: [SubtaskModel] = []
+        tags: [TagModel]? = nil,
+        subtasks: [SubtaskModel]? = nil
     ) {
         self.id = id
         self.title = title
@@ -67,10 +67,10 @@ enum TaskPriority: String, Codable, CaseIterable {
 
 @Model
 final class SubtaskModel {
-    var id: UUID
-    var title: String
-    var isCompleted: Bool
-    var order: Int
+    var id: UUID = UUID()
+    var title: String = ""
+    var isCompleted: Bool = false
+    var order: Int = 0
 
     @Relationship
     var parent: TaskModel?

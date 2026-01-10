@@ -3,17 +3,17 @@ import SwiftData
 
 @Model
 final class NoteModel {
-    var id: UUID
-    var title: String
-    var content: String
-    var createdAt: Date
-    var updatedAt: Date
-    var isPinned: Bool
-    var isFavorite: Bool
+    var id: UUID = UUID()
+    var title: String = ""
+    var content: String = ""
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
+    var isPinned: Bool = false
+    var isFavorite: Bool = false
     var color: String?
 
     @Relationship(deleteRule: .nullify, inverse: \TagModel.notes)
-    var tags: [TagModel]
+    var tags: [TagModel]?
 
     init(
         id: UUID = UUID(),
@@ -24,7 +24,7 @@ final class NoteModel {
         isPinned: Bool = false,
         isFavorite: Bool = false,
         color: String? = nil,
-        tags: [TagModel] = []
+        tags: [TagModel]? = nil
     ) {
         self.id = id
         self.title = title

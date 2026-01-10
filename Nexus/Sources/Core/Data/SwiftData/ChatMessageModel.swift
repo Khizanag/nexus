@@ -3,10 +3,10 @@ import SwiftData
 
 @Model
 final class ChatMessageModel {
-    var id: UUID
-    var role: String
-    var content: String
-    var timestamp: Date
+    var id: UUID = UUID()
+    var role: String = "user"
+    var content: String = ""
+    var timestamp: Date = Date()
 
     init(
         id: UUID = UUID(),

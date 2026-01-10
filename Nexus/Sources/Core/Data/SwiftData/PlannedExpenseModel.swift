@@ -3,16 +3,16 @@ import SwiftData
 
 @Model
 final class PlannedExpenseModel {
-    var id: UUID
-    var name: String
-    var amount: Double
-    var icon: String
-    var isRecurring: Bool
-    var isPaid: Bool
+    var id: UUID = UUID()
+    var name: String = ""
+    var amount: Double = 0
+    var icon: String = "dollarsign.circle.fill"
+    var isRecurring: Bool = true
+    var isPaid: Bool = false
     var paidDate: Date?
-    var notes: String
+    var notes: String = ""
     var budget: BudgetModel?
-    var createdAt: Date
+    var createdAt: Date = Date()
 
     init(
         id: UUID = UUID(),

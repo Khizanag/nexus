@@ -3,9 +3,9 @@ import SwiftData
 
 @Model
 final class CurrencyRateCacheModel {
-    var baseCurrency: String
-    var ratesData: Data
-    var timestamp: Date
+    var baseCurrency: String = "GEL"
+    var ratesData: Data = Data()
+    var timestamp: Date = Date()
 
     init(baseCurrency: String, ratesData: Data = Data(), timestamp: Date = .now) {
         self.baseCurrency = baseCurrency
