@@ -138,6 +138,8 @@ struct TaskEditorView: View {
         let finalDueDate = hasDueDate ? dueDate : nil
         let finalReminder = hasReminder ? reminderDate : nil
 
+        let taskToSchedule: TaskModel
+
         if let existingTask = task {
             existingTask.title = title
             existingTask.notes = notes
@@ -145,6 +147,7 @@ struct TaskEditorView: View {
             existingTask.dueDate = finalDueDate
             existingTask.reminderDate = finalReminder
             existingTask.updatedAt = .now
+            taskToSchedule = existingTask
         } else {
             let newTask = TaskModel(
                 title: title,
@@ -154,6 +157,19 @@ struct TaskEditorView: View {
                 reminderDate: finalReminder
             )
             modelContext.insert(newTask)
+            taskToSchedule = newTask
+        }
+
+        if finalReminder != nil {
+            Task {
+                let notificationService = DefaultTaskNotificationService.shared
+                let granted = await notificationService.requestAuthorization()
+                if granted {
+                    await notificationService.scheduleReminder(for: taskToSchedule)
+                }
+            }
+        } else {
+            DefaultTaskNotificationService.shared.cancelReminder(for: taskToSchedule)
         }
 
         dismiss()
@@ -161,6 +177,7 @@ struct TaskEditorView: View {
 
     private func deleteTask() {
         if let task {
+            DefaultTaskNotificationService.shared.cancelReminder(for: task)
             modelContext.delete(task)
         }
         dismiss()

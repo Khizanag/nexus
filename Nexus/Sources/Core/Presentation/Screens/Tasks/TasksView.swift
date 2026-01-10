@@ -147,6 +147,14 @@ struct TasksView: View {
             task.isCompleted.toggle()
             task.completedAt = task.isCompleted ? .now : nil
             task.updatedAt = .now
+
+            if task.isCompleted {
+                DefaultTaskNotificationService.shared.cancelReminder(for: task)
+            } else if task.reminderDate != nil {
+                Task {
+                    await DefaultTaskNotificationService.shared.scheduleReminder(for: task)
+                }
+            }
         }
     }
 }
