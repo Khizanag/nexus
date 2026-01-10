@@ -3,10 +3,10 @@ import SwiftData
 
 @Model
 final class TagModel {
-    var id: UUID
-    var name: String
-    var color: String
-    var createdAt: Date
+    var id: UUID = UUID()
+    var name: String = ""
+    var color: String = "gray"
+    var createdAt: Date = Date()
 
     var notes: [NoteModel]?
     var tasks: [TaskModel]?

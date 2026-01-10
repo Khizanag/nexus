@@ -3,20 +3,20 @@ import SwiftData
 
 @Model
 final class BudgetModel {
-    var id: UUID
-    var name: String
-    var amount: Double
-    var currency: String
-    var category: TransactionCategory
-    var period: BudgetPeriod
-    var startDate: Date
-    var isActive: Bool
-    var colorHex: String
-    var icon: String
-    var rolloverEnabled: Bool
-    var rolloverAmount: Double
-    var alertThreshold: Double
-    var createdAt: Date
+    var id: UUID = UUID()
+    var name: String = ""
+    var amount: Double = 0
+    var currency: String = "GEL"
+    var category: TransactionCategory = TransactionCategory.other
+    var period: BudgetPeriod = BudgetPeriod.monthly
+    var startDate: Date = Date()
+    var isActive: Bool = true
+    var colorHex: String = "8B5CF6"
+    var icon: String = "dollarsign.circle.fill"
+    var rolloverEnabled: Bool = false
+    var rolloverAmount: Double = 0
+    var alertThreshold: Double = 0.8
+    var createdAt: Date = Date()
 
     @Relationship(deleteRule: .cascade, inverse: \PlannedExpenseModel.budget)
     var plannedExpenses: [PlannedExpenseModel]?

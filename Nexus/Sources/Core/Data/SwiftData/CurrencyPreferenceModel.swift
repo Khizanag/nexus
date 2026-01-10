@@ -4,7 +4,7 @@ import SwiftData
 @Model
 final class CurrencyPreferenceModel {
     var id: String = "currency_preferences"
-    var favoriteCurrenciesData: Data
+    var favoriteCurrenciesData: Data = Data()
 
     init() {
         self.id = "currency_preferences"

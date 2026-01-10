@@ -3,13 +3,13 @@ import SwiftData
 
 @Model
 final class HealthEntryModel {
-    var id: UUID
-    var type: HealthMetricType
-    var value: Double
-    var unit: String
-    var date: Date
-    var notes: String
-    var createdAt: Date
+    var id: UUID = UUID()
+    var type: HealthMetricType = HealthMetricType.weight
+    var value: Double = 0
+    var unit: String = ""
+    var date: Date = Date()
+    var notes: String = ""
+    var createdAt: Date = Date()
 
     init(
         id: UUID = UUID(),

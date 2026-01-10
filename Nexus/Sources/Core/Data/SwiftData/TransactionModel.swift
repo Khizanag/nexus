@@ -3,18 +3,18 @@ import SwiftData
 
 @Model
 final class TransactionModel {
-    var id: UUID
-    var amount: Double
-    var currency: String
-    var title: String
-    var notes: String
-    var category: TransactionCategory
-    var type: TransactionType
-    var date: Date
-    var createdAt: Date
+    var id: UUID = UUID()
+    var amount: Double = 0
+    var currency: String = "GEL"
+    var title: String = ""
+    var notes: String = ""
+    var category: TransactionCategory = TransactionCategory.other
+    var type: TransactionType = TransactionType.expense
+    var date: Date = Date()
+    var createdAt: Date = Date()
 
     @Relationship(deleteRule: .nullify, inverse: \TagModel.transactions)
-    var tags: [TagModel]
+    var tags: [TagModel]?
 
     init(
         id: UUID = UUID(),
@@ -26,7 +26,7 @@ final class TransactionModel {
         type: TransactionType = .expense,
         date: Date = .now,
         createdAt: Date = .now,
-        tags: [TagModel] = []
+        tags: [TagModel]? = nil
     ) {
         self.id = id
         self.amount = amount

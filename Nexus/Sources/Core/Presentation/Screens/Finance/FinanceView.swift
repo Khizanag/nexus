@@ -23,6 +23,8 @@ struct FinanceView: View {
             ScrollView {
                 VStack(spacing: 20) {
                     periodSelector
+                    HouseSummaryCard()
+                    SubscriptionsSummaryCard()
                     budgetPreviewCard
                     CurrencyCalculatorCard()
                     summaryCard
