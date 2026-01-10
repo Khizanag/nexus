@@ -112,39 +112,47 @@ private struct NoteCard: View {
     let note: NoteModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                if note.isPinned {
-                    Image(systemName: "pin.fill")
-                        .font(.caption)
-                        .foregroundStyle(Color.nexusOrange)
-                }
-
-                Spacer()
-
-                if note.isFavorite {
-                    Image(systemName: "heart.fill")
-                        .font(.caption)
-                        .foregroundStyle(Color.nexusRed)
-                }
+        HStack(spacing: 0) {
+            if note.color != nil {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(accentColor)
+                    .frame(width: 4)
             }
 
-            Text(note.title.isEmpty ? "Untitled" : note.title)
-                .font(.nexusHeadline)
-                .lineLimit(2)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    if note.isPinned {
+                        Image(systemName: "pin.fill")
+                            .font(.caption)
+                            .foregroundStyle(Color.nexusOrange)
+                    }
 
-            Text(note.content.isEmpty ? "No content" : note.content)
-                .font(.nexusCaption)
-                .foregroundStyle(.secondary)
-                .lineLimit(4)
+                    Spacer()
 
-            Spacer(minLength: 0)
+                    if note.isFavorite {
+                        Image(systemName: "heart.fill")
+                            .font(.caption)
+                            .foregroundStyle(Color.nexusRed)
+                    }
+                }
 
-            Text(note.updatedAt.formatted(date: .abbreviated, time: .omitted))
-                .font(.nexusCaption2)
-                .foregroundStyle(.tertiary)
+                Text(note.title.isEmpty ? "Untitled" : note.title)
+                    .font(.nexusHeadline)
+                    .lineLimit(2)
+
+                Text(note.content.isEmpty ? "No content" : note.content)
+                    .font(.nexusCaption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(4)
+
+                Spacer(minLength: 0)
+
+                Text(note.updatedAt.formatted(date: .abbreviated, time: .omitted))
+                    .font(.nexusCaption2)
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(12)
         }
-        .padding(12)
         .frame(height: 160)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
@@ -152,21 +160,48 @@ private struct NoteCard: View {
                 .fill(noteColor)
                 .overlay {
                     RoundedRectangle(cornerRadius: 16)
-                        .strokeBorder(Color.nexusBorder, lineWidth: 1)
+                        .strokeBorder(borderColor, lineWidth: 1)
                 }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    private var accentColor: Color {
+        guard let colorName = note.color else { return .clear }
+        switch colorName {
+        case "purple": return .nexusPurple
+        case "blue": return .nexusBlue
+        case "green": return .nexusGreen
+        case "orange": return .nexusOrange
+        case "red": return .nexusRed
+        case "pink": return .nexusPink
+        default: return .clear
         }
     }
 
     private var noteColor: Color {
         guard let colorName = note.color else { return .nexusSurface }
         switch colorName {
-        case "purple": return .nexusPurple.opacity(0.2)
-        case "blue": return .nexusBlue.opacity(0.2)
-        case "green": return .nexusGreen.opacity(0.2)
-        case "orange": return .nexusOrange.opacity(0.2)
-        case "red": return .nexusRed.opacity(0.2)
-        case "pink": return .nexusPink.opacity(0.2)
+        case "purple": return .nexusPurple.opacity(0.15)
+        case "blue": return .nexusBlue.opacity(0.15)
+        case "green": return .nexusGreen.opacity(0.15)
+        case "orange": return .nexusOrange.opacity(0.15)
+        case "red": return .nexusRed.opacity(0.15)
+        case "pink": return .nexusPink.opacity(0.15)
         default: return .nexusSurface
+        }
+    }
+
+    private var borderColor: Color {
+        guard let colorName = note.color else { return .nexusBorder }
+        switch colorName {
+        case "purple": return .nexusPurple.opacity(0.3)
+        case "blue": return .nexusBlue.opacity(0.3)
+        case "green": return .nexusGreen.opacity(0.3)
+        case "orange": return .nexusOrange.opacity(0.3)
+        case "red": return .nexusRed.opacity(0.3)
+        case "pink": return .nexusPink.opacity(0.3)
+        default: return .nexusBorder
         }
     }
 }
