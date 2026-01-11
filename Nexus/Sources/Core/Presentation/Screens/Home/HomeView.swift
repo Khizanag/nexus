@@ -3,6 +3,7 @@ import SwiftData
 
 struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
+    @StateObject private var widgetManager = HomeWidgetManager.shared
 
     @Query(sort: \NoteModel.updatedAt, order: .reverse)
     private var recentNotes: [NoteModel]
@@ -17,14 +18,27 @@ struct HomeView: View {
     @State private var showNewTransaction = false
     @State private var showHealthEntry = false
     @State private var showInsights = false
+    @State private var showWidgetEditor = false
     @State private var selectedNote: NoteModel?
     @State private var selectedTask: TaskModel?
+
+    // Widget navigation states
+    @State private var showSubscriptions = false
+    @State private var showBudgets = false
+    @State private var showHealth = false
+    @State private var showHouse = false
+    @State private var showNotes = false
+    @State private var showTasks = false
+    @State private var showCalendar = false
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     headerSection
+                    if !widgetManager.selectedWidgets.isEmpty {
+                        widgetsSection
+                    }
                     quickActionsSection
                     insightsSection
                     recentActivitySection
@@ -68,9 +82,88 @@ struct HomeView: View {
             .sheet(item: $selectedTask) { task in
                 TaskEditorView(task: task)
             }
+            .sheet(isPresented: $showWidgetEditor) {
+                WidgetEditorSheet()
+            }
+            .sheet(isPresented: $showSubscriptions) {
+                SubscriptionsView()
+            }
+            .sheet(isPresented: $showBudgets) {
+                BudgetView()
+            }
+            .sheet(isPresented: $showHouse) {
+                HouseView()
+            }
+            .sheet(isPresented: $showNotes) {
+                NotesView()
+            }
+            .sheet(isPresented: $showTasks) {
+                TasksView()
+            }
+            .sheet(isPresented: $showCalendar) {
+                CalendarView()
+            }
         }
         .onAppear {
             updateGreeting()
+        }
+    }
+
+    // MARK: - Widgets Section
+
+    private var widgetsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Widgets")
+                    .font(.nexusHeadline)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                Button {
+                    showWidgetEditor = true
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "square.grid.2x2")
+                        Text("Edit")
+                    }
+                    .font(.nexusCaption)
+                    .foregroundStyle(Color.nexusPurple)
+                }
+            }
+
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                ForEach(widgetManager.selectedWidgets) { widget in
+                    HomeWidgetCard(widget: widget) {
+                        handleWidgetTap(widget)
+                    }
+                }
+            }
+        }
+    }
+
+    private func handleWidgetTap(_ widget: HomeWidget) {
+        switch widget {
+        case .notes:
+            showNotes = true
+        case .tasks:
+            showTasks = true
+        case .calendar:
+            showCalendar = true
+        case .subscriptions:
+            showSubscriptions = true
+        case .budgets:
+            showBudgets = true
+        case .healthSummary:
+            showHealthEntry = true
+        case .recentTransactions:
+            showNewTransaction = true
+        case .house:
+            showHouse = true
+        case .upcomingBills:
+            showSubscriptions = true
+        case .currencyConverter:
+            showNewTransaction = true
         }
     }
 
@@ -249,13 +342,29 @@ struct HomeView: View {
         }
     }
 
+    private var userName: String? {
+        NSUbiquitousKeyValueStore.default.string(forKey: "user_full_name")
+    }
+
+    private var firstName: String? {
+        guard let name = userName, !name.isEmpty else { return nil }
+        return name.components(separatedBy: " ").first
+    }
+
     private func updateGreeting() {
         let hour = Calendar.current.component(.hour, from: Date())
+        let timeGreeting: String
         switch hour {
-        case 5..<12: greeting = "Good Morning"
-        case 12..<17: greeting = "Good Afternoon"
-        case 17..<21: greeting = "Good Evening"
-        default: greeting = "Good Night"
+        case 5..<12: timeGreeting = "Good Morning"
+        case 12..<17: timeGreeting = "Good Afternoon"
+        case 17..<21: timeGreeting = "Good Evening"
+        default: timeGreeting = "Good Night"
+        }
+
+        if let name = firstName {
+            greeting = "\(timeGreeting), \(name)"
+        } else {
+            greeting = timeGreeting
         }
     }
 
@@ -378,6 +487,137 @@ private struct ActivityRow: View {
         .background {
             RoundedRectangle(cornerRadius: 12)
                 .fill(Color.nexusSurface)
+        }
+    }
+}
+
+// MARK: - Home Widget Card
+
+private struct HomeWidgetCard: View {
+    let widget: HomeWidget
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: widget.icon)
+                    .font(.system(size: 18))
+                    .foregroundStyle(widget.color)
+                    .frame(width: 32, height: 32)
+                    .background {
+                        Circle()
+                            .fill(widget.color.opacity(0.15))
+                    }
+
+                Text(widget.title)
+                    .font(.nexusSubheadline)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Spacer(minLength: 4)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 10)
+            .background {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.nexusSurface)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 12)
+                            .strokeBorder(Color.nexusBorder, lineWidth: 1)
+                    }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Widget Editor Sheet
+
+struct WidgetEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var widgetManager = HomeWidgetManager.shared
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    if widgetManager.selectedWidgets.isEmpty {
+                        Text("No widgets added")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(widgetManager.selectedWidgets) { widget in
+                            HStack(spacing: 12) {
+                                Image(systemName: widget.icon)
+                                    .foregroundStyle(widget.color)
+                                    .frame(width: 28)
+
+                                Text(widget.title)
+
+                                Spacer()
+
+                                Button {
+                                    withAnimation {
+                                        widgetManager.removeWidget(widget)
+                                    }
+                                } label: {
+                                    Image(systemName: "minus.circle.fill")
+                                        .foregroundStyle(.red)
+                                }
+                            }
+                        }
+                        .onMove { source, destination in
+                            widgetManager.moveWidget(from: source, to: destination)
+                        }
+                    }
+                } header: {
+                    Text("Active Widgets")
+                } footer: {
+                    Text("Drag to reorder. Tap minus to remove.")
+                }
+
+                Section("Available Widgets") {
+                    ForEach(HomeWidget.allCases.filter { !widgetManager.isSelected($0) }) { widget in
+                        HStack(spacing: 12) {
+                            Image(systemName: widget.icon)
+                                .foregroundStyle(widget.color)
+                                .frame(width: 28)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(widget.title)
+                                Text(widget.description)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Spacer()
+
+                            Button {
+                                withAnimation {
+                                    widgetManager.addWidget(widget)
+                                }
+                            } label: {
+                                Image(systemName: "plus.circle.fill")
+                                    .foregroundStyle(.green)
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Edit Widgets")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+            .environment(\.editMode, .constant(.active))
         }
     }
 }
