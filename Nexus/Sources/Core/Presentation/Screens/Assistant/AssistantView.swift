@@ -22,6 +22,13 @@ struct AssistantView: View {
     @State private var inputText: String = ""
     @State private var isLoading: Bool = false
     @State private var showCapabilities = false
+    @State private var pendingDismissWithNavigation: AssistantNavigation?
+
+    // Track last mentioned items for "open that" commands
+    @State private var lastMentionedEvents: [CalendarEvent] = []
+    @State private var lastMentionedTasks: [TaskModel] = []
+    @State private var lastMentionedNotes: [NoteModel] = []
+    @State private var selectedEventToShow: CalendarEvent?
 
     @State private var speechService = SpeechRecognitionService()
     @FocusState private var isInputFocused: Bool
@@ -29,7 +36,8 @@ struct AssistantView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.nexusBackground.ignoresSafeArea()
+                // Animated background
+                AnimatedGradientBackground()
 
                 VStack(spacing: 0) {
                     if messages.isEmpty {
@@ -47,9 +55,21 @@ struct AssistantView: View {
             .sheet(isPresented: $showCapabilities) {
                 CapabilitiesView()
             }
+            .sheet(item: $selectedEventToShow) { event in
+                CalendarEventDetailView(event: event, onUpdate: {})
+            }
             .onAppear { loadSavedMessages() }
             .onChange(of: speechService.transcribedText) { _, newValue in
                 if !newValue.isEmpty { inputText = newValue }
+            }
+            .onChange(of: pendingDismissWithNavigation) { _, newValue in
+                if let destination = newValue {
+                    assistantLauncher.navigate(to: destination)
+                    pendingDismissWithNavigation = nil
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        dismiss()
+                    }
+                }
             }
             .alert("Voice Input", isPresented: .init(
                 get: { speechService.errorMessage != nil },
@@ -63,8 +83,7 @@ struct AssistantView: View {
     }
 
     private func navigateAndDismiss(to destination: AssistantNavigation) {
-        assistantLauncher.navigate(to: destination)
-        dismiss()
+        pendingDismissWithNavigation = destination
     }
 }
 
@@ -130,72 +149,83 @@ private extension AssistantView {
 
 private extension AssistantView {
     var emptyState: some View {
-        ScrollView {
-            VStack(spacing: 32) {
-                Spacer().frame(height: 20)
-                AIAvatarView()
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 28) {
+                Spacer().frame(height: 10)
 
-                VStack(spacing: 8) {
-                    Text("Hey! I'm Nexus AI")
-                        .font(.nexusTitle2)
-                    Text("Your personal life assistant. I can help you with notes, tasks, finances, and health tracking.")
-                        .font(.nexusSubheadline)
+                AIAvatarView()
+                    .padding(.top, 10)
+
+                VStack(spacing: 10) {
+                    Text("Hey! I'm Nexus")
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+
+                    Text("Your AI-powered life assistant.\nAsk me anything about your data.")
+                        .font(.system(size: 15, weight: .regular))
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
+                        .lineSpacing(3)
                 }
+                .padding(.horizontal, 24)
 
                 quickStatsCard
 
-                VStack(spacing: 12) {
+                VStack(spacing: 14) {
                     Text("Try asking")
-                        .font(.nexusCaption)
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.tertiary)
+                        .textCase(.uppercase)
+                        .tracking(1)
 
-                    ForEach(dynamicSuggestions, id: \.self) { suggestion in
-                        SuggestionButton(text: suggestion) {
-                            inputText = suggestion
-                            sendMessage()
+                    VStack(spacing: 10) {
+                        ForEach(dynamicSuggestions, id: \.self) { suggestion in
+                            SuggestionButton(text: suggestion) {
+                                inputText = suggestion
+                                sendMessage()
+                            }
                         }
                     }
                 }
-                Spacer()
+
+                Spacer().frame(height: 20)
             }
             .frame(maxWidth: .infinity)
         }
     }
 
     var quickStatsCard: some View {
-        HStack(spacing: 0) {
-            QuickStatItem(
-                value: "\(tasks.filter { !$0.isCompleted }.count)",
-                label: "Open Tasks",
-                icon: "checkmark.circle",
-                color: .tasksColor
-            )
-            Divider().frame(height: 40)
-            QuickStatItem(
-                value: "\(notes.count)",
-                label: "Notes",
-                icon: "doc.text",
-                color: .notesColor
-            )
-            Divider().frame(height: 40)
-            QuickStatItem(
-                value: formatCurrency(monthlySpending),
-                label: "This Month",
-                icon: "creditcard",
-                color: .financeColor
-            )
-        }
-        .padding(.vertical, 16)
-        .background {
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.nexusSurface)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 16)
-                        .strokeBorder(Color.nexusBorder, lineWidth: 1)
-                }
+        GlassCard {
+            HStack(spacing: 0) {
+                QuickStatItem(
+                    value: "\(tasks.filter { !$0.isCompleted }.count)",
+                    label: "Tasks",
+                    icon: "checkmark.circle",
+                    color: .tasksColor
+                )
+
+                Rectangle()
+                    .fill(.white.opacity(0.1))
+                    .frame(width: 1, height: 50)
+
+                QuickStatItem(
+                    value: "\(notes.count)",
+                    label: "Notes",
+                    icon: "doc.text",
+                    color: .notesColor
+                )
+
+                Rectangle()
+                    .fill(.white.opacity(0.1))
+                    .frame(width: 1, height: 50)
+
+                QuickStatItem(
+                    value: formatCurrency(monthlySpending),
+                    label: "Spent",
+                    icon: "creditcard",
+                    color: .financeColor
+                )
+            }
+            .padding(.vertical, 20)
         }
         .padding(.horizontal, 20)
     }
@@ -284,20 +314,28 @@ private extension AssistantView {
 private extension AssistantView {
     var inputBar: some View {
         VStack(spacing: 0) {
-            Divider().background(Color.nexusBorder.opacity(0.5))
-
-            HStack(spacing: 10) {
+            HStack(spacing: 12) {
                 microphoneButton
                 textField
                 sendButton
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
         }
         .background {
             Rectangle()
-                .fill(Color.nexusBackground.opacity(0.95))
-                .background(.ultraThinMaterial)
+                .fill(.ultraThinMaterial)
+                .overlay(alignment: .top) {
+                    Rectangle()
+                        .fill(
+                            LinearGradient(
+                                colors: [.white.opacity(0.1), .clear],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .frame(height: 1)
+                }
                 .ignoresSafeArea()
         }
     }
@@ -307,50 +345,80 @@ private extension AssistantView {
             speechService.toggleRecording()
         } label: {
             ZStack {
-                Circle()
-                    .fill(speechService.isRecording ? Color.nexusRed : Color.nexusSurface)
-                    .frame(width: 40, height: 40)
-                    .overlay {
-                        Circle()
-                            .strokeBorder(Color.nexusBorder.opacity(speechService.isRecording ? 0 : 0.5), lineWidth: 1)
-                    }
+                if speechService.isRecording {
+                    Circle()
+                        .fill(Color.nexusRed)
+                        .frame(width: 44, height: 44)
+                        .overlay {
+                            Circle()
+                                .strokeBorder(
+                                    LinearGradient(
+                                        colors: [.nexusRed, .nexusRed.opacity(0.8)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ),
+                                    lineWidth: 1
+                                )
+                        }
+                        .shadow(color: Color.nexusRed.opacity(0.4), radius: 8)
+                } else {
+                    Circle()
+                        .fill(.ultraThinMaterial)
+                        .frame(width: 44, height: 44)
+                        .overlay {
+                            Circle()
+                                .strokeBorder(
+                                    LinearGradient(
+                                        colors: [.white.opacity(0.2), .white.opacity(0.05)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ),
+                                    lineWidth: 1
+                                )
+                        }
+                        .shadow(color: .black.opacity(0.1), radius: 8)
+                }
 
                 Image(systemName: speechService.isRecording ? "stop.fill" : "mic.fill")
-                    .font(.system(size: 16, weight: .medium))
+                    .font(.system(size: 18, weight: .medium))
                     .foregroundStyle(speechService.isRecording ? Color.white : Color.nexusPurple)
-                    .scaleEffect(speechService.isRecording ? 0.85 : 1.0)
+                    .scaleEffect(speechService.isRecording ? 0.9 : 1.0)
             }
             .overlay {
                 if speechService.isRecording {
                     Circle()
-                        .stroke(Color.nexusRed.opacity(0.4), lineWidth: 2)
-                        .scaleEffect(1.15)
-                        .opacity(speechService.isRecording ? 1 : 0)
+                        .stroke(Color.nexusRed.opacity(0.5), lineWidth: 2)
+                        .scaleEffect(1.2)
                         .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: speechService.isRecording)
                 }
             }
-            .shadow(color: speechService.isRecording ? Color.nexusRed.opacity(0.3) : .clear, radius: 8)
         }
-        .animation(.spring(response: 0.3), value: speechService.isRecording)
+        .buttonStyle(ScaleButtonStyle())
     }
 
     var textField: some View {
         TextField(speechService.isRecording ? "Listening..." : "Message...", text: $inputText, axis: .vertical)
-            .font(.system(size: 15))
-            .lineLimit(1...4)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            .font(.system(size: 16, weight: .regular))
+            .lineLimit(1...5)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
             .background {
-                RoundedRectangle(cornerRadius: 22)
-                    .fill(Color.nexusSurface.opacity(0.8))
+                Capsule()
+                    .fill(.ultraThinMaterial)
                     .overlay {
-                        RoundedRectangle(cornerRadius: 22)
+                        Capsule()
                             .strokeBorder(
-                                speechService.isRecording ? Color.nexusRed.opacity(0.4) :
-                                isInputFocused ? Color.nexusPurple.opacity(0.4) : Color.nexusBorder.opacity(0.5),
+                                LinearGradient(
+                                    colors: isInputFocused || speechService.isRecording
+                                        ? [.nexusPurple.opacity(0.5), .nexusBlue.opacity(0.3)]
+                                        : [.white.opacity(0.2), .white.opacity(0.05)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
                                 lineWidth: 1
                             )
                     }
+                    .shadow(color: .black.opacity(0.05), radius: 8)
             }
             .focused($isInputFocused)
             .disabled(speechService.isRecording)
@@ -361,23 +429,30 @@ private extension AssistantView {
             ZStack {
                 if inputText.isEmpty {
                     Circle()
-                        .fill(Color.nexusSurface)
-                        .frame(width: 40, height: 40)
+                        .fill(.ultraThinMaterial)
+                        .frame(width: 44, height: 44)
                         .overlay {
                             Circle()
-                                .strokeBorder(Color.nexusBorder.opacity(0.5), lineWidth: 1)
+                                .strokeBorder(
+                                    LinearGradient(
+                                        colors: [.white.opacity(0.2), .white.opacity(0.05)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ),
+                                    lineWidth: 1
+                                )
                         }
                 } else {
                     Circle()
                         .fill(
                             LinearGradient(
-                                colors: [.nexusPurple, .nexusPurple.opacity(0.8)],
+                                colors: [.nexusPurple, .nexusBlue],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
                         )
-                        .frame(width: 40, height: 40)
-                        .shadow(color: Color.nexusPurple.opacity(0.3), radius: 6)
+                        .frame(width: 44, height: 44)
+                        .shadow(color: Color.nexusPurple.opacity(0.4), radius: 10)
                 }
 
                 Image(systemName: "arrow.up")
@@ -660,6 +735,7 @@ private extension AssistantView {
             // Check what type of calendar query
             if input.contains("today") || input.contains("schedule") {
                 let events = try await calendarService.fetchTodayEvents()
+                lastMentionedEvents = events // Store for "open" commands
 
                 if events.isEmpty {
                     return ChatMessage(
@@ -676,23 +752,26 @@ private extension AssistantView {
 
                 if !allDayEvents.isEmpty {
                     response += "**All Day:**\n"
-                    for event in allDayEvents {
-                        response += "• \(event.title)\n"
+                    for (index, event) in allDayEvents.enumerated() {
+                        response += "\(index + 1). \(event.title)\n"
                     }
                     response += "\n"
                 }
 
                 if !timedEvents.isEmpty {
                     response += "**Scheduled:**\n"
-                    for event in timedEvents.prefix(8) {
+                    let startIndex = allDayEvents.count
+                    for (index, event) in timedEvents.prefix(8).enumerated() {
                         let time = formatter.string(from: event.startDate)
                         let location = event.location.map { " 📍 \($0)" } ?? ""
-                        response += "• **\(time)** - \(event.title)\(location)\n"
+                        response += "\(startIndex + index + 1). **\(time)** - \(event.title)\(location)\n"
                     }
                     if timedEvents.count > 8 {
                         response += "\n...and \(timedEvents.count - 8) more events"
                     }
                 }
+
+                response += "\n💡 *Say \"open 1\" or \"open [event name]\" to view details*"
 
                 return ChatMessage(role: .assistant, content: response, type: .stats)
             }
@@ -702,29 +781,33 @@ private extension AssistantView {
                 let tomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: Date()))!
                 let dayAfter = calendar.date(byAdding: .day, value: 1, to: tomorrow)!
                 let events = try await calendarService.fetchEvents(from: tomorrow, to: dayAfter)
+                lastMentionedEvents = events // Store for "open" commands
 
                 if events.isEmpty {
                     return ChatMessage(role: .assistant, content: "📅 **Tomorrow's Schedule**\n\nNo events scheduled for tomorrow.", type: .text)
                 }
 
                 var response = "📅 **Tomorrow's Schedule** (\(events.count) events)\n\n"
-                for event in events.prefix(8) {
+                for (index, event) in events.prefix(8).enumerated() {
                     if event.isAllDay {
-                        response += "• **All Day** - \(event.title)\n"
+                        response += "\(index + 1). **All Day** - \(event.title)\n"
                     } else {
                         let time = formatter.string(from: event.startDate)
-                        response += "• **\(time)** - \(event.title)\n"
+                        response += "\(index + 1). **\(time)** - \(event.title)\n"
                     }
                 }
                 if events.count > 8 {
                     response += "\n...and \(events.count - 8) more events"
                 }
 
+                response += "\n💡 *Say \"open 1\" or \"open [event name]\" to view details*"
+
                 return ChatMessage(role: .assistant, content: response, type: .stats)
             }
 
             if input.contains("week") || input.contains("upcoming") {
                 let events = try await calendarService.fetchUpcomingEvents(days: 7)
+                lastMentionedEvents = events // Store for "open" commands
 
                 if events.isEmpty {
                     return ChatMessage(role: .assistant, content: "📅 **This Week**\n\nNo events scheduled for the next 7 days.", type: .text)
@@ -738,16 +821,18 @@ private extension AssistantView {
                 }
 
                 var response = "📅 **Upcoming Events** (\(events.count) this week)\n\n"
+                var eventIndex = 1
                 for date in grouped.keys.sorted().prefix(5) {
                     let dayEvents = grouped[date] ?? []
                     response += "**\(dayFormatter.string(from: date)):**\n"
                     for event in dayEvents.prefix(3) {
                         if event.isAllDay {
-                            response += "• \(event.title)\n"
+                            response += "\(eventIndex). \(event.title)\n"
                         } else {
                             let time = formatter.string(from: event.startDate)
-                            response += "• \(time) - \(event.title)\n"
+                            response += "\(eventIndex). \(time) - \(event.title)\n"
                         }
+                        eventIndex += 1
                     }
                     if dayEvents.count > 3 {
                         response += "  ...+\(dayEvents.count - 3) more\n"
@@ -755,11 +840,15 @@ private extension AssistantView {
                     response += "\n"
                 }
 
+                response += "💡 *Say \"open 1\" or \"open [event name]\" to view details*"
+
                 return ChatMessage(role: .assistant, content: response, type: .stats)
             }
 
             // Default: show today's events
             let events = try await calendarService.fetchTodayEvents()
+            lastMentionedEvents = events // Store for "open" commands
+
             if events.isEmpty {
                 return ChatMessage(
                     role: .assistant,
@@ -769,17 +858,19 @@ private extension AssistantView {
             }
 
             var response = "📅 **Today** (\(events.count) events)\n\n"
-            for event in events.prefix(5) {
+            for (index, event) in events.prefix(5).enumerated() {
                 if event.isAllDay {
-                    response += "• **All Day** - \(event.title)\n"
+                    response += "\(index + 1). **All Day** - \(event.title)\n"
                 } else {
                     let time = formatter.string(from: event.startDate)
-                    response += "• **\(time)** - \(event.title)\n"
+                    response += "\(index + 1). **\(time)** - \(event.title)\n"
                 }
             }
             if events.count > 5 {
                 response += "\n...and \(events.count - 5) more events"
             }
+
+            response += "\n💡 *Say \"open 1\" or \"open [event name]\" to view details*"
 
             return ChatMessage(role: .assistant, content: response, type: .stats)
 
@@ -919,10 +1010,27 @@ private extension AssistantView {
     }
 
     func parseOpenAction(lowercased: String) -> ChatMessage? {
-        let openPatterns = ["open ", "go to ", "show me ", "take me to ", "navigate to ", "switch to "]
+        let openPatterns = ["open ", "go to ", "show me ", "take me to ", "navigate to ", "switch to ", "view "]
 
         for pattern in openPatterns {
             if lowercased.contains(pattern) {
+                // Check for specific event by number (e.g., "open 1", "open event 2")
+                if let eventResult = tryOpenEventByNumber(lowercased) {
+                    return eventResult
+                }
+
+                // Check for specific event by name (e.g., "open meeting with John")
+                if let eventResult = tryOpenEventByName(lowercased) {
+                    return eventResult
+                }
+
+                // Check for "open that", "open it" referring to last mentioned event
+                if lowercased.contains("that") || lowercased.contains(" it") || lowercased.contains("first") || lowercased.contains("last") {
+                    if let eventResult = tryOpenContextualEvent(lowercased) {
+                        return eventResult
+                    }
+                }
+
                 // Calendar
                 if lowercased.contains("calendar") || lowercased.contains("schedule") || lowercased.contains("events") {
                     navigateAndDismiss(to: .calendar)
@@ -984,6 +1092,86 @@ private extension AssistantView {
                     return ChatMessage(role: .assistant, content: "🏠 Opening House...", type: .action(icon: "house", label: "Open House"))
                 }
             }
+        }
+
+        return nil
+    }
+
+    private func tryOpenEventByNumber(_ input: String) -> ChatMessage? {
+        guard !lastMentionedEvents.isEmpty else { return nil }
+
+        // Extract number from input (e.g., "open 1", "open event 3", "show me number 2")
+        let pattern = #"(?:open|show|view)\s*(?:event|number|#)?\s*(\d+)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+              let match = regex.firstMatch(in: input, range: NSRange(input.startIndex..., in: input)),
+              let range = Range(match.range(at: 1), in: input),
+              let number = Int(input[range]) else {
+            return nil
+        }
+
+        let index = number - 1 // Convert to 0-based index
+        guard index >= 0, index < lastMentionedEvents.count else {
+            return ChatMessage(
+                role: .assistant,
+                content: "I couldn't find event #\(number). There are \(lastMentionedEvents.count) events in the list.",
+                type: .text
+            )
+        }
+
+        let event = lastMentionedEvents[index]
+        selectedEventToShow = event
+        return ChatMessage(
+            role: .assistant,
+            content: "📅 Opening **\(event.title)**...",
+            type: .action(icon: "calendar", label: "Open Event")
+        )
+    }
+
+    private func tryOpenEventByName(_ input: String) -> ChatMessage? {
+        guard !lastMentionedEvents.isEmpty else { return nil }
+
+        // Try to match event by title
+        for event in lastMentionedEvents {
+            let titleLowercased = event.title.lowercased()
+            let words = titleLowercased.split(separator: " ").map(String.init)
+
+            // Check if any significant word from the event title is in the input
+            for word in words where word.count > 3 {
+                if input.contains(word) {
+                    selectedEventToShow = event
+                    return ChatMessage(
+                        role: .assistant,
+                        content: "📅 Opening **\(event.title)**...",
+                        type: .action(icon: "calendar", label: "Open Event")
+                    )
+                }
+            }
+        }
+
+        return nil
+    }
+
+    private func tryOpenContextualEvent(_ input: String) -> ChatMessage? {
+        guard !lastMentionedEvents.isEmpty else { return nil }
+
+        // "open that", "open it" - typically refers to first or most recent
+        // "open first" - first event
+        // "open last" - last event
+
+        let event: CalendarEvent?
+        if input.contains("last") {
+            event = lastMentionedEvents.last
+        } else {
+            event = lastMentionedEvents.first
+        }
+
+        if let event = event {
+            selectedEventToShow = event
+            return ChatMessage(
+                role: .assistant,
+                content: "📅 Opening **\(event.title)**...",
+                type: .action(icon: "calendar", label: "Open Event")
+            )
         }
 
         return nil
