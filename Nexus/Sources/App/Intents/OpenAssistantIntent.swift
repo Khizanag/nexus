@@ -34,6 +34,32 @@ struct NexusShortcuts: AppShortcutsProvider {
 final class AssistantLauncher {
     static let shared = AssistantLauncher()
     var shouldOpenAssistant = false
+    var pendingNavigation: AssistantNavigation?
 
     private init() {}
+
+    func navigate(to destination: AssistantNavigation) {
+        pendingNavigation = destination
+    }
+
+    func consumeNavigation() -> AssistantNavigation? {
+        let navigation = pendingNavigation
+        pendingNavigation = nil
+        return navigation
+    }
+}
+
+// MARK: - Navigation Destinations
+
+enum AssistantNavigation: Equatable {
+    case tab(Tab)
+    case calendar
+    case calendarEvent(id: String)
+    case note(id: UUID)
+    case task(id: UUID)
+    case subscription(id: UUID)
+    case budget(id: UUID)
+    case stock(symbol: String)
+    case house(id: UUID)
+    case settings
 }

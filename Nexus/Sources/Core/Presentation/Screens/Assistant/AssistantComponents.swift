@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 
 // MARK: - AI Avatar View
@@ -89,34 +90,89 @@ struct QuickStatItem: View {
 
 struct MessageBubble: View {
     let message: ChatMessage
+    var onOpenAction: ((String) -> Void)?
+
+    @State private var showCopied = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            if message.role == .user { Spacer(minLength: 60) }
+        HStack(alignment: .top, spacing: 10) {
+            if message.role == .user { Spacer(minLength: 50) }
 
             if message.role == .assistant {
                 assistantAvatar
             }
 
-            VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 4) {
+            VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 6) {
                 Text(.init(message.content))
-                    .font(.nexusBody)
-                    .padding(12)
+                    .font(.system(size: 14, weight: .regular))
+                    .lineSpacing(3)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
                     .background {
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(bubbleColor)
+                        bubbleBackground
                     }
                     .foregroundStyle(message.role == .user ? .white : .primary)
+                    .contextMenu {
+                        Button {
+                            copyMessage()
+                        } label: {
+                            Label("Copy", systemImage: "doc.on.doc")
+                        }
+
+                        if message.role == .assistant {
+                            Button {
+                                speakMessage()
+                            } label: {
+                                Label("Speak", systemImage: "speaker.wave.2")
+                            }
+                        }
+                    }
+                    .overlay(alignment: .top) {
+                        if showCopied {
+                            Text("Copied!")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background {
+                                    Capsule().fill(Color.nexusGreen)
+                                }
+                                .offset(y: -28)
+                                .transition(.scale.combined(with: .opacity))
+                        }
+                    }
 
                 Text(message.timestamp.formatted(date: .omitted, time: .shortened))
-                    .font(.nexusCaption2)
+                    .font(.system(size: 10))
                     .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 4)
             }
-            .frame(maxWidth: 300, alignment: message.role == .user ? .trailing : .leading)
+            .frame(maxWidth: UIScreen.main.bounds.width * 0.75, alignment: message.role == .user ? .trailing : .leading)
 
-            if message.role == .assistant { Spacer(minLength: 60) }
+            if message.role == .assistant { Spacer(minLength: 50) }
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 2)
+    }
+
+    private func copyMessage() {
+        UIPasteboard.general.string = message.content
+        withAnimation(.spring(response: 0.3)) {
+            showCopied = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            withAnimation(.spring(response: 0.3)) {
+                showCopied = false
+            }
+        }
+    }
+
+    private func speakMessage() {
+        let utterance = AVSpeechUtterance(string: message.content)
+        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+        utterance.rate = 0.5
+        let synthesizer = AVSpeechSynthesizer()
+        synthesizer.speak(utterance)
     }
 }
 
@@ -130,12 +186,35 @@ private extension MessageBubble {
                     endPoint: .bottomTrailing
                 )
             )
-            .frame(width: 28, height: 28)
+            .frame(width: 26, height: 26)
             .overlay {
                 Image(systemName: "sparkles")
-                    .font(.system(size: 14))
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.white)
             }
+            .shadow(color: .nexusPurple.opacity(0.3), radius: 4, x: 0, y: 2)
+    }
+
+    @ViewBuilder
+    var bubbleBackground: some View {
+        if message.role == .user {
+            RoundedRectangle(cornerRadius: 18)
+                .fill(
+                    LinearGradient(
+                        colors: [.nexusPurple, .nexusPurple.opacity(0.85)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .shadow(color: .nexusPurple.opacity(0.2), radius: 4, x: 0, y: 2)
+        } else {
+            RoundedRectangle(cornerRadius: 18)
+                .fill(bubbleColor)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 18)
+                        .strokeBorder(Color.nexusBorder.opacity(0.5), lineWidth: 0.5)
+                }
+        }
     }
 
     var bubbleColor: Color {
@@ -145,9 +224,11 @@ private extension MessageBubble {
 
         switch message.type {
         case .taskCreated, .noteCreated, .taskCompleted, .healthLogged:
-            return Color.nexusGreen.opacity(0.15)
+            return Color.nexusGreen.opacity(0.12)
         case .stats, .taskList, .notesSummary, .financeSummary, .healthSummary:
-            return Color.nexusSurface
+            return Color.nexusSurface.opacity(0.8)
+        case .action:
+            return Color.nexusPurple.opacity(0.1)
         default:
             return Color.nexusSurface
         }
