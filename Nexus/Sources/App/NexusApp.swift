@@ -27,6 +27,12 @@ struct NexusApp: App {
             CurrencyPreferenceModel.self,
             BudgetModel.self,
             PlannedExpenseModel.self,
+            SubscriptionModel.self,
+            SubscriptionPaymentModel.self,
+            HouseModel.self,
+            UtilityAccountModel.self,
+            UtilityPaymentModel.self,
+            UtilityReadingModel.self,
         ])
 
         modelContainer = Self.createModelContainer(schema: schema)

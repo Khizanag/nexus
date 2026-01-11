@@ -32,6 +32,12 @@
 	<string>Nexus uses the microphone for voice input so you can speak to the AI assistant instead of typing.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Nexus uses speech recognition to convert your voice into text for the AI assistant.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Nexus uses your location to auto-fill your address when adding a new house or property.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Nexus accesses your calendar to display your events and help you manage your schedule.</string>
+	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
+	<string>Nexus needs permission to create and update calendar events.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
