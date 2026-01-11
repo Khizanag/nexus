@@ -366,7 +366,7 @@ private extension AssistantView {
 
         Task {
             try? await Task.sleep(for: .milliseconds(800))
-            let response = generateResponse(for: currentInput)
+            let response = await generateResponse(for: currentInput)
 
             await MainActor.run {
                 withAnimation {
@@ -382,7 +382,7 @@ private extension AssistantView {
 // MARK: - Response Generation
 
 private extension AssistantView {
-    func generateResponse(for input: String) -> ChatMessage {
+    func generateResponse(for input: String) async -> ChatMessage {
         let lowercased = input.lowercased()
 
         if let taskAction = parseTaskAction(input: input, lowercased: lowercased) { return taskAction }
@@ -405,8 +405,8 @@ private extension AssistantView {
         }
 
         if lowercased.contains("calendar") || lowercased.contains("event") || lowercased.contains("schedule") ||
-           lowercased.contains("appointment") || lowercased.contains("meeting") {
-            return generateCalendarResponse(for: lowercased)
+           lowercased.contains("appointment") || lowercased.contains("meeting") || lowercased.contains("today") {
+            return await generateCalendarResponse(for: lowercased)
         }
 
         if lowercased.contains("budget") {
@@ -600,16 +600,148 @@ private extension AssistantView {
         )
     }
 
-    func generateCalendarResponse(for input: String) -> ChatMessage {
+    func generateCalendarResponse(for input: String) async -> ChatMessage {
         guard calendarService.isAuthorized else {
             return ChatMessage(role: .assistant, content: "Calendar access is not authorized. Please enable calendar access in the Calendar tab to view your events.", type: .text)
         }
 
-        return ChatMessage(
-            role: .assistant,
-            content: "📅 To view your calendar events, open the Calendar tab. You can see your schedule in Day, Week, Month, or Agenda view.\n\n**Tip:** Long press on a time slot in Day view to quickly create a new event!",
-            type: .text
-        )
+        do {
+            let formatter = DateFormatter()
+            formatter.timeStyle = .short
+
+            // Check what type of calendar query
+            if input.contains("today") || input.contains("schedule") {
+                let events = try await calendarService.fetchTodayEvents()
+
+                if events.isEmpty {
+                    return ChatMessage(
+                        role: .assistant,
+                        content: "📅 **Today's Schedule**\n\nNo events scheduled for today. Enjoy your free day!",
+                        type: .text
+                    )
+                }
+
+                let allDayEvents = events.filter { $0.isAllDay }
+                let timedEvents = events.filter { !$0.isAllDay }
+
+                var response = "📅 **Today's Schedule** (\(events.count) events)\n\n"
+
+                if !allDayEvents.isEmpty {
+                    response += "**All Day:**\n"
+                    for event in allDayEvents {
+                        response += "• \(event.title)\n"
+                    }
+                    response += "\n"
+                }
+
+                if !timedEvents.isEmpty {
+                    response += "**Scheduled:**\n"
+                    for event in timedEvents.prefix(8) {
+                        let time = formatter.string(from: event.startDate)
+                        let location = event.location.map { " 📍 \($0)" } ?? ""
+                        response += "• **\(time)** - \(event.title)\(location)\n"
+                    }
+                    if timedEvents.count > 8 {
+                        response += "\n...and \(timedEvents.count - 8) more events"
+                    }
+                }
+
+                return ChatMessage(role: .assistant, content: response, type: .stats)
+            }
+
+            if input.contains("tomorrow") {
+                let calendar = Calendar.current
+                let tomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: Date()))!
+                let dayAfter = calendar.date(byAdding: .day, value: 1, to: tomorrow)!
+                let events = try await calendarService.fetchEvents(from: tomorrow, to: dayAfter)
+
+                if events.isEmpty {
+                    return ChatMessage(role: .assistant, content: "📅 **Tomorrow's Schedule**\n\nNo events scheduled for tomorrow.", type: .text)
+                }
+
+                var response = "📅 **Tomorrow's Schedule** (\(events.count) events)\n\n"
+                for event in events.prefix(8) {
+                    if event.isAllDay {
+                        response += "• **All Day** - \(event.title)\n"
+                    } else {
+                        let time = formatter.string(from: event.startDate)
+                        response += "• **\(time)** - \(event.title)\n"
+                    }
+                }
+                if events.count > 8 {
+                    response += "\n...and \(events.count - 8) more events"
+                }
+
+                return ChatMessage(role: .assistant, content: response, type: .stats)
+            }
+
+            if input.contains("week") || input.contains("upcoming") {
+                let events = try await calendarService.fetchUpcomingEvents(days: 7)
+
+                if events.isEmpty {
+                    return ChatMessage(role: .assistant, content: "📅 **This Week**\n\nNo events scheduled for the next 7 days.", type: .text)
+                }
+
+                let dayFormatter = DateFormatter()
+                dayFormatter.dateFormat = "EEEE, MMM d"
+
+                let grouped = Dictionary(grouping: events) { event in
+                    Calendar.current.startOfDay(for: event.startDate)
+                }
+
+                var response = "📅 **Upcoming Events** (\(events.count) this week)\n\n"
+                for date in grouped.keys.sorted().prefix(5) {
+                    let dayEvents = grouped[date] ?? []
+                    response += "**\(dayFormatter.string(from: date)):**\n"
+                    for event in dayEvents.prefix(3) {
+                        if event.isAllDay {
+                            response += "• \(event.title)\n"
+                        } else {
+                            let time = formatter.string(from: event.startDate)
+                            response += "• \(time) - \(event.title)\n"
+                        }
+                    }
+                    if dayEvents.count > 3 {
+                        response += "  ...+\(dayEvents.count - 3) more\n"
+                    }
+                    response += "\n"
+                }
+
+                return ChatMessage(role: .assistant, content: response, type: .stats)
+            }
+
+            // Default: show today's events
+            let events = try await calendarService.fetchTodayEvents()
+            if events.isEmpty {
+                return ChatMessage(
+                    role: .assistant,
+                    content: "📅 **Calendar**\n\nNo events today. Ask me about \"tomorrow's events\" or \"this week's schedule\" for upcoming events!",
+                    type: .text
+                )
+            }
+
+            var response = "📅 **Today** (\(events.count) events)\n\n"
+            for event in events.prefix(5) {
+                if event.isAllDay {
+                    response += "• **All Day** - \(event.title)\n"
+                } else {
+                    let time = formatter.string(from: event.startDate)
+                    response += "• **\(time)** - \(event.title)\n"
+                }
+            }
+            if events.count > 5 {
+                response += "\n...and \(events.count - 5) more events"
+            }
+
+            return ChatMessage(role: .assistant, content: response, type: .stats)
+
+        } catch {
+            return ChatMessage(
+                role: .assistant,
+                content: "📅 Couldn't fetch calendar events. Please make sure calendar access is enabled in Settings.",
+                type: .text
+            )
+        }
     }
 
     func generateBudgetResponse(for input: String) -> ChatMessage {
@@ -621,17 +753,28 @@ private extension AssistantView {
         var budgetSummary = "📊 **Budget Overview**\n\n"
 
         for budget in activeBudgets.prefix(5) {
+            let spent = calculateSpentForBudget(budget)
             let limit = budget.effectiveBudget
-            let percentage = limit > 0 ? min(100, Int((0 / limit) * 100)) : 0
+            let percentage = limit > 0 ? min(100, Int((spent / limit) * 100)) : 0
+            let remaining = max(0, limit - spent)
             let status = percentage >= 100 ? "🔴" : percentage >= 80 ? "🟡" : "🟢"
-            budgetSummary += "\(status) **\(budget.name):** \(formatCurrency(limit)) budget\n"
+            budgetSummary += "\(status) **\(budget.name):** \(formatCurrency(spent)) / \(formatCurrency(limit)) (\(percentage)%)\n"
+            budgetSummary += "   Remaining: \(formatCurrency(remaining)) • \(budget.daysRemaining) days left\n\n"
         }
 
         if activeBudgets.count > 5 {
-            budgetSummary += "\n...and \(activeBudgets.count - 5) more budgets"
+            budgetSummary += "...and \(activeBudgets.count - 5) more budgets"
         }
 
         return ChatMessage(role: .assistant, content: budgetSummary, type: .stats)
+    }
+
+    func calculateSpentForBudget(_ budget: BudgetModel) -> Double {
+        transactions
+            .filter { $0.type == .expense }
+            .filter { $0.category == budget.category }
+            .filter { $0.date >= budget.currentPeriodStart && $0.date <= budget.currentPeriodEnd }
+            .reduce(0) { $0 + $1.amount }
     }
 
     func generateStocksResponse(for input: String) -> ChatMessage {
