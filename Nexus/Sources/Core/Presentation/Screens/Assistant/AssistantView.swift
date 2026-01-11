@@ -10,6 +10,12 @@ struct AssistantView: View {
     @Query(sort: \TransactionModel.date, order: .reverse) private var transactions: [TransactionModel]
     @Query(sort: \HealthEntryModel.date, order: .reverse) private var healthEntries: [HealthEntryModel]
     @Query(sort: \ChatMessageModel.timestamp, order: .forward) private var savedMessages: [ChatMessageModel]
+    @Query(sort: \SubscriptionModel.name) private var subscriptions: [SubscriptionModel]
+    @Query(sort: \BudgetModel.name) private var budgets: [BudgetModel]
+    @Query(sort: \StockHoldingModel.symbol) private var stocks: [StockHoldingModel]
+    @Query(sort: \HouseModel.name) private var houses: [HouseModel]
+
+    private let calendarService = DefaultCalendarService.shared
 
     @State private var messages: [ChatMessage] = []
     @State private var inputText: String = ""
@@ -383,6 +389,7 @@ private extension AssistantView {
         if let noteAction = parseNoteAction(input: input, lowercased: lowercased) { return noteAction }
         if let completeAction = parseCompleteAction(lowercased: lowercased) { return completeAction }
         if let healthAction = parseHealthAction(input: input, lowercased: lowercased) { return healthAction }
+        if let subscriptionAction = parseSubscriptionAction(input: input, lowercased: lowercased) { return subscriptionAction }
 
         if lowercased.contains("task") || lowercased.contains("due") || lowercased.contains("todo") {
             return generateTasksResponse(for: lowercased)
@@ -392,9 +399,33 @@ private extension AssistantView {
             return generateNotesResponse(for: lowercased)
         }
 
+        if lowercased.contains("subscription") || lowercased.contains("recurring") || lowercased.contains("netflix") ||
+           lowercased.contains("spotify") || lowercased.contains("monthly service") {
+            return generateSubscriptionsResponse(for: lowercased)
+        }
+
+        if lowercased.contains("calendar") || lowercased.contains("event") || lowercased.contains("schedule") ||
+           lowercased.contains("appointment") || lowercased.contains("meeting") {
+            return generateCalendarResponse(for: lowercased)
+        }
+
+        if lowercased.contains("budget") {
+            return generateBudgetResponse(for: lowercased)
+        }
+
         if lowercased.contains("spend") || lowercased.contains("money") || lowercased.contains("finance") ||
-           lowercased.contains("expense") || lowercased.contains("income") || lowercased.contains("budget") {
+           lowercased.contains("expense") || lowercased.contains("income") {
             return generateFinanceResponse(for: lowercased)
+        }
+
+        if lowercased.contains("stock") || lowercased.contains("portfolio") || lowercased.contains("invest") ||
+           lowercased.contains("shares") || lowercased.contains("ticker") {
+            return generateStocksResponse(for: lowercased)
+        }
+
+        if lowercased.contains("house") || lowercased.contains("utility") || lowercased.contains("electric") ||
+           lowercased.contains("gas bill") || lowercased.contains("water bill") || lowercased.contains("property") {
+            return generateHouseResponse(for: lowercased)
         }
 
         if lowercased.contains("health") || lowercased.contains("sleep") || lowercased.contains("step") ||
@@ -406,17 +437,22 @@ private extension AssistantView {
             return ChatMessage(
                 role: .assistant,
                 content: """
-                I can help you with:
+                I can help you with everything in Nexus:
 
-                📝 **Notes** - Create, summarize, and organize your notes
+                📝 **Notes** - Create and summarize notes
                 ✅ **Tasks** - Create tasks, track deadlines, mark complete
-                💰 **Finance** - Analyze spending, income, and budgets
-                ❤️ **Health** - Log and track your health metrics
+                📅 **Calendar** - View today's events and schedule
+                💰 **Finance** - Analyze spending and budgets
+                🔄 **Subscriptions** - Track recurring payments
+                📈 **Stocks** - View your investment portfolio
+                🏠 **House** - Check utility bills and payments
+                ❤️ **Health** - Log and track health metrics
 
                 **Quick Actions:**
+                • "What's on my calendar today?"
+                • "Show my subscriptions"
+                • "How's my budget doing?"
                 • "Create task Buy groceries tomorrow"
-                • "Add note Meeting notes: ..."
-                • "Complete task Buy groceries"
                 • "Log 8 hours of sleep"
                 """,
                 type: .capabilities
@@ -425,7 +461,7 @@ private extension AssistantView {
 
         return ChatMessage(
             role: .assistant,
-            content: "I'm here to help you manage your personal life! You can ask me about your tasks, notes, spending, or health data. I can also **create tasks and notes** for you - just say \"Create task...\" or \"Add note...\"",
+            content: "I'm Nexus AI - your personal life assistant! I can help with tasks, notes, calendar, finances, subscriptions, stocks, house utilities, and health tracking. Just ask me anything or say \"What can you do?\" for more details.",
             type: .text
         )
     }
@@ -546,6 +582,102 @@ private extension AssistantView {
 
         return ChatMessage(role: .assistant, content: healthSummary, type: .healthSummary)
     }
+
+    func generateSubscriptionsResponse(for input: String) -> ChatMessage {
+        if subscriptions.isEmpty {
+            return ChatMessage(role: .assistant, content: "You haven't added any subscriptions yet. Add your recurring services like Netflix, Spotify, or gym memberships in the Finance tab!", type: .text)
+        }
+
+        let activeSubscriptions = subscriptions.filter { $0.isActive }
+        let monthlyTotal = activeSubscriptions.reduce(0.0) { $0 + $1.monthlyEquivalent }
+
+        let subscriptionList = activeSubscriptions.prefix(5).map { "• \($0.name): \($0.formattedAmount)\($0.billingCycle.shortName)" }.joined(separator: "\n")
+
+        return ChatMessage(
+            role: .assistant,
+            content: "🔄 **Subscriptions Summary**\n\n• **Active:** \(activeSubscriptions.count) subscriptions\n• **Monthly Cost:** ~\(formatCurrency(monthlyTotal))\n\n**Your Subscriptions:**\n\(subscriptionList)\(activeSubscriptions.count > 5 ? "\n...and \(activeSubscriptions.count - 5) more" : "")",
+            type: .stats
+        )
+    }
+
+    func generateCalendarResponse(for input: String) -> ChatMessage {
+        guard calendarService.isAuthorized else {
+            return ChatMessage(role: .assistant, content: "Calendar access is not authorized. Please enable calendar access in the Calendar tab to view your events.", type: .text)
+        }
+
+        return ChatMessage(
+            role: .assistant,
+            content: "📅 To view your calendar events, open the Calendar tab. You can see your schedule in Day, Week, Month, or Agenda view.\n\n**Tip:** Long press on a time slot in Day view to quickly create a new event!",
+            type: .text
+        )
+    }
+
+    func generateBudgetResponse(for input: String) -> ChatMessage {
+        if budgets.isEmpty {
+            return ChatMessage(role: .assistant, content: "You haven't created any budgets yet. Set up budgets in the Finance tab to track your spending by category!", type: .text)
+        }
+
+        let activeBudgets = budgets.filter { $0.isActive }
+        var budgetSummary = "📊 **Budget Overview**\n\n"
+
+        for budget in activeBudgets.prefix(5) {
+            let limit = budget.effectiveBudget
+            let percentage = limit > 0 ? min(100, Int((0 / limit) * 100)) : 0
+            let status = percentage >= 100 ? "🔴" : percentage >= 80 ? "🟡" : "🟢"
+            budgetSummary += "\(status) **\(budget.name):** \(formatCurrency(limit)) budget\n"
+        }
+
+        if activeBudgets.count > 5 {
+            budgetSummary += "\n...and \(activeBudgets.count - 5) more budgets"
+        }
+
+        return ChatMessage(role: .assistant, content: budgetSummary, type: .stats)
+    }
+
+    func generateStocksResponse(for input: String) -> ChatMessage {
+        if stocks.isEmpty {
+            return ChatMessage(role: .assistant, content: "You haven't added any stocks to your portfolio yet. Track your investments by adding stocks in the Finance > Stocks section!", type: .text)
+        }
+
+        let totalCost = stocks.reduce(0.0) { $0 + $1.totalCost }
+
+        let stockList = stocks.prefix(5).map { stock in
+            "📊 **\(stock.symbol):** \(Int(stock.quantity)) shares @ \(formatCurrency(stock.averageCostPerShare))"
+        }.joined(separator: "\n")
+
+        return ChatMessage(
+            role: .assistant,
+            content: "📊 **Portfolio Summary**\n\n💰 **Total Invested:** \(formatCurrency(totalCost))\n📈 **Holdings:** \(stocks.count) stocks\n\n**Your Stocks:**\n\(stockList)\(stocks.count > 5 ? "\n...and \(stocks.count - 5) more" : "")\n\n*Note: Live prices are available in the Stocks section.*",
+            type: .stats
+        )
+    }
+
+    func generateHouseResponse(for input: String) -> ChatMessage {
+        if houses.isEmpty {
+            return ChatMessage(role: .assistant, content: "You haven't added any properties yet. Add your house or apartment in the Finance > House section to track utility bills!", type: .text)
+        }
+
+        var houseSummary = "🏠 **Properties Overview**\n\n"
+
+        for house in houses.prefix(3) {
+            houseSummary += "**\(house.name)**\n"
+            if !house.address.isEmpty {
+                houseSummary += "📍 \(house.address)\n"
+            }
+
+            if let utilities = house.utilities, !utilities.isEmpty {
+                let utilityList = utilities.prefix(3).map { "• \($0.provider)" }.joined(separator: "\n")
+                houseSummary += "\(utilityList)\n"
+            }
+            houseSummary += "\n"
+        }
+
+        if houses.count > 3 {
+            houseSummary += "...and \(houses.count - 3) more properties"
+        }
+
+        return ChatMessage(role: .assistant, content: houseSummary, type: .stats)
+    }
 }
 
 // MARK: - AI Actions
@@ -582,6 +714,53 @@ private extension AssistantView {
             }
         }
         return nil
+    }
+
+    func parseSubscriptionAction(input: String, lowercased: String) -> ChatMessage? {
+        let createPatterns = ["add subscription", "new subscription", "subscribe to", "create subscription"]
+        for pattern in createPatterns {
+            if lowercased.contains(pattern) {
+                let extracted = extractContent(from: input, after: pattern)
+                if !extracted.isEmpty { return createSubscription(from: extracted, input: lowercased) }
+            }
+        }
+        return nil
+    }
+
+    func createSubscription(from content: String, input: String) -> ChatMessage {
+        var name = content
+        var amount: Double = 0
+
+        if let dollarIndex = input.firstIndex(of: "$") {
+            let afterDollar = input[input.index(after: dollarIndex)...]
+            if let value = Double(afterDollar.prefix(while: { $0.isNumber || $0 == "." })) {
+                amount = value
+            }
+        } else if let value = extractNumber(from: input) {
+            amount = value
+        }
+
+        let wordsToRemove = ["for $", " $"]
+        for word in wordsToRemove {
+            if let range = name.lowercased().range(of: word) {
+                name = String(name[..<range.lowerBound])
+            }
+        }
+        name = name.trimmingCharacters(in: .whitespaces)
+
+        let subscription = SubscriptionModel(
+            name: name,
+            amount: amount,
+            billingCycle: .monthly,
+            category: .other
+        )
+        modelContext.insert(subscription)
+
+        return ChatMessage(
+            role: .assistant,
+            content: "🔄 **Subscription Added!**\n\n**\(name)**\n💰 \(amount > 0 ? formatCurrency(amount) + "/month" : "Amount not set")\n\nYou can edit the details in the Subscriptions section.",
+            type: .text
+        )
     }
 
     func extractContent(from input: String, after pattern: String) -> String {
