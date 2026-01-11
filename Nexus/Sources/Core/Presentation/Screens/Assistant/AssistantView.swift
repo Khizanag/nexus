@@ -16,6 +16,7 @@ struct AssistantView: View {
     @Query(sort: \HouseModel.name) private var houses: [HouseModel]
 
     private let calendarService = DefaultCalendarService.shared
+    private let assistantLauncher = AssistantLauncher.shared
 
     @State private var messages: [ChatMessage] = []
     @State private var inputText: String = ""
@@ -27,17 +28,21 @@ struct AssistantView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                if messages.isEmpty {
-                    emptyState
-                } else {
-                    messagesList
+            ZStack {
+                Color.nexusBackground.ignoresSafeArea()
+
+                VStack(spacing: 0) {
+                    if messages.isEmpty {
+                        emptyState
+                    } else {
+                        messagesList
+                    }
+                    inputBar
                 }
-                inputBar
             }
-            .background(Color.nexusBackground)
             .navigationTitle("Nexus AI")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
             .toolbar { toolbarContent }
             .sheet(isPresented: $showCapabilities) {
                 CapabilitiesView()
@@ -55,6 +60,11 @@ struct AssistantView: View {
                 if let error = speechService.errorMessage { Text(error) }
             }
         }
+    }
+
+    private func navigateAndDismiss(to destination: AssistantNavigation) {
+        assistantLauncher.navigate(to: destination)
+        dismiss()
     }
 }
 
@@ -236,12 +246,14 @@ private extension AssistantView {
     var messagesList: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 16) {
+                LazyVStack(spacing: 8) {
+                    Color.clear.frame(height: 8)
+
                     ForEach(messages) { message in
                         MessageBubble(message: message)
                             .id(message.id)
                             .transition(.asymmetric(
-                                insertion: .scale(scale: 0.9).combined(with: .opacity),
+                                insertion: .move(edge: .bottom).combined(with: .opacity),
                                 removal: .opacity
                             ))
                     }
@@ -271,16 +283,21 @@ private extension AssistantView {
 
 private extension AssistantView {
     var inputBar: some View {
-        HStack(spacing: 8) {
-            microphoneButton
-            textField
-            sendButton
+        VStack(spacing: 0) {
+            Divider().background(Color.nexusBorder.opacity(0.5))
+
+            HStack(spacing: 10) {
+                microphoneButton
+                textField
+                sendButton
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 12)
         .background {
             Rectangle()
-                .fill(.ultraThinMaterial)
+                .fill(Color.nexusBackground.opacity(0.95))
+                .background(.ultraThinMaterial)
                 .ignoresSafeArea()
         }
     }
@@ -292,39 +309,46 @@ private extension AssistantView {
             ZStack {
                 Circle()
                     .fill(speechService.isRecording ? Color.nexusRed : Color.nexusSurface)
-                    .frame(width: 44, height: 44)
+                    .frame(width: 40, height: 40)
+                    .overlay {
+                        Circle()
+                            .strokeBorder(Color.nexusBorder.opacity(speechService.isRecording ? 0 : 0.5), lineWidth: 1)
+                    }
 
                 Image(systemName: speechService.isRecording ? "stop.fill" : "mic.fill")
-                    .font(.system(size: 18))
+                    .font(.system(size: 16, weight: .medium))
                     .foregroundStyle(speechService.isRecording ? Color.white : Color.nexusPurple)
-                    .scaleEffect(speechService.isRecording ? 0.8 : 1.0)
+                    .scaleEffect(speechService.isRecording ? 0.85 : 1.0)
             }
             .overlay {
                 if speechService.isRecording {
                     Circle()
-                        .stroke(Color.nexusRed.opacity(0.5), lineWidth: 2)
-                        .scaleEffect(1.2)
+                        .stroke(Color.nexusRed.opacity(0.4), lineWidth: 2)
+                        .scaleEffect(1.15)
                         .opacity(speechService.isRecording ? 1 : 0)
                         .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: speechService.isRecording)
                 }
             }
+            .shadow(color: speechService.isRecording ? Color.nexusRed.opacity(0.3) : .clear, radius: 8)
         }
         .animation(.spring(response: 0.3), value: speechService.isRecording)
     }
 
     var textField: some View {
-        TextField(speechService.isRecording ? "Listening..." : "Ask me anything...", text: $inputText, axis: .vertical)
-            .lineLimit(1...5)
-            .padding(12)
+        TextField(speechService.isRecording ? "Listening..." : "Message...", text: $inputText, axis: .vertical)
+            .font(.system(size: 15))
+            .lineLimit(1...4)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
             .background {
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(Color.nexusSurface)
+                RoundedRectangle(cornerRadius: 22)
+                    .fill(Color.nexusSurface.opacity(0.8))
                     .overlay {
-                        RoundedRectangle(cornerRadius: 20)
+                        RoundedRectangle(cornerRadius: 22)
                             .strokeBorder(
-                                speechService.isRecording ? Color.nexusRed.opacity(0.5) :
-                                isInputFocused ? Color.nexusPurple.opacity(0.5) : Color.nexusBorder,
-                                lineWidth: (isInputFocused || speechService.isRecording) ? 2 : 1
+                                speechService.isRecording ? Color.nexusRed.opacity(0.4) :
+                                isInputFocused ? Color.nexusPurple.opacity(0.4) : Color.nexusBorder.opacity(0.5),
+                                lineWidth: 1
                             )
                     }
             }
@@ -335,17 +359,34 @@ private extension AssistantView {
     var sendButton: some View {
         Button(action: sendMessage) {
             ZStack {
-                Circle()
-                    .fill(inputText.isEmpty ? Color.nexusSurface : Color.nexusPurple)
-                    .frame(width: 44, height: 44)
+                if inputText.isEmpty {
+                    Circle()
+                        .fill(Color.nexusSurface)
+                        .frame(width: 40, height: 40)
+                        .overlay {
+                            Circle()
+                                .strokeBorder(Color.nexusBorder.opacity(0.5), lineWidth: 1)
+                        }
+                } else {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [.nexusPurple, .nexusPurple.opacity(0.8)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 40, height: 40)
+                        .shadow(color: Color.nexusPurple.opacity(0.3), radius: 6)
+                }
 
                 Image(systemName: "arrow.up")
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(inputText.isEmpty ? Color.secondary : Color.white)
             }
         }
         .disabled(inputText.isEmpty || isLoading || speechService.isRecording)
-        .scaleEffect(inputText.isEmpty ? 1 : 1.05)
+        .scaleEffect(inputText.isEmpty ? 1 : 1.08)
         .animation(.spring(response: 0.3), value: inputText.isEmpty)
     }
 }
@@ -384,6 +425,9 @@ private extension AssistantView {
 private extension AssistantView {
     func generateResponse(for input: String) async -> ChatMessage {
         let lowercased = input.lowercased()
+
+        // Check for "open" commands first
+        if let openAction = parseOpenAction(lowercased: lowercased) { return openAction }
 
         if let taskAction = parseTaskAction(input: input, lowercased: lowercased) { return taskAction }
         if let noteAction = parseNoteAction(input: input, lowercased: lowercased) { return noteAction }
@@ -447,6 +491,10 @@ private extension AssistantView {
                 📈 **Stocks** - View your investment portfolio
                 🏠 **House** - Check utility bills and payments
                 ❤️ **Health** - Log and track health metrics
+
+                **Navigation:**
+                • "Open calendar" / "Open tasks" / "Open finance"
+                • "Go to health" / "Show settings"
 
                 **Quick Actions:**
                 • "What's on my calendar today?"
@@ -867,6 +915,77 @@ private extension AssistantView {
                 if !extracted.isEmpty { return createSubscription(from: extracted, input: lowercased) }
             }
         }
+        return nil
+    }
+
+    func parseOpenAction(lowercased: String) -> ChatMessage? {
+        let openPatterns = ["open ", "go to ", "show me ", "take me to ", "navigate to ", "switch to "]
+
+        for pattern in openPatterns {
+            if lowercased.contains(pattern) {
+                // Calendar
+                if lowercased.contains("calendar") || lowercased.contains("schedule") || lowercased.contains("events") {
+                    navigateAndDismiss(to: .calendar)
+                    return ChatMessage(role: .assistant, content: "📅 Opening Calendar...", type: .action(icon: "calendar", label: "Open Calendar"))
+                }
+
+                // Tasks
+                if lowercased.contains("task") || lowercased.contains("todo") || lowercased.contains("to-do") {
+                    navigateAndDismiss(to: .tab(.tasks))
+                    return ChatMessage(role: .assistant, content: "✅ Opening Tasks...", type: .action(icon: "checkmark.circle", label: "Open Tasks"))
+                }
+
+                // Finance
+                if lowercased.contains("finance") || lowercased.contains("money") || lowercased.contains("budget") ||
+                   lowercased.contains("expense") || lowercased.contains("transaction") {
+                    navigateAndDismiss(to: .tab(.finance))
+                    return ChatMessage(role: .assistant, content: "💰 Opening Finance...", type: .action(icon: "creditcard", label: "Open Finance"))
+                }
+
+                // Subscriptions
+                if lowercased.contains("subscription") {
+                    navigateAndDismiss(to: .tab(.finance))
+                    return ChatMessage(role: .assistant, content: "🔄 Opening Subscriptions...", type: .action(icon: "arrow.triangle.2.circlepath", label: "Open Subscriptions"))
+                }
+
+                // Stocks
+                if lowercased.contains("stock") || lowercased.contains("portfolio") || lowercased.contains("investment") {
+                    navigateAndDismiss(to: .tab(.finance))
+                    return ChatMessage(role: .assistant, content: "📈 Opening Stocks...", type: .action(icon: "chart.line.uptrend.xyaxis", label: "Open Stocks"))
+                }
+
+                // Health
+                if lowercased.contains("health") || lowercased.contains("wellness") || lowercased.contains("fitness") {
+                    navigateAndDismiss(to: .tab(.health))
+                    return ChatMessage(role: .assistant, content: "❤️ Opening Health...", type: .action(icon: "heart", label: "Open Health"))
+                }
+
+                // Home
+                if lowercased.contains("home") || lowercased.contains("dashboard") {
+                    navigateAndDismiss(to: .tab(.home))
+                    return ChatMessage(role: .assistant, content: "🏠 Opening Home...", type: .action(icon: "house", label: "Open Home"))
+                }
+
+                // Notes
+                if lowercased.contains("note") {
+                    navigateAndDismiss(to: .tab(.home))
+                    return ChatMessage(role: .assistant, content: "📝 Opening Notes...", type: .action(icon: "doc.text", label: "Open Notes"))
+                }
+
+                // Settings
+                if lowercased.contains("setting") {
+                    navigateAndDismiss(to: .settings)
+                    return ChatMessage(role: .assistant, content: "⚙️ Opening Settings...", type: .action(icon: "gear", label: "Open Settings"))
+                }
+
+                // House/Property
+                if lowercased.contains("house") || lowercased.contains("property") || lowercased.contains("utilit") {
+                    navigateAndDismiss(to: .tab(.finance))
+                    return ChatMessage(role: .assistant, content: "🏠 Opening House...", type: .action(icon: "house", label: "Open House"))
+                }
+            }
+        }
+
         return nil
     }
 

@@ -8,6 +8,8 @@ struct RootView: View {
     @State private var previousTab: Tab = .home
     @State private var showAssistant = false
     @State private var pendingWaterLog = false
+    @State private var showCalendar = false
+    @State private var showSettings = false
 
     private var assistantLauncher = AssistantLauncher.shared
 
@@ -47,11 +49,43 @@ struct RootView: View {
                 handlePendingWidgetAction()
             }
         }
+        .onChange(of: showAssistant) { _, isShowing in
+            if !isShowing {
+                handlePendingNavigation()
+            }
+        }
         .sheet(isPresented: $showAssistant) {
             AssistantView()
         }
         .sheet(isPresented: $pendingWaterLog) {
             QuickWaterLogView()
+        }
+        .sheet(isPresented: $showCalendar) {
+            CalendarView()
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
+        }
+    }
+
+    private func handlePendingNavigation() {
+        guard let navigation = assistantLauncher.consumeNavigation() else { return }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            switch navigation {
+            case .tab(let tab):
+                selectedTab = tab
+            case .calendar, .calendarEvent:
+                showCalendar = true
+            case .note:
+                selectedTab = .home // Notes are in home
+            case .task:
+                selectedTab = .tasks
+            case .subscription, .budget, .stock, .house:
+                selectedTab = .finance
+            case .settings:
+                showSettings = true
+            }
         }
     }
 
