@@ -4,13 +4,19 @@ import SwiftData
 struct TasksView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \TaskModel.createdAt, order: .reverse) private var allTasks: [TaskModel]
+    @Query(sort: \TaskGroupModel.order) private var taskGroups: [TaskGroupModel]
 
     @State private var selectedFilter: TaskFilter = .all
-    @State private var groupingMode: TaskGrouping = .dueDate
+    @State private var groupingMode: TaskGrouping = .project
     @State private var showNewTask = false
     @State private var selectedTask: TaskModel?
-    @State private var completedTaskMessage: String?
-    @State private var recentlyCompletedTaskId: UUID?
+    @State private var toastMessage: String?
+    @State private var toastIsCompletion: Bool = true
+    @State private var recentlyChangedTaskId: UUID?
+    @State private var taskIsLeaving: Bool = false
+    @State private var showGroupEditor = false
+    @State private var editingGroup: TaskGroupModel?
+    @State private var collapsedGroups: Set<UUID> = []
 
     private var filteredTasks: [TaskModel] {
         switch selectedFilter {
@@ -31,18 +37,20 @@ struct TasksView: View {
         }
     }
 
-    private var groupedTasks: [(String, [TaskModel])] {
+    private var groupedTasks: [(String, [TaskModel], TaskGroupModel?)] {
         guard selectedFilter == .all else {
-            return [("", filteredTasks)]
+            return [("", filteredTasks, nil)]
         }
 
         switch groupingMode {
         case .none:
-            return [("", filteredTasks)]
+            return [("", filteredTasks, nil)]
         case .dueDate:
-            return groupByDueDate(filteredTasks)
+            return groupByDueDate(filteredTasks).map { ($0.0, $0.1, nil) }
         case .priority:
-            return groupByPriority(filteredTasks)
+            return groupByPriority(filteredTasks).map { ($0.0, $0.1, nil) }
+        case .project:
+            return groupByProject(filteredTasks)
         }
     }
 
@@ -54,11 +62,13 @@ struct TasksView: View {
 
                     ScrollView {
                         LazyVStack(spacing: 16) {
-                            ForEach(groupedTasks, id: \.0) { group in
-                                if !group.0.isEmpty {
-                                    taskGroupSection(title: group.0, tasks: group.1)
+                            ForEach(groupedTasks, id: \.0) { title, tasks, group in
+                                if let group {
+                                    projectSection(group: group, tasks: tasks)
+                                } else if !title.isEmpty {
+                                    taskGroupSection(title: title, tasks: tasks)
                                 } else {
-                                    ForEach(group.1) { task in
+                                    ForEach(tasks) { task in
                                         taskRowView(task)
                                     }
                                 }
@@ -75,14 +85,17 @@ struct TasksView: View {
                 }
                 .background(Color.nexusBackground)
 
-                // Completion toast
-                if let message = completedTaskMessage {
+                // Status toast - positioned directly above tab bar
+                if let message = toastMessage {
                     VStack {
                         Spacer()
-                        completedToast(message: message)
-                            .padding(.bottom, 100)
+                        statusToast(message: message, isCompletion: toastIsCompletion)
+                            .padding(.bottom, 60)
                     }
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .bottom).combined(with: .opacity),
+                        removal: .opacity.combined(with: .scale(scale: 0.9))
+                    ))
                     .zIndex(100)
                 }
             }
@@ -98,6 +111,26 @@ struct TasksView: View {
                                     }
                                 } label: {
                                     Label(mode.title, systemImage: groupingMode == mode ? "checkmark" : "")
+                                }
+                            }
+                        }
+
+                        Divider()
+
+                        Section("Projects") {
+                            Button {
+                                showGroupEditor = true
+                            } label: {
+                                Label("New Project", systemImage: "plus.circle")
+                            }
+
+                            if !taskGroups.isEmpty {
+                                ForEach(taskGroups) { group in
+                                    Button {
+                                        editingGroup = group
+                                    } label: {
+                                        Label(group.name, systemImage: group.icon)
+                                    }
                                 }
                             }
                         }
@@ -118,6 +151,12 @@ struct TasksView: View {
             }
             .sheet(item: $selectedTask) { task in
                 TaskEditorView(task: task)
+            }
+            .sheet(isPresented: $showGroupEditor) {
+                TaskGroupEditorView(group: nil)
+            }
+            .sheet(item: $editingGroup) { group in
+                TaskGroupEditorView(group: group)
             }
         }
     }
@@ -151,10 +190,98 @@ struct TasksView: View {
     }
 
     @ViewBuilder
+    private func projectSection(group: TaskGroupModel, tasks: [TaskModel]) -> some View {
+        let isCollapsed = collapsedGroups.contains(group.id)
+        let groupColor = Color(hex: group.colorHex) ?? .nexusPurple
+
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                    if isCollapsed {
+                        collapsedGroups.remove(group.id)
+                    } else {
+                        collapsedGroups.insert(group.id)
+                    }
+                }
+            } label: {
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(groupColor.opacity(0.15))
+                            .frame(width: 36, height: 36)
+
+                        Image(systemName: group.icon)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(groupColor)
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(group.name)
+                            .font(.nexusHeadline)
+                            .foregroundStyle(.primary)
+
+                        Text("\(tasks.count) task\(tasks.count == 1 ? "" : "s")")
+                            .font(.nexusCaption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(isCollapsed ? 0 : 90))
+                }
+                .padding(12)
+                .background {
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(Color.nexusSurface)
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 14)
+                                .strokeBorder(groupColor.opacity(0.2), lineWidth: 1)
+                        }
+                }
+            }
+            .buttonStyle(.plain)
+            .contextMenu {
+                Button {
+                    editingGroup = group
+                } label: {
+                    Label("Edit Project", systemImage: "pencil")
+                }
+
+                Button(role: .destructive) {
+                    deleteGroup(group)
+                } label: {
+                    Label("Delete Project", systemImage: "trash")
+                }
+            }
+
+            if !isCollapsed && !tasks.isEmpty {
+                VStack(spacing: 8) {
+                    ForEach(tasks) { task in
+                        taskRowView(task)
+                    }
+                }
+                .padding(.top, 8)
+                .padding(.leading, 4)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+    }
+
+    private func deleteGroup(_ group: TaskGroupModel) {
+        withAnimation(.spring(response: 0.3)) {
+            modelContext.delete(group)
+        }
+    }
+
+    @ViewBuilder
     private func taskRowView(_ task: TaskModel) -> some View {
         TaskRow(
             task: task,
-            isRecentlyCompleted: recentlyCompletedTaskId == task.id,
+            isRecentlyChanged: recentlyChangedTaskId == task.id,
+            isLeaving: taskIsLeaving && recentlyChangedTaskId == task.id,
             onToggle: {
                 toggleTask(task)
             }
@@ -164,19 +291,20 @@ struct TasksView: View {
         }
     }
 
-    private func completedToast(message: String) -> some View {
+    private func statusToast(message: String, isCompletion: Bool) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: "checkmark.circle.fill")
+            Image(systemName: isCompletion ? "checkmark.circle.fill" : "arrow.uturn.backward.circle.fill")
                 .font(.system(size: 20))
-                .foregroundStyle(Color.nexusGreen)
+                .foregroundStyle(isCompletion ? Color.nexusGreen : Color.nexusOrange)
 
             Text(message)
                 .font(.nexusSubheadline)
                 .fontWeight(.medium)
+                .lineLimit(1)
 
             Spacer()
 
-            Text("Moved to Completed")
+            Text(isCompletion ? "Moved to Completed" : "Restored")
                 .font(.nexusCaption)
                 .foregroundStyle(.secondary)
         }
@@ -187,9 +315,12 @@ struct TasksView: View {
                 .fill(.ultraThinMaterial)
                 .overlay {
                     RoundedRectangle(cornerRadius: 16)
-                        .strokeBorder(Color.nexusGreen.opacity(0.3), lineWidth: 1)
+                        .strokeBorder(
+                            (isCompletion ? Color.nexusGreen : Color.nexusOrange).opacity(0.3),
+                            lineWidth: 1
+                        )
                 }
-                .shadow(color: .black.opacity(0.2), radius: 20, x: 0, y: 10)
+                .shadow(color: .black.opacity(0.25), radius: 20, x: 0, y: 8)
         }
         .padding(.horizontal, 20)
     }
@@ -265,43 +396,82 @@ struct TasksView: View {
 
     private func toggleTask(_ task: TaskModel) {
         let wasCompleted = task.isCompleted
+        let taskTitle = task.title
+
+        // Haptic feedback
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+
+        // Mark as recently changed for animation
+        recentlyChangedTaskId = task.id
+        taskIsLeaving = false
 
         if !wasCompleted {
-            // Mark as recently completed for animation
-            recentlyCompletedTaskId = task.id
+            // Completing task
+            toastIsCompletion = true
 
-            // Haptic feedback
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-
-            // Show completion animation for longer
-            withAnimation(.spring(response: 0.6, dampingFraction: 0.7)) {
+            // Show highlight and celebrate
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
                 task.isCompleted = true
                 task.completedAt = .now
                 task.updatedAt = .now
             }
 
-            // Show toast after a delay
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                withAnimation(.spring(response: 0.4)) {
-                    completedTaskMessage = task.title
+            // Start "leaving" animation after celebration
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                    taskIsLeaving = true
                 }
             }
 
-            // Hide toast and remove from list after delay
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+            // Show toast
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 withAnimation(.spring(response: 0.4)) {
-                    completedTaskMessage = nil
-                    recentlyCompletedTaskId = nil
+                    toastMessage = taskTitle
+                }
+            }
+
+            // Hide toast and cleanup after longer delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
+                withAnimation(.spring(response: 0.4)) {
+                    toastMessage = nil
+                    recentlyChangedTaskId = nil
+                    taskIsLeaving = false
                 }
             }
 
             DefaultTaskNotificationService.shared.cancelReminder(for: task)
         } else {
-            // Uncomplete task
-            withAnimation(.spring(response: 0.3)) {
+            // Uncompleting task
+            toastIsCompletion = false
+
+            // Animate restoration
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
                 task.isCompleted = false
                 task.completedAt = nil
                 task.updatedAt = .now
+            }
+
+            // Start "leaving" animation
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                    taskIsLeaving = true
+                }
+            }
+
+            // Show toast
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                withAnimation(.spring(response: 0.4)) {
+                    toastMessage = taskTitle
+                }
+            }
+
+            // Hide toast and cleanup
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                withAnimation(.spring(response: 0.4)) {
+                    toastMessage = nil
+                    recentlyChangedTaskId = nil
+                    taskIsLeaving = false
+                }
             }
 
             if task.reminderDate != nil {
@@ -383,6 +553,26 @@ struct TasksView: View {
 
         return result
     }
+
+    private func groupByProject(_ tasks: [TaskModel]) -> [(String, [TaskModel], TaskGroupModel?)] {
+        var result: [(String, [TaskModel], TaskGroupModel?)] = []
+
+        // Group tasks by their project
+        for group in taskGroups {
+            let groupTasks = tasks.filter { $0.group?.id == group.id }
+            if !groupTasks.isEmpty {
+                result.append((group.name, groupTasks, group))
+            }
+        }
+
+        // Tasks without a project
+        let ungroupedTasks = tasks.filter { $0.group == nil }
+        if !ungroupedTasks.isEmpty {
+            result.append(("Inbox", ungroupedTasks, nil))
+        }
+
+        return result
+    }
 }
 
 // MARK: - Task Filter
@@ -405,15 +595,16 @@ private enum TaskFilter: String, CaseIterable, Identifiable {
 // MARK: - Task Grouping
 
 private enum TaskGrouping: String, CaseIterable, Identifiable {
-    case none, dueDate, priority
+    case project, dueDate, priority, none
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .none: "None"
+        case .project: "Project"
         case .dueDate: "Due Date"
         case .priority: "Priority"
+        case .none: "None"
         }
     }
 }
@@ -465,30 +656,35 @@ private struct FilterChip: View {
 
 private struct TaskRow: View {
     let task: TaskModel
-    let isRecentlyCompleted: Bool
+    let isRecentlyChanged: Bool
+    let isLeaving: Bool
     let onToggle: () -> Void
 
     @State private var checkmarkScale: CGFloat = 1.0
     @State private var showCelebration = false
     @State private var strikethroughProgress: CGFloat = 0
 
+    private var highlightColor: Color {
+        task.isCompleted ? Color.nexusGreen : Color.nexusOrange
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             Button(action: {
                 if !task.isCompleted {
-                    // Animate checkmark
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
-                        checkmarkScale = 1.3
+                    // Animate checkmark bounce
+                    withAnimation(.spring(response: 0.25, dampingFraction: 0.4)) {
+                        checkmarkScale = 1.4
                     }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.5)) {
                             checkmarkScale = 1.0
                         }
                     }
-                    // Show celebration
+                    // Show celebration particles
                     showCelebration = true
-                    // Animate strikethrough
-                    withAnimation(.easeInOut(duration: 0.5).delay(0.2)) {
+                    // Animate strikethrough - make it slower and more visible
+                    withAnimation(.easeInOut(duration: 0.8).delay(0.3)) {
                         strikethroughProgress = 1.0
                     }
                 }
@@ -520,11 +716,14 @@ private struct TaskRow: View {
                     .font(.nexusBody)
                     .foregroundStyle(task.isCompleted ? .secondary : .primary)
                     .overlay(alignment: .leading) {
-                        if task.isCompleted || isRecentlyCompleted {
+                        if task.isCompleted || (isRecentlyChanged && strikethroughProgress > 0) {
                             GeometryReader { geo in
                                 Rectangle()
                                     .fill(Color.secondary)
-                                    .frame(width: geo.size.width * (isRecentlyCompleted ? strikethroughProgress : 1), height: 1.5)
+                                    .frame(
+                                        width: geo.size.width * (isRecentlyChanged ? strikethroughProgress : 1),
+                                        height: 1.5
+                                    )
                                     .offset(y: geo.size.height / 2)
                             }
                         }
@@ -544,6 +743,14 @@ private struct TaskRow: View {
 
             Spacer()
 
+            // Direction indicator when leaving
+            if isLeaving {
+                Image(systemName: task.isCompleted ? "arrow.down.circle.fill" : "arrow.up.circle.fill")
+                    .font(.system(size: 16))
+                    .foregroundStyle(highlightColor.opacity(0.8))
+                    .transition(.scale.combined(with: .opacity))
+            }
+
             if task.priority == .high || task.priority == .urgent {
                 Image(systemName: "flag.fill")
                     .font(.caption)
@@ -558,25 +765,28 @@ private struct TaskRow: View {
         .padding(16)
         .background {
             RoundedRectangle(cornerRadius: 12)
-                .fill(isRecentlyCompleted ? Color.nexusGreen.opacity(0.1) : Color.nexusSurface)
+                .fill(isRecentlyChanged ? highlightColor.opacity(0.12) : Color.nexusSurface)
                 .overlay {
                     RoundedRectangle(cornerRadius: 12)
                         .strokeBorder(
-                            isRecentlyCompleted ? Color.nexusGreen.opacity(0.4) : Color.nexusBorder,
-                            lineWidth: isRecentlyCompleted ? 2 : 1
+                            isRecentlyChanged ? highlightColor.opacity(0.5) : Color.nexusBorder,
+                            lineWidth: isRecentlyChanged ? 2 : 1
                         )
                 }
         }
         .overlay {
-            // Celebration particles
-            if showCelebration {
+            // Celebration particles for completion
+            if showCelebration && task.isCompleted {
                 CelebrationParticles()
                     .allowsHitTesting(false)
             }
         }
-        .scaleEffect(isRecentlyCompleted ? 0.98 : 1.0)
-        .opacity(isRecentlyCompleted ? 0.9 : 1.0)
-        .animation(.spring(response: 0.5), value: isRecentlyCompleted)
+        // Transition effect - scale down and fade when leaving
+        .scaleEffect(isLeaving ? 0.92 : (isRecentlyChanged ? 1.02 : 1.0))
+        .opacity(isLeaving ? 0.6 : 1.0)
+        .offset(y: isLeaving ? (task.isCompleted ? 8 : -8) : 0)
+        .animation(.spring(response: 0.5, dampingFraction: 0.7), value: isRecentlyChanged)
+        .animation(.spring(response: 0.6, dampingFraction: 0.75), value: isLeaving)
         .onChange(of: task.isCompleted) { oldValue, newValue in
             if !newValue {
                 // Reset animation states when uncompleted

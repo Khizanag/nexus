@@ -4,6 +4,7 @@ import SwiftData
 struct TaskEditorView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Query(sort: \TaskGroupModel.order) private var taskGroups: [TaskGroupModel]
 
     let task: TaskModel?
 
@@ -14,6 +15,7 @@ struct TaskEditorView: View {
     @State private var hasDueDate: Bool
     @State private var hasReminder: Bool
     @State private var reminderDate: Date?
+    @State private var selectedGroupId: UUID?
 
     @FocusState private var isTitleFocused: Bool
 
@@ -26,6 +28,7 @@ struct TaskEditorView: View {
         _hasDueDate = State(initialValue: task?.dueDate != nil)
         _hasReminder = State(initialValue: task?.reminderDate != nil)
         _reminderDate = State(initialValue: task?.reminderDate)
+        _selectedGroupId = State(initialValue: task?.group?.id)
     }
 
     var body: some View {
@@ -51,6 +54,24 @@ struct TaskEditorView: View {
                                 Text(priority.rawValue.capitalized)
                             }
                             .tag(priority)
+                        }
+                    }
+                }
+
+                if !taskGroups.isEmpty {
+                    Section {
+                        Picker("Project", selection: $selectedGroupId) {
+                            Text("Inbox")
+                                .tag(nil as UUID?)
+
+                            ForEach(taskGroups) { group in
+                                HStack(spacing: 8) {
+                                    Image(systemName: group.icon)
+                                        .foregroundStyle(Color(hex: group.colorHex) ?? .nexusPurple)
+                                    Text(group.name)
+                                }
+                                .tag(group.id as UUID?)
+                            }
                         }
                     }
                 }
@@ -137,6 +158,7 @@ struct TaskEditorView: View {
     private func saveTask() {
         let finalDueDate = hasDueDate ? dueDate : nil
         let finalReminder = hasReminder ? reminderDate : nil
+        let selectedGroup = taskGroups.first { $0.id == selectedGroupId }
 
         let taskToSchedule: TaskModel
 
@@ -146,6 +168,7 @@ struct TaskEditorView: View {
             existingTask.priority = priority
             existingTask.dueDate = finalDueDate
             existingTask.reminderDate = finalReminder
+            existingTask.group = selectedGroup
             existingTask.updatedAt = .now
             taskToSchedule = existingTask
         } else {
@@ -154,7 +177,8 @@ struct TaskEditorView: View {
                 notes: notes,
                 priority: priority,
                 dueDate: finalDueDate,
-                reminderDate: finalReminder
+                reminderDate: finalReminder,
+                group: selectedGroup
             )
             modelContext.insert(newTask)
             taskToSchedule = newTask

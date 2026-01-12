@@ -20,6 +20,9 @@ final class TaskModel {
     @Relationship(deleteRule: .cascade)
     var subtasks: [SubtaskModel]?
 
+    @Relationship
+    var group: TaskGroupModel?
+
     init(
         id: UUID = UUID(),
         title: String = "",
@@ -32,7 +35,8 @@ final class TaskModel {
         updatedAt: Date = .now,
         reminderDate: Date? = nil,
         tags: [TagModel]? = nil,
-        subtasks: [SubtaskModel]? = nil
+        subtasks: [SubtaskModel]? = nil,
+        group: TaskGroupModel? = nil
     ) {
         self.id = id
         self.title = title
@@ -46,6 +50,7 @@ final class TaskModel {
         self.reminderDate = reminderDate
         self.tags = tags
         self.subtasks = subtasks
+        self.group = group
     }
 }
 
