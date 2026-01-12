@@ -31,6 +31,8 @@ struct AssistantView: View {
     @State private var selectedEventToShow: CalendarEvent?
 
     @State private var speechService = SpeechRecognitionService()
+    @State private var showScrollToBottom = false
+    @State private var scrollProxy: ScrollViewProxy?
     @FocusState private var isInputFocused: Bool
 
     var body: some View {
@@ -46,6 +48,20 @@ struct AssistantView: View {
                         messagesList
                     }
                     inputBar
+                }
+
+                // Scroll to bottom button
+                if showScrollToBottom && !messages.isEmpty {
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Spacer()
+                            scrollToBottomButton
+                                .padding(.trailing, 16)
+                                .padding(.bottom, 90)
+                        }
+                    }
+                    .transition(.scale.combined(with: .opacity))
                 }
             }
             .navigationTitle("Nexus AI")
@@ -296,9 +312,25 @@ private extension AssistantView {
                         .padding(.horizontal, 20)
                         .transition(.scale(scale: 0.8).combined(with: .opacity))
                     }
+
+                    // Bottom anchor for scroll detection
+                    Color.clear
+                        .frame(height: 1)
+                        .id("bottom")
+                        .onAppear { showScrollToBottom = false }
+                        .onDisappear { showScrollToBottom = true }
                 }
                 .padding(.vertical, 16)
                 .animation(.spring(response: 0.4), value: messages.count)
+            }
+            .onAppear {
+                scrollProxy = proxy
+                // Auto-scroll to bottom on appear
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    if let lastMessage = messages.last {
+                        proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                    }
+                }
             }
             .onChange(of: messages.count) {
                 withAnimation(.spring(response: 0.3)) {
@@ -306,6 +338,43 @@ private extension AssistantView {
                 }
             }
         }
+    }
+
+    var scrollToBottomButton: some View {
+        Button {
+            withAnimation(.spring(response: 0.3)) {
+                scrollProxy?.scrollTo("bottom", anchor: .bottom)
+            }
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(.ultraThinMaterial)
+                    .frame(width: 44, height: 44)
+                    .overlay {
+                        Circle()
+                            .strokeBorder(
+                                LinearGradient(
+                                    colors: [.white.opacity(0.3), .white.opacity(0.1)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1
+                            )
+                    }
+                    .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 5)
+
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.nexusPurple, .nexusBlue],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
+        }
+        .buttonStyle(ScaleButtonStyle())
     }
 }
 
