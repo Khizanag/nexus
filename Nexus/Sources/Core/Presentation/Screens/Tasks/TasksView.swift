@@ -65,6 +65,8 @@ struct TasksView: View {
                             ForEach(groupedTasks, id: \.0) { title, tasks, group in
                                 if let group {
                                     projectSection(group: group, tasks: tasks)
+                                } else if title == "Inbox" && groupingMode == .project {
+                                    inboxSection(tasks: tasks)
                                 } else if !title.isEmpty {
                                     taskGroupSection(title: title, tasks: tasks)
                                 } else {
@@ -273,6 +275,74 @@ struct TasksView: View {
     private func deleteGroup(_ group: TaskGroupModel) {
         withAnimation(.spring(response: 0.3)) {
             modelContext.delete(group)
+        }
+    }
+
+    @ViewBuilder
+    private func inboxSection(tasks: [TaskModel]) -> some View {
+        let isCollapsed = collapsedGroups.contains(UUID(uuidString: "00000000-0000-0000-0000-000000000000")!)
+
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                    let inboxId = UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
+                    if isCollapsed {
+                        collapsedGroups.remove(inboxId)
+                    } else {
+                        collapsedGroups.insert(inboxId)
+                    }
+                }
+            } label: {
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.nexusBlue.opacity(0.15))
+                            .frame(width: 36, height: 36)
+
+                        Image(systemName: "tray.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(Color.nexusBlue)
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Inbox")
+                            .font(.nexusHeadline)
+                            .foregroundStyle(.primary)
+
+                        Text("\(tasks.count) task\(tasks.count == 1 ? "" : "s")")
+                            .font(.nexusCaption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(isCollapsed ? 0 : 90))
+                }
+                .padding(12)
+                .background {
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(Color.nexusSurface)
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 14)
+                                .strokeBorder(Color.nexusBlue.opacity(0.2), lineWidth: 1)
+                        }
+                }
+            }
+            .buttonStyle(.plain)
+
+            if !isCollapsed && !tasks.isEmpty {
+                VStack(spacing: 8) {
+                    ForEach(tasks) { task in
+                        taskRowView(task)
+                    }
+                }
+                .padding(.top, 8)
+                .padding(.leading, 4)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
         }
     }
 

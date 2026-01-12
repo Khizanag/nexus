@@ -60,39 +60,53 @@ struct TaskEditorView: View {
                 }
 
                 Section {
-                    if taskGroups.isEmpty {
-                        Button {
-                            showNewProject = true
-                        } label: {
-                            HStack {
-                                Image(systemName: "folder.badge.plus")
-                                    .foregroundStyle(Color.nexusPurple)
-                                Text("Create Project")
-                                    .foregroundStyle(.primary)
+                    HStack {
+                        Text("Project")
+                        Spacer()
+                        Menu {
+                            Button {
+                                selectedGroupId = nil
+                            } label: {
+                                Label("Inbox", systemImage: selectedGroupId == nil ? "checkmark" : "tray.fill")
                             }
-                        }
-                    } else {
-                        Picker("Project", selection: $selectedGroupId) {
-                            Text("Inbox")
-                                .tag(nil as UUID?)
 
                             ForEach(taskGroups) { group in
-                                HStack(spacing: 8) {
+                                Button {
+                                    selectedGroupId = group.id
+                                } label: {
+                                    Label(
+                                        group.name,
+                                        systemImage: selectedGroupId == group.id ? "checkmark" : group.icon
+                                    )
+                                }
+                            }
+
+                            Divider()
+
+                            Button {
+                                showNewProject = true
+                            } label: {
+                                Label("New Project", systemImage: "plus.circle")
+                            }
+                        } label: {
+                            HStack(spacing: 6) {
+                                if let groupId = selectedGroupId,
+                                   let group = taskGroups.first(where: { $0.id == groupId }) {
                                     Image(systemName: group.icon)
+                                        .font(.system(size: 14))
                                         .foregroundStyle(Color(hex: group.colorHex) ?? Color.nexusPurple)
                                     Text(group.name)
+                                        .foregroundStyle(.primary)
+                                } else {
+                                    Image(systemName: "tray.fill")
+                                        .font(.system(size: 14))
+                                        .foregroundStyle(Color.nexusBlue)
+                                    Text("Inbox")
+                                        .foregroundStyle(.primary)
                                 }
-                                .tag(group.id as UUID?)
-                            }
-                        }
-
-                        Button {
-                            showNewProject = true
-                        } label: {
-                            HStack {
-                                Image(systemName: "plus.circle.fill")
-                                    .foregroundStyle(Color.nexusPurple)
-                                Text("New Project")
+                                Image(systemName: "chevron.up.chevron.down")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.secondary)
                             }
                         }
                     }
