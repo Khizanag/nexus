@@ -16,6 +16,7 @@ struct TaskEditorView: View {
     @State private var hasReminder: Bool
     @State private var reminderDate: Date?
     @State private var selectedGroupId: UUID?
+    @State private var showNewProject = false
 
     @FocusState private var isTitleFocused: Bool
 
@@ -58,8 +59,19 @@ struct TaskEditorView: View {
                     }
                 }
 
-                if !taskGroups.isEmpty {
-                    Section {
+                Section {
+                    if taskGroups.isEmpty {
+                        Button {
+                            showNewProject = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "folder.badge.plus")
+                                    .foregroundStyle(Color.nexusPurple)
+                                Text("Create Project")
+                                    .foregroundStyle(.primary)
+                            }
+                        }
+                    } else {
                         Picker("Project", selection: $selectedGroupId) {
                             Text("Inbox")
                                 .tag(nil as UUID?)
@@ -67,10 +79,20 @@ struct TaskEditorView: View {
                             ForEach(taskGroups) { group in
                                 HStack(spacing: 8) {
                                     Image(systemName: group.icon)
-                                        .foregroundStyle(Color(hex: group.colorHex) ?? .nexusPurple)
+                                        .foregroundStyle(Color(hex: group.colorHex) ?? Color.nexusPurple)
                                     Text(group.name)
                                 }
                                 .tag(group.id as UUID?)
+                            }
+                        }
+
+                        Button {
+                            showNewProject = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "plus.circle.fill")
+                                    .foregroundStyle(Color.nexusPurple)
+                                Text("New Project")
                             }
                         }
                     }
@@ -142,6 +164,9 @@ struct TaskEditorView: View {
                 if task == nil {
                     isTitleFocused = true
                 }
+            }
+            .sheet(isPresented: $showNewProject) {
+                TaskGroupEditorView(group: nil)
             }
         }
     }
