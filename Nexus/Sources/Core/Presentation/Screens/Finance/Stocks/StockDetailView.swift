@@ -367,7 +367,7 @@ struct StockDetailView: View {
                 }
             }
 
-            if !isInWatchlist && !isInPortfolio {
+            if !isInWatchlist, !isInPortfolio {
                 HStack(spacing: 12) {
                     Button {
                         addToWatchlist()
@@ -482,7 +482,7 @@ struct StockDetailView: View {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
         formatter.currencyCode = "USD"
-        if showSign && amount > 0 {
+        if showSign, amount > 0 {
             return "+\(formatter.string(from: NSNumber(value: amount)) ?? "$0.00")"
         }
         return formatter.string(from: NSNumber(value: amount)) ?? "$0.00"
@@ -594,7 +594,7 @@ struct AddTransactionSheet: View {
     private var isValid: Bool {
         guard let qty = Double(quantity), let price = Double(pricePerShare),
               qty > 0, price > 0 else { return false }
-        if transactionType == .sell && qty > holding.quantity { return false }
+        if transactionType == .sell, qty > holding.quantity { return false }
         return true
     }
 

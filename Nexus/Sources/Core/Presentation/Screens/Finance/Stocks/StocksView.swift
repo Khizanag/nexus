@@ -60,7 +60,7 @@ struct StocksView: View {
                 .padding(.horizontal, 20)
                 .padding(.vertical, 12)
 
-                if isLoading && quotes.isEmpty {
+                if isLoading, quotes.isEmpty {
                     loadingView
                 } else {
                     TabView(selection: $selectedTab) {
@@ -313,7 +313,7 @@ struct StocksView: View {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
         formatter.currencyCode = "USD"
-        if showSign && amount > 0 {
+        if showSign, amount > 0 {
             return "+\(formatter.string(from: NSNumber(value: amount)) ?? "$0.00")"
         }
         return formatter.string(from: NSNumber(value: amount)) ?? "$0.00"
