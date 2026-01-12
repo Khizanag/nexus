@@ -4,22 +4,23 @@ import AVFoundation
 import Observation
 
 @Observable
-@MainActor
-final class SpeechRecognitionService {
-    var transcribedText: String = ""
-    var isRecording: Bool = false
-    var errorMessage: String?
+final class SpeechRecognitionService: @unchecked Sendable {
+    @MainActor var transcribedText: String = ""
+    @MainActor var isRecording: Bool = false
+    @MainActor var errorMessage: String?
 
+    // Audio resources - accessed from audio thread
     private var audioEngine: AVAudioEngine?
     private var speechRecognizer: SFSpeechRecognizer?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
-    private var silenceTimer: Timer?
+    @MainActor private var silenceTimer: Timer?
 
-    init() {
+    nonisolated init() {
         speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
     }
 
+    @MainActor
     func toggleRecording() {
         if isRecording {
             stopRecording()
@@ -30,6 +31,7 @@ final class SpeechRecognitionService {
         }
     }
 
+    @MainActor
     func startRecording() async {
         #if targetEnvironment(simulator)
         errorMessage = "Voice input requires a physical device"
@@ -63,23 +65,24 @@ final class SpeechRecognitionService {
         }
 
         // Start the actual recording
-        await beginRecordingSession()
+        beginRecordingSession()
         #endif
     }
 
-    private func beginRecordingSession() async {
+    @MainActor
+    private func beginRecordingSession() {
         guard let speechRecognizer, speechRecognizer.isAvailable else {
             errorMessage = "Speech recognition not available on this device"
             return
         }
 
         // Clean up any previous session
-        cleanupAudioSession()
+        cleanupResources()
 
         do {
             // Configure audio session
             let audioSession = AVAudioSession.sharedInstance()
-            try audioSession.setCategory(.playAndRecord, mode: .measurement, options: [.defaultToSpeaker, .allowBluetoothA2DP])
+            try audioSession.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
             try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
 
             // Create audio engine
@@ -99,10 +102,14 @@ final class SpeechRecognitionService {
             // Create recognition request
             let request = SFSpeechAudioBufferRecognitionRequest()
             request.shouldReportPartialResults = true
-            request.requiresOnDeviceRecognition = false
 
-            // Install audio tap
+            // Store request before installing tap
+            self.recognitionRequest = request
+            self.audioEngine = engine
+
+            // Install audio tap - this callback runs on audio thread
             inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
+                // Directly append - recognitionRequest is thread-safe for append
                 self?.recognitionRequest?.append(buffer)
             }
 
@@ -110,13 +117,9 @@ final class SpeechRecognitionService {
             engine.prepare()
             try engine.start()
 
-            // Store references
-            self.audioEngine = engine
-            self.recognitionRequest = request
-
             // Start recognition task
             self.recognitionTask = speechRecognizer.recognitionTask(with: request) { [weak self] result, error in
-                Task { @MainActor in
+                Task { @MainActor [weak self] in
                     self?.handleRecognitionResult(result: result, error: error)
                 }
             }
@@ -126,15 +129,16 @@ final class SpeechRecognitionService {
             errorMessage = nil
             transcribedText = ""
 
-            // Start silence timer - auto-stop after 30 seconds of no new input
+            // Start silence timer - auto-stop after 30 seconds
             startSilenceTimer()
 
         } catch {
-            errorMessage = "Failed to start recording: \(error.localizedDescription)"
-            cleanupAudioSession()
+            errorMessage = "Failed to start: \(error.localizedDescription)"
+            cleanupResources()
         }
     }
 
+    @MainActor
     private func handleRecognitionResult(result: SFSpeechRecognitionResult?, error: Error?) {
         // Reset silence timer on new results
         if result != nil {
@@ -144,46 +148,45 @@ final class SpeechRecognitionService {
         if let result {
             transcribedText = result.bestTranscription.formattedString
 
-            // Auto-stop after final result
             if result.isFinal {
                 stopRecording()
             }
         }
 
         if let error {
-            // Ignore cancellation errors (they happen on normal stop)
             let nsError = error as NSError
-            if nsError.domain != "kAFAssistantErrorDomain" || nsError.code != 216 {
-                // Only show error if it's not a cancellation
-                if isRecording {
-                    errorMessage = "Recognition error: \(error.localizedDescription)"
-                }
+            // Ignore cancellation errors (code 216 or 1110)
+            let isCancellation = (nsError.code == 216 || nsError.code == 1110)
+            if !isCancellation && isRecording {
+                errorMessage = "Error: \(error.localizedDescription)"
             }
             stopRecording()
         }
     }
 
+    @MainActor
     private func startSilenceTimer() {
         silenceTimer?.invalidate()
         silenceTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: false) { [weak self] _ in
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 self?.stopRecording()
             }
         }
     }
 
+    @MainActor
     func stopRecording() {
         guard isRecording else { return }
-
         isRecording = false
+
         silenceTimer?.invalidate()
         silenceTimer = nil
 
-        cleanupAudioSession()
+        cleanupResources()
     }
 
-    private func cleanupAudioSession() {
-        // Stop recognition task first
+    private func cleanupResources() {
+        // Cancel recognition task
         recognitionTask?.cancel()
         recognitionTask = nil
 
@@ -191,19 +194,16 @@ final class SpeechRecognitionService {
         recognitionRequest?.endAudio()
         recognitionRequest = nil
 
-        // Stop and cleanup audio engine
+        // Stop audio engine
         if let engine = audioEngine {
-            engine.stop()
+            if engine.isRunning {
+                engine.stop()
+            }
             engine.inputNode.removeTap(onBus: 0)
         }
         audioEngine = nil
 
         // Deactivate audio session
-        do {
-            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        } catch {
-            // Ignore deactivation errors
-        }
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
-
 }
