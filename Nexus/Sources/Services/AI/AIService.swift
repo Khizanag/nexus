@@ -39,7 +39,7 @@ final class DefaultAIService: AIService {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
         request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
-
+        
         let body: [String: Any] = [
             "model": "claude-sonnet-4-20250514",
             "max_tokens": 1024,

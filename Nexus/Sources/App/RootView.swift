@@ -4,14 +4,18 @@ import SwiftData
 struct RootView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
+    @Query(sort: \TaskModel.createdAt, order: .reverse) private var allTasks: [TaskModel]
+
     @State private var selectedTab: Tab = .home
     @State private var previousTab: Tab = .home
     @State private var showAssistant = false
     @State private var pendingWaterLog = false
     @State private var showCalendar = false
     @State private var showSettings = false
+    @State private var taskToShow: TaskModel?
 
     private var assistantLauncher = AssistantLauncher.shared
+    private var taskLauncher = TaskLauncher.shared
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -47,11 +51,17 @@ struct RootView: View {
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
                 handlePendingWidgetAction()
+                handlePendingTaskAction()
             }
         }
         .onChange(of: showAssistant) { _, isShowing in
             if !isShowing {
                 handlePendingNavigation()
+            }
+        }
+        .onChange(of: taskLauncher.pendingTaskId) { _, newTaskId in
+            if newTaskId != nil {
+                handlePendingTaskAction()
             }
         }
         .sheet(isPresented: $showAssistant) {
@@ -65,6 +75,9 @@ struct RootView: View {
         }
         .sheet(isPresented: $showSettings) {
             SettingsView()
+        }
+        .sheet(item: $taskToShow) { task in
+            TaskEditorView(task: task)
         }
     }
 
@@ -98,6 +111,32 @@ struct RootView: View {
                 showAssistant = true
             case .logWater:
                 pendingWaterLog = true
+            }
+        }
+    }
+
+    private func handlePendingTaskAction() {
+        guard let (taskId, shouldMarkComplete) = taskLauncher.consumePendingTask() else { return }
+
+        // Find the task
+        guard let task = allTasks.first(where: { $0.id == taskId }) else { return }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            if shouldMarkComplete {
+                // Mark task as complete
+                withAnimation(.spring(response: 0.5)) {
+                    task.isCompleted = true
+                    task.completedAt = .now
+                    task.updatedAt = .now
+                }
+                DefaultTaskNotificationService.shared.cancelReminder(for: task)
+
+                // Also navigate to tasks and show a brief feedback
+                selectedTab = .tasks
+            } else {
+                // Just open the task
+                selectedTab = .tasks
+                taskToShow = task
             }
         }
     }
