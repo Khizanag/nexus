@@ -143,7 +143,7 @@ enum BudgetStatus {
         case .onTrack: "checkmark.circle.fill"
         case .warning: "exclamationmark.triangle.fill"
         case .exceeded: "xmark.circle.fill"
-        case .completed: "flag.checkered"
+        case .completed: "checkmark.seal.fill"
         }
     }
 

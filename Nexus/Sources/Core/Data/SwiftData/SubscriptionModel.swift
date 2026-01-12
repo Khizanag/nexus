@@ -261,9 +261,9 @@ enum SubscriptionCategory: String, Codable, CaseIterable, Identifiable {
 
     var icon: String {
         switch self {
-        case .streaming: "play.tv.fill"
+        case .streaming: "play.rectangle.fill"
         case .music: "music.note"
-        case .software: "app.fill"
+        case .software: "app.badge.fill"
         case .gaming: "gamecontroller.fill"
         case .fitness: "figure.run"
         case .news: "newspaper.fill"
@@ -346,10 +346,10 @@ struct PopularSubscription: Identifiable {
 
     static let all: [PopularSubscription] = [
         // Streaming
-        PopularSubscription(name: "Netflix", icon: "play.tv.fill", color: "red", category: .streaming, defaultAmount: 44.99, defaultCurrency: "GEL", defaultCycle: .monthly, url: "https://netflix.com/account"),
+        PopularSubscription(name: "Netflix", icon: "play.rectangle.fill", color: "red", category: .streaming, defaultAmount: 44.99, defaultCurrency: "GEL", defaultCycle: .monthly, url: "https://netflix.com/account"),
         PopularSubscription(name: "YouTube Premium", icon: "play.rectangle.fill", color: "red", category: .streaming, defaultAmount: 22.99, defaultCurrency: "GEL", defaultCycle: .monthly, url: "https://youtube.com/paid_memberships"),
         PopularSubscription(name: "Disney+", icon: "sparkles.tv.fill", color: "blue", category: .streaming, defaultAmount: 29.99, defaultCurrency: "GEL", defaultCycle: .monthly, url: "https://disneyplus.com/account"),
-        PopularSubscription(name: "HBO Max", icon: "play.tv.fill", color: "purple", category: .streaming, defaultAmount: 39.99, defaultCurrency: "GEL", defaultCycle: .monthly, url: nil),
+        PopularSubscription(name: "HBO Max", icon: "play.rectangle.fill", color: "purple", category: .streaming, defaultAmount: 39.99, defaultCurrency: "GEL", defaultCycle: .monthly, url: nil),
 
         // Music
         PopularSubscription(name: "Spotify", icon: "music.note", color: "green", category: .music, defaultAmount: 14.99, defaultCurrency: "GEL", defaultCycle: .monthly, url: "https://spotify.com/account"),
@@ -360,8 +360,8 @@ struct PopularSubscription: Identifiable {
         PopularSubscription(name: "iCloud+", icon: "cloud.fill", color: "blue", category: .cloud, defaultAmount: 2.99, defaultCurrency: "GEL", defaultCycle: .monthly, url: nil),
         PopularSubscription(name: "Google One", icon: "cloud.fill", color: "blue", category: .cloud, defaultAmount: 5.99, defaultCurrency: "GEL", defaultCycle: .monthly, url: "https://one.google.com"),
         PopularSubscription(name: "Dropbox", icon: "cloud.fill", color: "blue", category: .cloud, defaultAmount: 11.99, defaultCurrency: "USD", defaultCycle: .monthly, url: nil),
-        PopularSubscription(name: "Microsoft 365", icon: "app.fill", color: "orange", category: .software, defaultAmount: 6.99, defaultCurrency: "USD", defaultCycle: .monthly, url: nil),
-        PopularSubscription(name: "Adobe Creative Cloud", icon: "app.fill", color: "red", category: .software, defaultAmount: 54.99, defaultCurrency: "USD", defaultCycle: .monthly, url: nil),
+        PopularSubscription(name: "Microsoft 365", icon: "app.badge.fill", color: "orange", category: .software, defaultAmount: 6.99, defaultCurrency: "USD", defaultCycle: .monthly, url: nil),
+        PopularSubscription(name: "Adobe Creative Cloud", icon: "app.badge.fill", color: "red", category: .software, defaultAmount: 54.99, defaultCurrency: "USD", defaultCycle: .monthly, url: nil),
         PopularSubscription(name: "Notion", icon: "doc.fill", color: "gray", category: .software, defaultAmount: 8.00, defaultCurrency: "USD", defaultCycle: .monthly, url: nil),
         PopularSubscription(name: "1Password", icon: "lock.fill", color: "blue", category: .software, defaultAmount: 2.99, defaultCurrency: "USD", defaultCycle: .monthly, url: nil),
         PopularSubscription(name: "Claude Pro", icon: "brain", color: "orange", category: .software, defaultAmount: 20.00, defaultCurrency: "USD", defaultCycle: .monthly, url: "https://claude.ai"),

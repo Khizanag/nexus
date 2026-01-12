@@ -57,14 +57,14 @@ enum HealthMetricType: String, Codable, CaseIterable {
 
     var icon: String {
         switch self {
-        case .weight: "scalemass.fill"
+        case .weight: "scalemass"
         case .waterIntake: "drop.fill"
         case .sleep: "moon.fill"
         case .steps: "figure.walk"
         case .calories: "flame.fill"
         case .heartRate: "heart.fill"
         case .bloodPressure: "waveform.path.ecg"
-        case .mood: "face.smiling"
+        case .mood: "face.smiling.fill"
         case .energy: "bolt.fill"
         }
     }
