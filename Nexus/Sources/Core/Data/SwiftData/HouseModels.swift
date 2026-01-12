@@ -248,7 +248,7 @@ enum UtilityType: String, Codable, CaseIterable, Identifiable {
         case .tv: "tv.fill"
         case .phone: "phone.fill"
         case .cleaning: "trash.fill"
-        case .security: "lock.shield.fill"
+        case .security: "shield.fill"
         case .parking: "car.fill"
         case .other: "wrench.fill"
         }

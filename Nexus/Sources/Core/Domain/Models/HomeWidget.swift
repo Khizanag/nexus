@@ -40,7 +40,7 @@ enum HomeWidget: String, CaseIterable, Identifiable, Codable {
         case .recentTransactions: "creditcard.fill"
         case .house: "house.fill"
         case .upcomingBills: "calendar.badge.clock"
-        case .currencyConverter: "coloncurrencysign.circle.fill"
+        case .currencyConverter: "dollarsign.circle.fill"
         }
     }
 
