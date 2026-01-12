@@ -14,12 +14,41 @@ struct TaskGroupEditorView: View {
 
     private var isEditing: Bool { group != nil }
 
+    private var trimmedName: String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var isDuplicateName: Bool {
+        let lowercasedName = trimmedName.lowercased()
+        return existingGroups.contains { existingGroup in
+            // Skip the current group when editing
+            if let group, existingGroup.id == group.id {
+                return false
+            }
+            return existingGroup.name.lowercased() == lowercasedName
+        }
+    }
+
+    private var canSave: Bool {
+        !trimmedName.isEmpty && !isDuplicateName
+    }
+
     var body: some View {
         NavigationStack {
             Form {
                 Section {
                     TextField("Project Name", text: $name)
                         .font(.nexusBody)
+
+                    if isDuplicateName, !trimmedName.isEmpty {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.circle.fill")
+                                .font(.caption)
+                            Text("A project with this name already exists")
+                                .font(.nexusCaption)
+                        }
+                        .foregroundStyle(.red)
+                    }
                 } header: {
                     Text("Name")
                 }
@@ -98,7 +127,7 @@ struct TaskGroupEditorView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { save() }
-                        .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .disabled(!canSave)
                 }
             }
             .onAppear {
@@ -170,8 +199,7 @@ struct TaskGroupEditorView: View {
     }
 
     private func save() {
-        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty else { return }
+        guard canSave else { return }
 
         if let group {
             group.name = trimmedName
