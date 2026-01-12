@@ -101,7 +101,7 @@ private struct AgendaSectionHeader: View {
         }
 
         let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: Date()), to: date).day ?? 0
-        if days > 0 && days <= 7 {
+        if days > 0, days <= 7 {
             return "In \(days) days"
         }
         return nil

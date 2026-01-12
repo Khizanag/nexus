@@ -34,7 +34,7 @@ final class DefaultSubscriptionNotificationService: SubscriptionNotificationServ
     }
 
     func scheduleReminder(for subscription: SubscriptionModel) async {
-        guard subscription.isActive && !subscription.isPaused else { return }
+        guard subscription.isActive, !subscription.isPaused else { return }
 
         let reminderDate = Calendar.current.date(
             byAdding: .day,
