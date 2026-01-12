@@ -25,7 +25,7 @@ enum Tab: String, CaseIterable, Identifiable {
         case .tasks: "checkmark.circle.fill"
         case .assistant: "sparkles"
         case .health: "heart.fill"
-        case .finance: "creditcard.fill"
+        case .finance: "chart.pie.fill"
         }
     }
 
