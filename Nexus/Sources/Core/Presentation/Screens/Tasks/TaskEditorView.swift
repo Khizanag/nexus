@@ -20,6 +20,8 @@ struct TaskEditorView: View {
 
     @FocusState private var isTitleFocused: Bool
 
+    private static let lastUsedProjectKey = "lastUsedProjectId"
+
     init(task: TaskModel?) {
         self.task = task
         _title = State(initialValue: task?.title ?? "")
@@ -29,7 +31,23 @@ struct TaskEditorView: View {
         _hasDueDate = State(initialValue: task?.dueDate != nil)
         _hasReminder = State(initialValue: task?.reminderDate != nil)
         _reminderDate = State(initialValue: task?.reminderDate)
-        _selectedGroupId = State(initialValue: task?.group?.id)
+        _selectedGroupId = State(initialValue: task?.group?.id ?? Self.lastUsedProjectId)
+    }
+
+    private static var lastUsedProjectId: UUID? {
+        get {
+            guard let uuidString = UserDefaults.standard.string(forKey: lastUsedProjectKey) else {
+                return nil
+            }
+            return UUID(uuidString: uuidString)
+        }
+        set {
+            if let uuid = newValue {
+                UserDefaults.standard.set(uuid.uuidString, forKey: lastUsedProjectKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: lastUsedProjectKey)
+            }
+        }
     }
 
     var body: some View {
@@ -198,6 +216,9 @@ struct TaskEditorView: View {
         let finalDueDate = hasDueDate ? dueDate : nil
         let finalReminder = hasReminder ? reminderDate : nil
         let selectedGroup = taskGroups.first { $0.id == selectedGroupId }
+
+        // Cache the selected project for next task creation
+        Self.lastUsedProjectId = selectedGroupId
 
         let taskToSchedule: TaskModel
 
