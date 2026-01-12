@@ -44,7 +44,10 @@ final class DefaultAIService: AIService {
             "model": "claude-sonnet-4-20250514",
             "max_tokens": 1024,
             "messages": [
-                ["role": "user", "content": message]
+                [
+                    "role": "user",
+                    "content": message,
+                ]
             ],
             "system": "You are Nexus AI, a personal life assistant. Help users manage their notes, tasks, finances, and health. Be concise and helpful."
         ]
