@@ -11,6 +11,9 @@ struct HomeView: View {
     @Query(filter: #Predicate<TaskModel> { !$0.isCompleted }, sort: \TaskModel.dueDate)
     private var upcomingTasks: [TaskModel]
 
+    @Query(filter: #Predicate<TaskModel> { $0.isCompleted }, sort: \TaskModel.completedAt, order: .reverse)
+    private var completedTasks: [TaskModel]
+
     @State private var greeting: String = ""
     @State private var showSettings = false
     @State private var showNewNote = false
@@ -34,17 +37,30 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: 0) {
                     headerSection
+                        .padding(.bottom, 24)
+
                     if !widgetManager.selectedWidgets.isEmpty {
+                        SectionDivider()
                         widgetsSection
+                            .padding(.vertical, 20)
                     }
+
+                    SectionDivider()
                     quickActionsSection
+                        .padding(.vertical, 20)
+
+                    SectionDivider()
                     insightsSection
+                        .padding(.vertical, 20)
+
+                    SectionDivider()
                     recentActivitySection
+                        .padding(.vertical, 20)
                 }
                 .padding(.horizontal, 20)
-                .padding(.bottom, 120)
+                .padding(.bottom, 80)
             }
             .background(Color.nexusBackground)
             .navigationBarTitleDisplayMode(.inline)
@@ -267,9 +283,9 @@ struct HomeView: View {
                         .frame(height: 40)
 
                     InsightItem(
-                        title: "Streak",
-                        value: "\(calculateStreak())",
-                        subtitle: "days",
+                        title: "Done Today",
+                        value: "\(tasksCompletedToday)",
+                        subtitle: tasksCompletedToday == 1 ? "task" : "tasks",
                         color: .nexusGreen
                     )
                 }
@@ -290,7 +306,7 @@ struct HomeView: View {
                 Spacer()
             }
 
-            if recentNotes.isEmpty && upcomingTasks.isEmpty {
+            if recentNotes.isEmpty, upcomingTasks.isEmpty {
                 emptyStateView
             } else {
                 VStack(spacing: 8) {
@@ -368,30 +384,12 @@ struct HomeView: View {
         }
     }
 
-    private func calculateStreak() -> Int {
+    private var tasksCompletedToday: Int {
         let calendar = Calendar.current
-        var streak = 0
-        var currentDate = calendar.startOfDay(for: Date())
-
-        while true {
-            let hasActivity = recentNotes.contains { note in
-                calendar.isDate(note.updatedAt, inSameDayAs: currentDate)
-            } || upcomingTasks.contains { task in
-                if let completedAt = task.completedAt {
-                    return calendar.isDate(completedAt, inSameDayAs: currentDate)
-                }
-                return false
-            }
-
-            if hasActivity {
-                streak += 1
-                currentDate = calendar.date(byAdding: .day, value: -1, to: currentDate)!
-            } else {
-                break
-            }
-        }
-
-        return streak
+        return completedTasks.filter { task in
+            guard let completedAt = task.completedAt else { return false }
+            return calendar.isDateInToday(completedAt)
+        }.count
     }
 }
 
