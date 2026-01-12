@@ -57,13 +57,25 @@ extension TaskGroupModel {
     ]
 
     static let defaultColors = [
-        "#8B5CF6", // Purple
-        "#3B82F6", // Blue
-        "#14B8A6", // Teal
-        "#22C55E", // Green
-        "#F59E0B", // Orange
+        // Row 1 - Reds & Pinks
         "#EF4444", // Red
+        "#F43F5E", // Rose
         "#EC4899", // Pink
+        "#D946EF", // Fuchsia
+        // Row 2 - Purples & Blues
+        "#A855F7", // Violet
+        "#8B5CF6", // Purple
         "#6366F1", // Indigo
+        "#3B82F6", // Blue
+        // Row 3 - Cyans & Greens
+        "#0EA5E9", // Sky Blue
+        "#06B6D4", // Cyan
+        "#14B8A6", // Teal
+        "#10B981", // Emerald
+        // Row 4 - Greens & Warm
+        "#22C55E", // Green
+        "#84CC16", // Lime
+        "#F59E0B", // Amber
+        "#F97316", // Orange
     ]
 }
