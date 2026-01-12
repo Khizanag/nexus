@@ -68,6 +68,15 @@ enum TaskPriority: String, Codable, CaseIterable {
         case .urgent: "red"
         }
     }
+
+    var sortOrder: Int {
+        switch self {
+        case .low: 1
+        case .medium: 2
+        case .high: 3
+        case .urgent: 4
+        }
+    }
 }
 
 @Model

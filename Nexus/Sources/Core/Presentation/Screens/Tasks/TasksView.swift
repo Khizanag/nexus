@@ -8,6 +8,8 @@ struct TasksView: View {
 
     @State private var selectedFilter: TaskFilter = .all
     @State private var groupingMode: TaskGrouping = .project
+    @State private var sortMode: TaskSorting = .dateCreated
+    @State private var sortAscending: Bool = false
     @State private var showNewTask = false
     @State private var selectedTask: TaskModel?
     @State private var toastMessage: String?
@@ -19,22 +21,43 @@ struct TasksView: View {
     @State private var collapsedGroups: Set<UUID> = []
 
     private var filteredTasks: [TaskModel] {
+        let filtered: [TaskModel]
         switch selectedFilter {
         case .all:
-            allTasks.filter { !$0.isCompleted }
+            filtered = allTasks.filter { !$0.isCompleted }
         case .today:
-            allTasks.filter { task in
+            filtered = allTasks.filter { task in
                 guard let dueDate = task.dueDate else { return false }
                 return Calendar.current.isDateInToday(dueDate) && !task.isCompleted
             }
         case .upcoming:
-            allTasks.filter { task in
+            filtered = allTasks.filter { task in
                 guard let dueDate = task.dueDate else { return false }
                 return dueDate > Date() && !task.isCompleted
             }
         case .completed:
-            allTasks.filter { $0.isCompleted }
+            filtered = allTasks.filter { $0.isCompleted }
         }
+
+        return sortTasks(filtered)
+    }
+
+    private func sortTasks(_ tasks: [TaskModel]) -> [TaskModel] {
+        let sorted = tasks.sorted { task1, task2 in
+            switch sortMode {
+            case .dateCreated:
+                return task1.createdAt > task2.createdAt
+            case .dueDate:
+                let date1 = task1.dueDate ?? Date.distantFuture
+                let date2 = task2.dueDate ?? Date.distantFuture
+                return date1 < date2
+            case .priority:
+                return task1.priority.sortOrder > task2.priority.sortOrder
+            case .alphabetical:
+                return task1.title.localizedCaseInsensitiveCompare(task2.title) == .orderedAscending
+            }
+        }
+        return sortAscending ? sorted.reversed() : sorted
     }
 
     private var groupedTasks: [(String, [TaskModel], TaskGroupModel?)] {
@@ -65,7 +88,7 @@ struct TasksView: View {
                             ForEach(groupedTasks, id: \.0) { title, tasks, group in
                                 if let group {
                                     projectSection(group: group, tasks: tasks)
-                                } else if title == "Inbox" && groupingMode == .project {
+                                } else if title == "Inbox", groupingMode == .project {
                                     inboxSection(tasks: tasks)
                                 } else if !title.isEmpty {
                                     taskGroupSection(title: title, tasks: tasks)
@@ -113,6 +136,43 @@ struct TasksView: View {
                                     }
                                 } label: {
                                     Label(mode.title, systemImage: groupingMode == mode ? "checkmark" : "")
+                                }
+                            }
+                        }
+
+                        Divider()
+
+                        Section("Sort By") {
+                            ForEach(TaskSorting.allCases) { sort in
+                                Button {
+                                    withAnimation(.spring(response: 0.3)) {
+                                        if sortMode == sort {
+                                            sortAscending.toggle()
+                                        } else {
+                                            sortMode = sort
+                                            sortAscending = false
+                                        }
+                                    }
+                                } label: {
+                                    HStack {
+                                        if sortMode == sort {
+                                            Image(systemName: "checkmark")
+                                                .foregroundStyle(.blue)
+                                        }
+
+                                        Text(sort.title)
+
+                                        Spacer()
+
+                                        if sortMode == sort {
+                                            Image(systemName: sortAscending ? "arrow.up" : "arrow.down")
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+
+                                        Image(systemName: sort.icon)
+                                            .foregroundStyle(.secondary)
+                                    }
                                 }
                             }
                         }
@@ -206,42 +266,59 @@ struct TasksView: View {
                     }
                 }
             } label: {
-                HStack(spacing: 12) {
-                    ZStack {
-                        Circle()
-                            .fill(groupColor.opacity(0.15))
-                            .frame(width: 36, height: 36)
+                HStack(spacing: 0) {
+                    // Accent bar
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(groupColor)
+                        .frame(width: 4)
+                        .padding(.vertical, 8)
 
-                        Image(systemName: group.icon)
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(groupColor)
-                    }
+                    HStack(spacing: 12) {
+                        ZStack {
+                            Circle()
+                                .fill(groupColor.opacity(0.15))
+                                .frame(width: 40, height: 40)
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(group.name)
-                            .font(.nexusHeadline)
-                            .foregroundStyle(.primary)
-
-                        Text("\(tasks.count) task\(tasks.count == 1 ? "" : "s")")
-                            .font(.nexusCaption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.tertiary)
-                        .rotationEffect(.degrees(isCollapsed ? 0 : 90))
-                }
-                .padding(12)
-                .background {
-                    RoundedRectangle(cornerRadius: 14)
-                        .fill(Color.nexusSurface)
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 14)
-                                .strokeBorder(groupColor.opacity(0.2), lineWidth: 1)
+                            Image(systemName: group.icon)
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(groupColor)
                         }
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(group.name)
+                                .font(.nexusHeadline)
+                                .foregroundStyle(.primary)
+
+                            Text("\(tasks.count) task\(tasks.count == 1 ? "" : "s")")
+                                .font(.nexusCaption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(groupColor.opacity(0.6))
+                            .rotationEffect(.degrees(isCollapsed ? 0 : 90))
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 14)
+                }
+                .background {
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color.nexusSurface)
+                        .shadow(color: groupColor.opacity(0.08), radius: 8, x: 0, y: 4)
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: 16)
+                        .strokeBorder(
+                            LinearGradient(
+                                colors: [groupColor.opacity(0.3), groupColor.opacity(0.1)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1
+                        )
                 }
             }
             .buttonStyle(.plain)
@@ -259,7 +336,7 @@ struct TasksView: View {
                 }
             }
 
-            if !isCollapsed && !tasks.isEmpty {
+            if !isCollapsed, !tasks.isEmpty {
                 VStack(spacing: 8) {
                     ForEach(tasks) { task in
                         taskRowView(task)
@@ -293,47 +370,64 @@ struct TasksView: View {
                     }
                 }
             } label: {
-                HStack(spacing: 12) {
-                    ZStack {
-                        Circle()
-                            .fill(Color.nexusBlue.opacity(0.15))
-                            .frame(width: 36, height: 36)
+                HStack(spacing: 0) {
+                    // Accent bar
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color.nexusBlue)
+                        .frame(width: 4)
+                        .padding(.vertical, 8)
 
-                        Image(systemName: "tray.fill")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(Color.nexusBlue)
-                    }
+                    HStack(spacing: 12) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.nexusBlue.opacity(0.15))
+                                .frame(width: 40, height: 40)
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Inbox")
-                            .font(.nexusHeadline)
-                            .foregroundStyle(.primary)
-
-                        Text("\(tasks.count) task\(tasks.count == 1 ? "" : "s")")
-                            .font(.nexusCaption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.tertiary)
-                        .rotationEffect(.degrees(isCollapsed ? 0 : 90))
-                }
-                .padding(12)
-                .background {
-                    RoundedRectangle(cornerRadius: 14)
-                        .fill(Color.nexusSurface)
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 14)
-                                .strokeBorder(Color.nexusBlue.opacity(0.2), lineWidth: 1)
+                            Image(systemName: "tray.fill")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(Color.nexusBlue)
                         }
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Inbox")
+                                .font(.nexusHeadline)
+                                .foregroundStyle(.primary)
+
+                            Text("\(tasks.count) task\(tasks.count == 1 ? "" : "s")")
+                                .font(.nexusCaption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Color.nexusBlue.opacity(0.6))
+                            .rotationEffect(.degrees(isCollapsed ? 0 : 90))
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 14)
+                }
+                .background {
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color.nexusSurface)
+                        .shadow(color: Color.nexusBlue.opacity(0.08), radius: 8, x: 0, y: 4)
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: 16)
+                        .strokeBorder(
+                            LinearGradient(
+                                colors: [Color.nexusBlue.opacity(0.3), Color.nexusBlue.opacity(0.1)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1
+                        )
                 }
             }
             .buttonStyle(.plain)
 
-            if !isCollapsed && !tasks.isEmpty {
+            if !isCollapsed, !tasks.isEmpty {
                 VStack(spacing: 8) {
                     ForEach(tasks) { task in
                         taskRowView(task)
@@ -679,46 +773,29 @@ private enum TaskGrouping: String, CaseIterable, Identifiable {
     }
 }
 
-// MARK: - Filter Chip
+// MARK: - Task Sorting
 
-private struct FilterChip: View {
-    let title: String
-    let isSelected: Bool
-    let count: Int
-    let action: () -> Void
+private enum TaskSorting: String, CaseIterable, Identifiable {
+    case dateCreated, dueDate, priority, alphabetical
 
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Text(title)
-                    .font(.nexusSubheadline)
+    var id: String { rawValue }
 
-                if count > 0 {
-                    Text("\(count)")
-                        .font(.nexusCaption)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background {
-                            Capsule()
-                                .fill(isSelected ? .white.opacity(0.2) : Color.nexusBorder)
-                        }
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background {
-                Capsule()
-                    .fill(isSelected ? Color.nexusPurple : Color.nexusSurface)
-                    .overlay {
-                        if !isSelected {
-                            Capsule()
-                                .strokeBorder(Color.nexusBorder, lineWidth: 1)
-                        }
-                    }
-            }
-            .foregroundStyle(isSelected ? .white : .primary)
+    var title: String {
+        switch self {
+        case .dateCreated: "Date Created"
+        case .dueDate: "Due Date"
+        case .priority: "Priority"
+        case .alphabetical: "Alphabetical"
         }
-        .buttonStyle(.plain)
+    }
+
+    var icon: String {
+        switch self {
+        case .dateCreated: "clock"
+        case .dueDate: "calendar"
+        case .priority: "flag"
+        case .alphabetical: "textformat.abc"
+        }
     }
 }
 
@@ -732,88 +809,198 @@ private struct TaskRow: View {
 
     @State private var checkmarkScale: CGFloat = 1.0
     @State private var showCelebration = false
-    @State private var strikethroughProgress: CGFloat = 0
+    @State private var showStrikethrough = false
 
     private var highlightColor: Color {
         task.isCompleted ? Color.nexusGreen : Color.nexusOrange
     }
 
+    private var priorityAccentColor: Color {
+        switch task.priority {
+        case .urgent: Color.nexusRed
+        case .high: Color.nexusOrange
+        case .medium: Color.nexusBlue
+        case .low: Color.nexusTextTertiary
+        }
+    }
+
     var body: some View {
-        HStack(spacing: 12) {
-            Button(action: {
-                if !task.isCompleted {
-                    // Animate checkmark bounce
-                    withAnimation(.spring(response: 0.25, dampingFraction: 0.4)) {
-                        checkmarkScale = 1.4
-                    }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.5)) {
-                            checkmarkScale = 1.0
-                        }
-                    }
-                    // Show celebration particles
-                    showCelebration = true
-                    // Animate strikethrough - make it slower and more visible
-                    withAnimation(.easeInOut(duration: 0.8).delay(0.3)) {
-                        strikethroughProgress = 1.0
-                    }
-                }
-                onToggle()
-            }) {
-                ZStack {
-                    // Base circle
+        HStack(spacing: 0) {
+            // Priority accent bar
+            RoundedRectangle(cornerRadius: 2)
+                .fill(task.isCompleted ? Color.nexusGreen.opacity(0.5) : priorityAccentColor)
+                .frame(width: 3)
+                .padding(.vertical, 10)
+
+            HStack(spacing: 14) {
+                checkmarkButton
+                taskContent
+                Spacer(minLength: 8)
+                trailingContent
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 14)
+        }
+        .background { rowBackground }
+        .overlay { celebrationOverlay }
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .scaleEffect(isLeaving ? 0.92 : (isRecentlyChanged ? 1.02 : 1.0))
+        .opacity(isLeaving ? 0.6 : 1.0)
+        .offset(y: isLeaving ? (task.isCompleted ? 8 : -8) : 0)
+        .animation(.spring(response: 0.5, dampingFraction: 0.7), value: isRecentlyChanged)
+        .animation(.spring(response: 0.6, dampingFraction: 0.75), value: isLeaving)
+        .onChange(of: task.isCompleted) { _, newValue in
+            if !newValue {
+                showStrikethrough = false
+                showCelebration = false
+            }
+        }
+    }
+}
+
+// MARK: - TaskRow Components
+
+private extension TaskRow {
+    var checkmarkButton: some View {
+        Button(action: handleToggle) {
+            ZStack {
+                if task.isCompleted {
+                    // Completed state - solid green ring and fill
                     Circle()
-                        .strokeBorder(task.isCompleted ? Color.nexusGreen : priorityColor, lineWidth: 2)
-                        .frame(width: 26, height: 26)
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.nexusGreen, Color.nexusGreen.opacity(0.8)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 28, height: 28)
+                        .shadow(color: Color.nexusGreen.opacity(0.4), radius: 4, x: 0, y: 2)
 
-                    // Filled circle when completed
-                    if task.isCompleted {
-                        Circle()
-                            .fill(Color.nexusGreen)
-                            .frame(width: 26, height: 26)
-
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(.white)
-                    }
-                }
-                .scaleEffect(checkmarkScale)
-            }
-            .buttonStyle(.plain)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(task.title)
-                    .font(.nexusBody)
-                    .foregroundStyle(task.isCompleted ? .secondary : .primary)
-                    .overlay(alignment: .leading) {
-                        if task.isCompleted || (isRecentlyChanged && strikethroughProgress > 0) {
-                            GeometryReader { geo in
-                                Rectangle()
-                                    .fill(Color.secondary)
-                                    .frame(
-                                        width: geo.size.width * (isRecentlyChanged ? strikethroughProgress : 1),
-                                        height: 1.5
-                                    )
-                                    .offset(y: geo.size.height / 2)
-                            }
-                        }
-                    }
-
-                if let dueDate = task.dueDate {
-                    HStack(spacing: 4) {
-                        Image(systemName: "calendar")
-                            .font(.caption2)
-                        Text(dueDate.formatted(date: .abbreviated, time: .omitted))
-                            .font(.nexusCaption)
-                    }
-                    .foregroundStyle(dueDateColor(dueDate))
-                    .opacity(task.isCompleted ? 0.6 : 1)
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.white)
+                } else {
+                    // Uncompleted state - gradient ring
+                    Circle()
+                        .strokeBorder(
+                            LinearGradient(
+                                colors: [priorityAccentColor, priorityAccentColor.opacity(0.6)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 2.5
+                        )
+                        .frame(width: 28, height: 28)
                 }
             }
+            .scaleEffect(checkmarkScale)
+        }
+        .buttonStyle(.plain)
+    }
 
-            Spacer()
+    var taskContent: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(task.title)
+                .font(.nexusBody)
+                .fontWeight(.medium)
+                .foregroundStyle(task.isCompleted ? .secondary : .primary)
+                .strikethrough(task.isCompleted || showStrikethrough, color: .secondary)
+                .animation(.easeInOut(duration: 0.4), value: showStrikethrough)
+                .lineLimit(2)
 
-            // Direction indicator when leaving
+            if !task.notes.isEmpty || task.dueDate != nil || task.reminderDate != nil {
+                HStack(spacing: 10) {
+                    if let dueDate = task.dueDate {
+                        dueDateBadge(dueDate)
+                    }
+
+                    if task.reminderDate != nil {
+                        reminderBadge
+                    }
+
+                    if !task.notes.isEmpty {
+                        notesBadge
+                    }
+                }
+            }
+        }
+    }
+
+    func dueDateBadge(_ dueDate: Date) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: dueDateIcon(dueDate))
+                .font(.system(size: 10, weight: .semibold))
+            Text(formatDueDate(dueDate))
+                .font(.system(size: 11, weight: .medium))
+        }
+        .foregroundStyle(dueDateColor(dueDate))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background {
+            Capsule()
+                .fill(dueDateColor(dueDate).opacity(0.12))
+        }
+        .opacity(task.isCompleted ? 0.5 : 1)
+    }
+
+    var reminderBadge: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "bell.fill")
+                .font(.system(size: 9, weight: .semibold))
+        }
+        .foregroundStyle(Color.nexusPurple)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+        .background {
+            Capsule()
+                .fill(Color.nexusPurple.opacity(0.12))
+        }
+        .opacity(task.isCompleted ? 0.5 : 1)
+    }
+
+    var notesBadge: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "note.text")
+                .font(.system(size: 9, weight: .semibold))
+        }
+        .foregroundStyle(Color.nexusTextTertiary)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+        .background {
+            Capsule()
+                .fill(Color.nexusTextTertiary.opacity(0.12))
+        }
+        .opacity(task.isCompleted ? 0.5 : 1)
+    }
+
+    func dueDateIcon(_ date: Date) -> String {
+        if Calendar.current.isDateInToday(date) {
+            return "sun.max.fill"
+        } else if date < Date() {
+            return "exclamationmark.circle.fill"
+        } else if Calendar.current.isDateInTomorrow(date) {
+            return "sunrise.fill"
+        }
+        return "calendar"
+    }
+
+    func formatDueDate(_ date: Date) -> String {
+        if Calendar.current.isDateInToday(date) {
+            return "Today"
+        } else if Calendar.current.isDateInTomorrow(date) {
+            return "Tomorrow"
+        } else if date < Date() {
+            let days = Calendar.current.dateComponents([.day], from: date, to: Date()).day ?? 0
+            return days == 1 ? "1 day ago" : "\(days) days ago"
+        } else {
+            return date.formatted(.dateTime.month(.abbreviated).day())
+        }
+    }
+
+    @ViewBuilder
+    var trailingContent: some View {
+        HStack(spacing: 8) {
             if isLeaving {
                 Image(systemName: task.isCompleted ? "arrow.down.circle.fill" : "arrow.up.circle.fill")
                     .font(.system(size: 16))
@@ -821,61 +1008,78 @@ private struct TaskRow: View {
                     .transition(.scale.combined(with: .opacity))
             }
 
-            if task.priority == .high || task.priority == .urgent {
-                Image(systemName: "flag.fill")
-                    .font(.caption)
-                    .foregroundStyle(priorityColor)
-                    .opacity(task.isCompleted ? 0.4 : 1)
+            if task.priority == .urgent {
+                priorityBadge(icon: "flame.fill", color: .nexusRed)
+            } else if task.priority == .high {
+                priorityBadge(icon: "flag.fill", color: .nexusOrange)
             }
 
             Image(systemName: "chevron.right")
-                .font(.caption)
+                .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.tertiary)
         }
-        .padding(16)
-        .background {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(isRecentlyChanged ? highlightColor.opacity(0.12) : Color.nexusSurface)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 12)
-                        .strokeBorder(
-                            isRecentlyChanged ? highlightColor.opacity(0.5) : Color.nexusBorder,
-                            lineWidth: isRecentlyChanged ? 2 : 1
-                        )
+    }
+
+    func priorityBadge(icon: String, color: Color) -> some View {
+        Image(systemName: icon)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(color)
+            .opacity(task.isCompleted ? 0.4 : 1)
+    }
+
+    var rowBackground: some View {
+        RoundedRectangle(cornerRadius: 14)
+            .fill(isRecentlyChanged ? highlightColor.opacity(0.08) : Color.nexusSurface)
+            .shadow(
+                color: isRecentlyChanged
+                    ? highlightColor.opacity(0.15)
+                    : Color.black.opacity(0.08),
+                radius: isRecentlyChanged ? 8 : 4,
+                x: 0,
+                y: 2
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 14)
+                    .strokeBorder(
+                        isRecentlyChanged
+                            ? highlightColor.opacity(0.4)
+                            : priorityAccentColor.opacity(task.isCompleted ? 0 : 0.15),
+                        lineWidth: isRecentlyChanged ? 1.5 : 1
+                    )
+            }
+    }
+
+    @ViewBuilder
+    var celebrationOverlay: some View {
+        if showCelebration, task.isCompleted {
+            CelebrationParticles()
+                .allowsHitTesting(false)
+        }
+    }
+}
+
+// MARK: - TaskRow Actions
+
+private extension TaskRow {
+    func handleToggle() {
+        if !task.isCompleted {
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.4)) {
+                checkmarkScale = 1.4
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.5)) {
+                    checkmarkScale = 1.0
                 }
-        }
-        .overlay {
-            // Celebration particles for completion
-            if showCelebration && task.isCompleted {
-                CelebrationParticles()
-                    .allowsHitTesting(false)
+            }
+            showCelebration = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                showStrikethrough = true
             }
         }
-        // Transition effect - scale down and fade when leaving
-        .scaleEffect(isLeaving ? 0.92 : (isRecentlyChanged ? 1.02 : 1.0))
-        .opacity(isLeaving ? 0.6 : 1.0)
-        .offset(y: isLeaving ? (task.isCompleted ? 8 : -8) : 0)
-        .animation(.spring(response: 0.5, dampingFraction: 0.7), value: isRecentlyChanged)
-        .animation(.spring(response: 0.6, dampingFraction: 0.75), value: isLeaving)
-        .onChange(of: task.isCompleted) { oldValue, newValue in
-            if !newValue {
-                // Reset animation states when uncompleted
-                strikethroughProgress = 0
-                showCelebration = false
-            }
-        }
+        onToggle()
     }
 
-    private var priorityColor: Color {
-        switch task.priority {
-        case .low: .secondary
-        case .medium: .nexusBlue
-        case .high: .nexusOrange
-        case .urgent: .nexusRed
-        }
-    }
-
-    private func dueDateColor(_ date: Date) -> Color {
+    func dueDateColor(_ date: Date) -> Color {
         if Calendar.current.isDateInToday(date) {
             return .nexusOrange
         } else if date < Date() {
