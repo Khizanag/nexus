@@ -64,7 +64,7 @@ struct CalendarView: View {
                 }
             }
             .onChange(of: showEventEditor) { _, newValue in
-                if newValue && eventEditorInitialDate == Date() {
+                if newValue, eventEditorInitialDate == Date() {
                     eventEditorInitialDate = selectedDate
                 }
             }

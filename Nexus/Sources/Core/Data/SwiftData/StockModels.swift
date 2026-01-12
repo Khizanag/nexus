@@ -231,7 +231,7 @@ final class StockAlertModel {
     }
 
     func shouldTrigger(currentPrice: Double) -> Bool {
-        guard isActive && !isTriggered else { return false }
+        guard isActive, !isTriggered else { return false }
         switch alertType {
         case .priceAbove:
             return currentPrice >= targetPrice

@@ -59,7 +59,7 @@ struct HealthView: View {
 private extension HealthView {
     @ViewBuilder
     var healthKitBanner: some View {
-        if healthKitService.isAvailable && !healthKitService.isAuthorized {
+        if healthKitService.isAvailable, !healthKitService.isAuthorized {
             NexusCard {
                 HStack(spacing: 12) {
                     Image(systemName: "heart.circle.fill")

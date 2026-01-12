@@ -215,7 +215,7 @@ struct SubscriptionsSummaryCard: View {
 
             Spacer()
 
-            if isLoadingRates && hasMixedCurrencies {
+            if isLoadingRates, hasMixedCurrencies {
                 ProgressView()
                     .scaleEffect(0.7)
             } else {
@@ -223,11 +223,11 @@ struct SubscriptionsSummaryCard: View {
                     Text(formattedMonthly)
                         .font(.system(size: 16, weight: .bold, design: .rounded))
 
-                    if hasMixedCurrencies && exchangeRates != nil {
+                    if hasMixedCurrencies, exchangeRates != nil {
                         Text("converted")
                             .font(.system(size: 9))
                             .foregroundStyle(.tertiary)
-                    } else if hasMixedCurrencies && exchangeRates == nil {
+                    } else if hasMixedCurrencies, exchangeRates == nil {
                         Text("(\(targetCurrency.rawValue) only)")
                             .font(.system(size: 9))
                             .foregroundStyle(.orange)

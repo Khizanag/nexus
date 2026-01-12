@@ -51,7 +51,7 @@ struct AssistantView: View {
                 }
 
                 // Scroll to bottom button
-                if showScrollToBottom && !messages.isEmpty {
+                if showScrollToBottom, !messages.isEmpty {
                     VStack {
                         Spacer()
                         HStack {

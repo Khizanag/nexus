@@ -93,7 +93,7 @@ final class SpeechRecognitionService: @unchecked Sendable {
             let recordingFormat = inputNode.outputFormat(forBus: 0)
 
             // Validate format - this is crucial for real devices
-            guard recordingFormat.sampleRate > 0 && recordingFormat.channelCount > 0 else {
+            guard recordingFormat.sampleRate > 0, recordingFormat.channelCount > 0 else {
                 errorMessage = "Invalid audio format. Please try again."
                 try? audioSession.setActive(false)
                 return
@@ -157,7 +157,7 @@ final class SpeechRecognitionService: @unchecked Sendable {
             let nsError = error as NSError
             // Ignore cancellation errors (code 216 or 1110)
             let isCancellation = (nsError.code == 216 || nsError.code == 1110)
-            if !isCancellation && isRecording {
+            if !isCancellation, isRecording {
                 errorMessage = "Error: \(error.localizedDescription)"
             }
             stopRecording()

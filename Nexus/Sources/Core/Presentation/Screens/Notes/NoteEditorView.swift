@@ -348,7 +348,7 @@ struct NoteEditorView: View {
                   dotIndex != trimmedLine.startIndex,
                   let num = Int(trimmedLine[..<dotIndex]) {
             let afterDot = trimmedLine.index(after: dotIndex)
-            if afterDot < trimmedLine.endIndex && trimmedLine[afterDot] == " " {
+            if afterDot < trimmedLine.endIndex, trimmedLine[afterDot] == " " {
                 content = newValue + "\(num + 1). "
             }
         }
