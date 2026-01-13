@@ -24,7 +24,6 @@ struct AssistantView: View {
     @State private var showCapabilities = false
     @State private var pendingDismissWithNavigation: AssistantNavigation?
 
-    // Track last mentioned items for "open that" commands
     @State private var lastMentionedEvents: [CalendarEvent] = []
     @State private var lastMentionedTasks: [TaskModel] = []
     @State private var lastMentionedNotes: [NoteModel] = []
@@ -35,42 +34,20 @@ struct AssistantView: View {
     @State private var scrollProxy: ScrollViewProxy?
     @FocusState private var isInputFocused: Bool
 
+    // MARK: - Body
+
     var body: some View {
         NavigationStack {
             ZStack {
-                // Animated background
                 AnimatedGradientBackground()
-
-                VStack(spacing: 0) {
-                    if messages.isEmpty {
-                        emptyState
-                    } else {
-                        messagesList
-                    }
-                    inputBar
-                }
-
-                // Scroll to bottom button
-                if showScrollToBottom, !messages.isEmpty {
-                    VStack {
-                        Spacer()
-                        HStack {
-                            Spacer()
-                            scrollToBottomButton
-                                .padding(.trailing, 16)
-                                .padding(.bottom, 90)
-                        }
-                    }
-                    .transition(.scale.combined(with: .opacity))
-                }
+                mainContent
+                scrollToBottomOverlay
             }
             .navigationTitle("Nexus AI")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
             .toolbar { toolbarContent }
-            .sheet(isPresented: $showCapabilities) {
-                CapabilitiesView()
-            }
+            .sheet(isPresented: $showCapabilities) { CapabilitiesView() }
             .sheet(item: $selectedEventToShow) { event in
                 CalendarEventDetailView(event: event, onUpdate: {})
             }
@@ -79,13 +56,7 @@ struct AssistantView: View {
                 if !newValue.isEmpty { inputText = newValue }
             }
             .onChange(of: pendingDismissWithNavigation) { _, newValue in
-                if let destination = newValue {
-                    assistantLauncher.navigate(to: destination)
-                    pendingDismissWithNavigation = nil
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        dismiss()
-                    }
-                }
+                handlePendingNavigation(newValue)
             }
             .alert("Voice Input", isPresented: .init(
                 get: { speechService.errorMessage != nil },
@@ -96,10 +67,6 @@ struct AssistantView: View {
                 if let error = speechService.errorMessage { Text(error) }
             }
         }
-    }
-
-    private func navigateAndDismiss(to destination: AssistantNavigation) {
-        pendingDismissWithNavigation = destination
     }
 }
 
@@ -116,12 +83,8 @@ private extension AssistantView {
         }
         ToolbarItem(placement: .topBarTrailing) {
             Menu {
-                Button("What can you do?", systemImage: "sparkles") {
-                    showCapabilities = true
-                }
-                Button("Clear Chat", systemImage: "trash", role: .destructive) {
-                    clearAllMessages()
-                }
+                Button("What can you do?", systemImage: "sparkles") { showCapabilities = true }
+                Button("Clear Chat", systemImage: "trash", role: .destructive) { clearAllMessages() }
             } label: {
                 Image(systemName: "ellipsis.circle")
             }
@@ -129,34 +92,33 @@ private extension AssistantView {
     }
 }
 
-// MARK: - Message Persistence
+// MARK: - Main Content
 
 private extension AssistantView {
-    func loadSavedMessages() {
-        messages = savedMessages.map { saved in
-            ChatMessage(
-                id: saved.id,
-                role: saved.role == "user" ? .user : .assistant,
-                content: saved.content,
-                timestamp: saved.timestamp
-            )
+    var mainContent: some View {
+        VStack(spacing: 0) {
+            if messages.isEmpty {
+                emptyState
+            } else {
+                messagesList
+            }
+            inputBar
         }
     }
 
-    func saveMessage(_ message: ChatMessage) {
-        let savedMessage = ChatMessageModel(
-            id: message.id,
-            role: message.role == .user ? "user" : "assistant",
-            content: message.content,
-            timestamp: message.timestamp
-        )
-        modelContext.insert(savedMessage)
-    }
-
-    func clearAllMessages() {
-        withAnimation { messages.removeAll() }
-        for saved in savedMessages {
-            modelContext.delete(saved)
+    @ViewBuilder
+    var scrollToBottomOverlay: some View {
+        if showScrollToBottom, !messages.isEmpty {
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    scrollToBottomButton
+                        .padding(.trailing, 16)
+                        .padding(.bottom, 90)
+                }
+            }
+            .transition(.scale.combined(with: .opacity))
         }
     }
 }
@@ -168,45 +130,29 @@ private extension AssistantView {
         ScrollView(showsIndicators: false) {
             VStack(spacing: 28) {
                 Spacer().frame(height: 10)
-
                 AIAvatarView()
                     .padding(.top, 10)
-
-                VStack(spacing: 10) {
-                    Text("Hey! I'm Nexus")
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
-
-                    Text("Your AI-powered life assistant.\nAsk me anything about your data.")
-                        .font(.system(size: 15, weight: .regular))
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .lineSpacing(3)
-                }
-                .padding(.horizontal, 24)
-
+                welcomeText
                 quickStatsCard
-
-                VStack(spacing: 14) {
-                    Text("Try asking")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.tertiary)
-                        .textCase(.uppercase)
-                        .tracking(1)
-
-                    VStack(spacing: 10) {
-                        ForEach(dynamicSuggestions, id: \.self) { suggestion in
-                            SuggestionButton(text: suggestion) {
-                                inputText = suggestion
-                                sendMessage()
-                            }
-                        }
-                    }
-                }
-
+                suggestionsSection
                 Spacer().frame(height: 20)
             }
             .frame(maxWidth: .infinity)
         }
+    }
+
+    var welcomeText: some View {
+        VStack(spacing: 10) {
+            Text("Hey! I'm Nexus")
+                .font(.system(size: 28, weight: .bold, design: .rounded))
+
+            Text("Your AI-powered life assistant.\nAsk me anything about your data.")
+                .font(.system(size: 15, weight: .regular))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .lineSpacing(3)
+        }
+        .padding(.horizontal, 24)
     }
 
     var quickStatsCard: some View {
@@ -219,9 +165,7 @@ private extension AssistantView {
                     color: .tasksColor
                 )
 
-                Rectangle()
-                    .fill(.white.opacity(0.1))
-                    .frame(width: 1, height: 50)
+                statDivider
 
                 QuickStatItem(
                     value: "\(notes.count)",
@@ -230,9 +174,7 @@ private extension AssistantView {
                     color: .notesColor
                 )
 
-                Rectangle()
-                    .fill(.white.opacity(0.1))
-                    .frame(width: 1, height: 50)
+                statDivider
 
                 QuickStatItem(
                     value: formatCurrency(monthlySpending),
@@ -244,6 +186,31 @@ private extension AssistantView {
             .padding(.vertical, 20)
         }
         .padding(.horizontal, 20)
+    }
+
+    var statDivider: some View {
+        Rectangle()
+            .fill(.white.opacity(0.1))
+            .frame(width: 1, height: 50)
+    }
+
+    var suggestionsSection: some View {
+        VStack(spacing: 14) {
+            Text("Try asking")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.tertiary)
+                .textCase(.uppercase)
+                .tracking(1)
+
+            VStack(spacing: 10) {
+                ForEach(dynamicSuggestions, id: \.self) { suggestion in
+                    SuggestionButton(text: suggestion) {
+                        inputText = suggestion
+                        sendMessage()
+                    }
+                }
+            }
+        }
     }
 
     var dynamicSuggestions: [String] {
@@ -305,39 +272,34 @@ private extension AssistantView {
                     }
 
                     if isLoading {
-                        HStack {
-                            TypingIndicator()
-                            Spacer()
-                        }
-                        .padding(.horizontal, 20)
-                        .transition(.scale(scale: 0.8).combined(with: .opacity))
+                        loadingIndicator
                     }
 
-                    // Bottom anchor for scroll detection
-                    Color.clear
-                        .frame(height: 1)
-                        .id("bottom")
-                        .onAppear { showScrollToBottom = false }
-                        .onDisappear { showScrollToBottom = true }
+                    bottomAnchor
                 }
                 .padding(.vertical, 16)
                 .animation(.spring(response: 0.4), value: messages.count)
             }
-            .onAppear {
-                scrollProxy = proxy
-                // Auto-scroll to bottom on appear
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    if let lastMessage = messages.last {
-                        proxy.scrollTo(lastMessage.id, anchor: .bottom)
-                    }
-                }
-            }
-            .onChange(of: messages.count) {
-                withAnimation(.spring(response: 0.3)) {
-                    proxy.scrollTo(messages.last?.id, anchor: .bottom)
-                }
-            }
+            .onAppear { setupScrollProxy(proxy) }
+            .onChange(of: messages.count) { scrollToLatestMessage(proxy) }
         }
+    }
+
+    var loadingIndicator: some View {
+        HStack {
+            TypingIndicator()
+            Spacer()
+        }
+        .padding(.horizontal, 20)
+        .transition(.scale(scale: 0.8).combined(with: .opacity))
+    }
+
+    var bottomAnchor: some View {
+        Color.clear
+            .frame(height: 1)
+            .id("bottom")
+            .onAppear { showScrollToBottom = false }
+            .onDisappear { showScrollToBottom = true }
     }
 
     var scrollToBottomButton: some View {
@@ -346,35 +308,54 @@ private extension AssistantView {
                 scrollProxy?.scrollTo("bottom", anchor: .bottom)
             }
         } label: {
-            ZStack {
-                Circle()
-                    .fill(.ultraThinMaterial)
-                    .frame(width: 44, height: 44)
-                    .overlay {
-                        Circle()
-                            .strokeBorder(
-                                LinearGradient(
-                                    colors: [.white.opacity(0.3), .white.opacity(0.1)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                lineWidth: 1
-                            )
-                    }
-                    .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 5)
-
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [.nexusPurple, .nexusBlue],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-            }
+            scrollToBottomButtonContent
         }
         .buttonStyle(ScaleButtonStyle())
+    }
+
+    var scrollToBottomButtonContent: some View {
+        ZStack {
+            Circle()
+                .fill(.ultraThinMaterial)
+                .frame(width: 44, height: 44)
+                .overlay {
+                    Circle()
+                        .strokeBorder(
+                            LinearGradient(
+                                colors: [.white.opacity(0.3), .white.opacity(0.1)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1
+                        )
+                }
+                .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 5)
+
+            Image(systemName: "chevron.down")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [.nexusPurple, .nexusBlue],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        }
+    }
+
+    func setupScrollProxy(_ proxy: ScrollViewProxy) {
+        scrollProxy = proxy
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            if let lastMessage = messages.last {
+                proxy.scrollTo(lastMessage.id, anchor: .bottom)
+            }
+        }
+    }
+
+    func scrollToLatestMessage(_ proxy: ScrollViewProxy) {
+        withAnimation(.spring(response: 0.3)) {
+            proxy.scrollTo(messages.last?.id, anchor: .bottom)
+        }
     }
 }
 
@@ -391,78 +372,90 @@ private extension AssistantView {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
         }
-        .background {
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .overlay(alignment: .top) {
-                    Rectangle()
-                        .fill(
-                            LinearGradient(
-                                colors: [.white.opacity(0.1), .clear],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
+        .background { inputBarBackground }
+    }
+
+    var inputBarBackground: some View {
+        Rectangle()
+            .fill(.ultraThinMaterial)
+            .overlay(alignment: .top) {
+                Rectangle()
+                    .fill(
+                        LinearGradient(
+                            colors: [.white.opacity(0.1), .clear],
+                            startPoint: .top,
+                            endPoint: .bottom
                         )
-                        .frame(height: 1)
-                }
-                .ignoresSafeArea()
-        }
+                    )
+                    .frame(height: 1)
+            }
+            .ignoresSafeArea()
     }
 
     var microphoneButton: some View {
-        Button {
-            speechService.toggleRecording()
-        } label: {
-            ZStack {
-                if speechService.isRecording {
-                    Circle()
-                        .fill(Color.nexusRed)
-                        .frame(width: 44, height: 44)
-                        .overlay {
-                            Circle()
-                                .strokeBorder(
-                                    LinearGradient(
-                                        colors: [.nexusRed, .nexusRed.opacity(0.8)],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    ),
-                                    lineWidth: 1
-                                )
-                        }
-                        .shadow(color: Color.nexusRed.opacity(0.4), radius: 8)
-                } else {
-                    Circle()
-                        .fill(.ultraThinMaterial)
-                        .frame(width: 44, height: 44)
-                        .overlay {
-                            Circle()
-                                .strokeBorder(
-                                    LinearGradient(
-                                        colors: [.white.opacity(0.2), .white.opacity(0.05)],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    ),
-                                    lineWidth: 1
-                                )
-                        }
-                        .shadow(color: .black.opacity(0.1), radius: 8)
-                }
-
-                Image(systemName: speechService.isRecording ? "stop.fill" : "mic.fill")
-                    .font(.system(size: 18, weight: .medium))
-                    .foregroundStyle(speechService.isRecording ? Color.white : Color.nexusPurple)
-                    .scaleEffect(speechService.isRecording ? 0.9 : 1.0)
-            }
-            .overlay {
-                if speechService.isRecording {
-                    Circle()
-                        .stroke(Color.nexusRed.opacity(0.5), lineWidth: 2)
-                        .scaleEffect(1.2)
-                        .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: speechService.isRecording)
-                }
-            }
+        Button { speechService.toggleRecording() } label: {
+            microphoneButtonContent
         }
         .buttonStyle(ScaleButtonStyle())
+    }
+
+    var microphoneButtonContent: some View {
+        ZStack {
+            if speechService.isRecording {
+                microphoneRecordingBackground
+            } else {
+                microphoneIdleBackground
+            }
+
+            Image(systemName: speechService.isRecording ? "stop.fill" : "mic.fill")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(speechService.isRecording ? Color.white : Color.nexusPurple)
+                .scaleEffect(speechService.isRecording ? 0.9 : 1.0)
+        }
+        .overlay {
+            if speechService.isRecording {
+                Circle()
+                    .stroke(Color.nexusRed.opacity(0.5), lineWidth: 2)
+                    .scaleEffect(1.2)
+                    .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: speechService.isRecording)
+            }
+        }
+    }
+
+    var microphoneRecordingBackground: some View {
+        Circle()
+            .fill(Color.nexusRed)
+            .frame(width: 44, height: 44)
+            .overlay {
+                Circle()
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [.nexusRed, .nexusRed.opacity(0.8)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
+            }
+            .shadow(color: Color.nexusRed.opacity(0.4), radius: 8)
+    }
+
+    var microphoneIdleBackground: some View {
+        Circle()
+            .fill(.ultraThinMaterial)
+            .frame(width: 44, height: 44)
+            .overlay {
+                Circle()
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [.white.opacity(0.2), .white.opacity(0.05)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
+            }
+            .shadow(color: .black.opacity(0.1), radius: 8)
     }
 
     var textField: some View {
@@ -471,67 +464,130 @@ private extension AssistantView {
             .lineLimit(1...5)
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .background {
-                Capsule()
-                    .fill(.ultraThinMaterial)
-                    .overlay {
-                        Capsule()
-                            .strokeBorder(
-                                LinearGradient(
-                                    colors: isInputFocused || speechService.isRecording
-                                        ? [.nexusPurple.opacity(0.5), .nexusBlue.opacity(0.3)]
-                                        : [.white.opacity(0.2), .white.opacity(0.05)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                lineWidth: 1
-                            )
-                    }
-                    .shadow(color: .black.opacity(0.05), radius: 8)
-            }
+            .background { textFieldBackground }
             .focused($isInputFocused)
             .disabled(speechService.isRecording)
     }
 
+    var textFieldBackground: some View {
+        Capsule()
+            .fill(.ultraThinMaterial)
+            .overlay {
+                Capsule()
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: isInputFocused || speechService.isRecording
+                                ? [.nexusPurple.opacity(0.5), .nexusBlue.opacity(0.3)]
+                                : [.white.opacity(0.2), .white.opacity(0.05)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
+            }
+            .shadow(color: .black.opacity(0.05), radius: 8)
+    }
+
     var sendButton: some View {
         Button(action: sendMessage) {
-            ZStack {
-                if inputText.isEmpty {
-                    Circle()
-                        .fill(.ultraThinMaterial)
-                        .frame(width: 44, height: 44)
-                        .overlay {
-                            Circle()
-                                .strokeBorder(
-                                    LinearGradient(
-                                        colors: [.white.opacity(0.2), .white.opacity(0.05)],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    ),
-                                    lineWidth: 1
-                                )
-                        }
-                } else {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [.nexusPurple, .nexusBlue],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 44, height: 44)
-                        .shadow(color: Color.nexusPurple.opacity(0.4), radius: 10)
-                }
-
-                Image(systemName: "arrow.up")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(inputText.isEmpty ? Color.secondary : Color.white)
-            }
+            sendButtonContent
         }
         .disabled(inputText.isEmpty || isLoading || speechService.isRecording)
         .scaleEffect(inputText.isEmpty ? 1 : 1.08)
         .animation(.spring(response: 0.3), value: inputText.isEmpty)
+    }
+
+    var sendButtonContent: some View {
+        ZStack {
+            if inputText.isEmpty {
+                sendButtonIdleBackground
+            } else {
+                sendButtonActiveBackground
+            }
+
+            Image(systemName: "arrow.up")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(inputText.isEmpty ? Color.secondary : Color.white)
+        }
+    }
+
+    var sendButtonIdleBackground: some View {
+        Circle()
+            .fill(.ultraThinMaterial)
+            .frame(width: 44, height: 44)
+            .overlay {
+                Circle()
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [.white.opacity(0.2), .white.opacity(0.05)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
+            }
+    }
+
+    var sendButtonActiveBackground: some View {
+        Circle()
+            .fill(
+                LinearGradient(
+                    colors: [.nexusPurple, .nexusBlue],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .frame(width: 44, height: 44)
+            .shadow(color: Color.nexusPurple.opacity(0.4), radius: 10)
+    }
+}
+
+// MARK: - Message Persistence
+
+private extension AssistantView {
+    func loadSavedMessages() {
+        messages = savedMessages.map { saved in
+            ChatMessage(
+                id: saved.id,
+                role: saved.role == "user" ? .user : .assistant,
+                content: saved.content,
+                timestamp: saved.timestamp
+            )
+        }
+    }
+
+    func saveMessage(_ message: ChatMessage) {
+        let savedMessage = ChatMessageModel(
+            id: message.id,
+            role: message.role == .user ? "user" : "assistant",
+            content: message.content,
+            timestamp: message.timestamp
+        )
+        modelContext.insert(savedMessage)
+    }
+
+    func clearAllMessages() {
+        withAnimation { messages.removeAll() }
+        for saved in savedMessages {
+            modelContext.delete(saved)
+        }
+    }
+}
+
+// MARK: - Navigation
+
+private extension AssistantView {
+    func navigateAndDismiss(to destination: AssistantNavigation) {
+        pendingDismissWithNavigation = destination
+    }
+
+    func handlePendingNavigation(_ destination: AssistantNavigation?) {
+        guard let destination else { return }
+        assistantLauncher.navigate(to: destination)
+        pendingDismissWithNavigation = nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            dismiss()
+        }
     }
 }
 
@@ -570,9 +626,7 @@ private extension AssistantView {
     func generateResponse(for input: String) async -> ChatMessage {
         let lowercased = input.lowercased()
 
-        // Check for "open" commands first
         if let openAction = parseOpenAction(lowercased: lowercased) { return openAction }
-
         if let taskAction = parseTaskAction(input: input, lowercased: lowercased) { return taskAction }
         if let noteAction = parseNoteAction(input: input, lowercased: lowercased) { return noteAction }
         if let completeAction = parseCompleteAction(lowercased: lowercased) { return completeAction }
@@ -622,42 +676,54 @@ private extension AssistantView {
         }
 
         if lowercased.contains("can you") || lowercased.contains("help") || lowercased.contains("what can") {
-            return ChatMessage(
-                role: .assistant,
-                content: """
-                I can help you with everything in Nexus:
-
-                📝 **Notes** - Create and summarize notes
-                ✅ **Tasks** - Create tasks, track deadlines, mark complete
-                📅 **Calendar** - View today's events and schedule
-                💰 **Finance** - Analyze spending and budgets
-                🔄 **Subscriptions** - Track recurring payments
-                📈 **Stocks** - View your investment portfolio
-                🏠 **House** - Check utility bills and payments
-                ❤️ **Health** - Log and track health metrics
-
-                **Navigation:**
-                • "Open calendar" / "Open tasks" / "Open finance"
-                • "Go to health" / "Show settings"
-
-                **Quick Actions:**
-                • "What's on my calendar today?"
-                • "Show my subscriptions"
-                • "How's my budget doing?"
-                • "Create task Buy groceries tomorrow"
-                • "Log 8 hours of sleep"
-                """,
-                type: .capabilities
-            )
+            return generateCapabilitiesResponse()
         }
 
-        return ChatMessage(
+        return generateDefaultResponse()
+    }
+
+    func generateCapabilitiesResponse() -> ChatMessage {
+        ChatMessage(
+            role: .assistant,
+            content: """
+            I can help you with everything in Nexus:
+
+            📝 **Notes** - Create and summarize notes
+            ✅ **Tasks** - Create tasks, track deadlines, mark complete
+            📅 **Calendar** - View today's events and schedule
+            💰 **Finance** - Analyze spending and budgets
+            🔄 **Subscriptions** - Track recurring payments
+            📈 **Stocks** - View your investment portfolio
+            🏠 **House** - Check utility bills and payments
+            ❤️ **Health** - Log and track health metrics
+
+            **Navigation:**
+            • "Open calendar" / "Open tasks" / "Open finance"
+            • "Go to health" / "Show settings"
+
+            **Quick Actions:**
+            • "What's on my calendar today?"
+            • "Show my subscriptions"
+            • "How's my budget doing?"
+            • "Create task Buy groceries tomorrow"
+            • "Log 8 hours of sleep"
+            """,
+            type: .capabilities
+        )
+    }
+
+    func generateDefaultResponse() -> ChatMessage {
+        ChatMessage(
             role: .assistant,
             content: "I'm Nexus AI - your personal life assistant! I can help with tasks, notes, calendar, finances, subscriptions, stocks, house utilities, and health tracking. Just ask me anything or say \"What can you do?\" for more details.",
             type: .text
         )
     }
+}
 
+// MARK: - Tasks Response
+
+private extension AssistantView {
     func generateTasksResponse(for input: String) -> ChatMessage {
         let pendingTasks = tasks.filter { !$0.isCompleted }
         let completedTasks = tasks.filter { $0.isCompleted }
@@ -671,37 +737,59 @@ private extension AssistantView {
         }
 
         if input.contains("today") {
-            if todayTasks.isEmpty {
-                return ChatMessage(role: .assistant, content: "You have no tasks due today. Enjoy your free day! 🎉", type: .text)
-            }
-            let taskList = todayTasks.prefix(5).map { "• \($0.title)" }.joined(separator: "\n")
-            return ChatMessage(
-                role: .assistant,
-                content: "📅 **Tasks Due Today** (\(todayTasks.count))\n\n\(taskList)\(todayTasks.count > 5 ? "\n...and \(todayTasks.count - 5) more" : "")\n\n\(todayTasks.count == 1 ? "Just one task" : "You've got this!") 💪",
-                type: .taskList(count: todayTasks.count)
-            )
+            return generateTodayTasksResponse(todayTasks)
         }
 
         if input.contains("overdue") || input.contains("late") {
-            if overdueTasks.isEmpty {
-                return ChatMessage(role: .assistant, content: "Great news! You have no overdue tasks. You're on top of things! ⭐", type: .text)
-            }
-            let taskList = overdueTasks.prefix(5).map { "• \($0.title)" }.joined(separator: "\n")
-            return ChatMessage(
-                role: .assistant,
-                content: "⚠️ **Overdue Tasks** (\(overdueTasks.count))\n\n\(taskList)\n\nConsider tackling these soon!",
-                type: .taskList(count: overdueTasks.count)
-            )
+            return generateOverdueTasksResponse(overdueTasks)
         }
 
-        let completionRate = tasks.isEmpty ? 0 : Int((Double(completedTasks.count) / Double(tasks.count)) * 100)
-        return ChatMessage(
-            role: .assistant,
-            content: "📊 **Task Overview**\n\n• **Pending:** \(pendingTasks.count) tasks\n• **Completed:** \(completedTasks.count) tasks\n• **Due Today:** \(todayTasks.count) tasks\n• **Overdue:** \(overdueTasks.count) tasks\n\nCompletion rate: **\(completionRate)%** \(completionRate >= 70 ? "🌟" : completionRate >= 50 ? "👍" : "💪")",
-            type: .stats
+        return generateTaskOverviewResponse(
+            pending: pendingTasks.count,
+            completed: completedTasks.count,
+            today: todayTasks.count,
+            overdue: overdueTasks.count,
+            total: tasks.count
         )
     }
 
+    func generateTodayTasksResponse(_ todayTasks: [TaskModel]) -> ChatMessage {
+        if todayTasks.isEmpty {
+            return ChatMessage(role: .assistant, content: "You have no tasks due today. Enjoy your free day! 🎉", type: .text)
+        }
+        let taskList = todayTasks.prefix(5).map { "• \($0.title)" }.joined(separator: "\n")
+        return ChatMessage(
+            role: .assistant,
+            content: "📅 **Tasks Due Today** (\(todayTasks.count))\n\n\(taskList)\(todayTasks.count > 5 ? "\n...and \(todayTasks.count - 5) more" : "")\n\n\(todayTasks.count == 1 ? "Just one task" : "You've got this!") 💪",
+            type: .taskList(count: todayTasks.count)
+        )
+    }
+
+    func generateOverdueTasksResponse(_ overdueTasks: [TaskModel]) -> ChatMessage {
+        if overdueTasks.isEmpty {
+            return ChatMessage(role: .assistant, content: "Great news! You have no overdue tasks. You're on top of things! ⭐", type: .text)
+        }
+        let taskList = overdueTasks.prefix(5).map { "• \($0.title)" }.joined(separator: "\n")
+        return ChatMessage(
+            role: .assistant,
+            content: "⚠️ **Overdue Tasks** (\(overdueTasks.count))\n\n\(taskList)\n\nConsider tackling these soon!",
+            type: .taskList(count: overdueTasks.count)
+        )
+    }
+
+    func generateTaskOverviewResponse(pending: Int, completed: Int, today: Int, overdue: Int, total: Int) -> ChatMessage {
+        let completionRate = total == 0 ? 0 : Int((Double(completed) / Double(total)) * 100)
+        return ChatMessage(
+            role: .assistant,
+            content: "📊 **Task Overview**\n\n• **Pending:** \(pending) tasks\n• **Completed:** \(completed) tasks\n• **Due Today:** \(today) tasks\n• **Overdue:** \(overdue) tasks\n\nCompletion rate: **\(completionRate)%** \(completionRate >= 70 ? "🌟" : completionRate >= 50 ? "👍" : "💪")",
+            type: .stats
+        )
+    }
+}
+
+// MARK: - Notes Response
+
+private extension AssistantView {
     func generateNotesResponse(for input: String) -> ChatMessage {
         if notes.isEmpty {
             return ChatMessage(role: .assistant, content: "You haven't created any notes yet. Start capturing your thoughts by tapping the + button in the Notes tab!", type: .text)
@@ -720,7 +808,11 @@ private extension AssistantView {
             type: .notesSummary(count: notes.count)
         )
     }
+}
 
+// MARK: - Finance Response
+
+private extension AssistantView {
     func generateFinanceResponse(for input: String) -> ChatMessage {
         if transactions.isEmpty {
             return ChatMessage(role: .assistant, content: "You haven't logged any transactions yet. Start tracking your finances by adding income and expenses in the Finance tab!", type: .text)
@@ -745,7 +837,11 @@ private extension AssistantView {
             type: .financeSummary(balance: balance)
         )
     }
+}
 
+// MARK: - Health Response
+
+private extension AssistantView {
     func generateHealthResponse(for input: String) -> ChatMessage {
         if healthEntries.isEmpty {
             return ChatMessage(role: .assistant, content: "You haven't logged any health data yet. Start tracking your wellness journey in the Health tab!", type: .text)
@@ -774,7 +870,11 @@ private extension AssistantView {
 
         return ChatMessage(role: .assistant, content: healthSummary, type: .healthSummary)
     }
+}
 
+// MARK: - Subscriptions Response
+
+private extension AssistantView {
     func generateSubscriptionsResponse(for input: String) -> ChatMessage {
         if subscriptions.isEmpty {
             return ChatMessage(role: .assistant, content: "You haven't added any subscriptions yet. Add your recurring services like Netflix, Spotify, or gym memberships in the Finance tab!", type: .text)
@@ -791,7 +891,11 @@ private extension AssistantView {
             type: .stats
         )
     }
+}
 
+// MARK: - Calendar Response
+
+private extension AssistantView {
     func generateCalendarResponse(for input: String) async -> ChatMessage {
         guard calendarService.isAuthorized else {
             return ChatMessage(role: .assistant, content: "Calendar access is not authorized. Please enable calendar access in the Calendar tab to view your events.", type: .text)
@@ -801,147 +905,19 @@ private extension AssistantView {
             let formatter = DateFormatter()
             formatter.timeStyle = .short
 
-            // Check what type of calendar query
             if input.contains("today") || input.contains("schedule") {
-                let events = try await calendarService.fetchTodayEvents()
-                lastMentionedEvents = events // Store for "open" commands
-
-                if events.isEmpty {
-                    return ChatMessage(
-                        role: .assistant,
-                        content: "📅 **Today's Schedule**\n\nNo events scheduled for today. Enjoy your free day!",
-                        type: .text
-                    )
-                }
-
-                let allDayEvents = events.filter { $0.isAllDay }
-                let timedEvents = events.filter { !$0.isAllDay }
-
-                var response = "📅 **Today's Schedule** (\(events.count) events)\n\n"
-
-                if !allDayEvents.isEmpty {
-                    response += "**All Day:**\n"
-                    for (index, event) in allDayEvents.enumerated() {
-                        response += "\(index + 1). \(event.title)\n"
-                    }
-                    response += "\n"
-                }
-
-                if !timedEvents.isEmpty {
-                    response += "**Scheduled:**\n"
-                    let startIndex = allDayEvents.count
-                    for (index, event) in timedEvents.prefix(8).enumerated() {
-                        let time = formatter.string(from: event.startDate)
-                        let location = event.location.map { " 📍 \($0)" } ?? ""
-                        response += "\(startIndex + index + 1). **\(time)** - \(event.title)\(location)\n"
-                    }
-                    if timedEvents.count > 8 {
-                        response += "\n...and \(timedEvents.count - 8) more events"
-                    }
-                }
-
-                response += "\n💡 *Say \"open 1\" or \"open [event name]\" to view details*"
-
-                return ChatMessage(role: .assistant, content: response, type: .stats)
+                return try await generateTodayCalendarResponse(formatter: formatter)
             }
 
             if input.contains("tomorrow") {
-                let calendar = Calendar.current
-                let tomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: Date()))!
-                let dayAfter = calendar.date(byAdding: .day, value: 1, to: tomorrow)!
-                let events = try await calendarService.fetchEvents(from: tomorrow, to: dayAfter)
-                lastMentionedEvents = events // Store for "open" commands
-
-                if events.isEmpty {
-                    return ChatMessage(role: .assistant, content: "📅 **Tomorrow's Schedule**\n\nNo events scheduled for tomorrow.", type: .text)
-                }
-
-                var response = "📅 **Tomorrow's Schedule** (\(events.count) events)\n\n"
-                for (index, event) in events.prefix(8).enumerated() {
-                    if event.isAllDay {
-                        response += "\(index + 1). **All Day** - \(event.title)\n"
-                    } else {
-                        let time = formatter.string(from: event.startDate)
-                        response += "\(index + 1). **\(time)** - \(event.title)\n"
-                    }
-                }
-                if events.count > 8 {
-                    response += "\n...and \(events.count - 8) more events"
-                }
-
-                response += "\n💡 *Say \"open 1\" or \"open [event name]\" to view details*"
-
-                return ChatMessage(role: .assistant, content: response, type: .stats)
+                return try await generateTomorrowCalendarResponse(formatter: formatter)
             }
 
             if input.contains("week") || input.contains("upcoming") {
-                let events = try await calendarService.fetchUpcomingEvents(days: 7)
-                lastMentionedEvents = events // Store for "open" commands
-
-                if events.isEmpty {
-                    return ChatMessage(role: .assistant, content: "📅 **This Week**\n\nNo events scheduled for the next 7 days.", type: .text)
-                }
-
-                let dayFormatter = DateFormatter()
-                dayFormatter.dateFormat = "EEEE, MMM d"
-
-                let grouped = Dictionary(grouping: events) { event in
-                    Calendar.current.startOfDay(for: event.startDate)
-                }
-
-                var response = "📅 **Upcoming Events** (\(events.count) this week)\n\n"
-                var eventIndex = 1
-                for date in grouped.keys.sorted().prefix(5) {
-                    let dayEvents = grouped[date] ?? []
-                    response += "**\(dayFormatter.string(from: date)):**\n"
-                    for event in dayEvents.prefix(3) {
-                        if event.isAllDay {
-                            response += "\(eventIndex). \(event.title)\n"
-                        } else {
-                            let time = formatter.string(from: event.startDate)
-                            response += "\(eventIndex). \(time) - \(event.title)\n"
-                        }
-                        eventIndex += 1
-                    }
-                    if dayEvents.count > 3 {
-                        response += "  ...+\(dayEvents.count - 3) more\n"
-                    }
-                    response += "\n"
-                }
-
-                response += "💡 *Say \"open 1\" or \"open [event name]\" to view details*"
-
-                return ChatMessage(role: .assistant, content: response, type: .stats)
+                return try await generateWeekCalendarResponse(formatter: formatter)
             }
 
-            // Default: show today's events
-            let events = try await calendarService.fetchTodayEvents()
-            lastMentionedEvents = events // Store for "open" commands
-
-            if events.isEmpty {
-                return ChatMessage(
-                    role: .assistant,
-                    content: "📅 **Calendar**\n\nNo events today. Ask me about \"tomorrow's events\" or \"this week's schedule\" for upcoming events!",
-                    type: .text
-                )
-            }
-
-            var response = "📅 **Today** (\(events.count) events)\n\n"
-            for (index, event) in events.prefix(5).enumerated() {
-                if event.isAllDay {
-                    response += "\(index + 1). **All Day** - \(event.title)\n"
-                } else {
-                    let time = formatter.string(from: event.startDate)
-                    response += "\(index + 1). **\(time)** - \(event.title)\n"
-                }
-            }
-            if events.count > 5 {
-                response += "\n...and \(events.count - 5) more events"
-            }
-
-            response += "\n💡 *Say \"open 1\" or \"open [event name]\" to view details*"
-
-            return ChatMessage(role: .assistant, content: response, type: .stats)
+            return try await generateDefaultCalendarResponse(formatter: formatter)
 
         } catch {
             return ChatMessage(
@@ -952,6 +928,152 @@ private extension AssistantView {
         }
     }
 
+    func generateTodayCalendarResponse(formatter: DateFormatter) async throws -> ChatMessage {
+        let events = try await calendarService.fetchTodayEvents()
+        lastMentionedEvents = events
+
+        if events.isEmpty {
+            return ChatMessage(
+                role: .assistant,
+                content: "📅 **Today's Schedule**\n\nNo events scheduled for today. Enjoy your free day!",
+                type: .text
+            )
+        }
+
+        let allDayEvents = events.filter { $0.isAllDay }
+        let timedEvents = events.filter { !$0.isAllDay }
+
+        var response = "📅 **Today's Schedule** (\(events.count) events)\n\n"
+
+        if !allDayEvents.isEmpty {
+            response += "**All Day:**\n"
+            for (index, event) in allDayEvents.enumerated() {
+                response += "\(index + 1). \(event.title)\n"
+            }
+            response += "\n"
+        }
+
+        if !timedEvents.isEmpty {
+            response += "**Scheduled:**\n"
+            let startIndex = allDayEvents.count
+            for (index, event) in timedEvents.prefix(8).enumerated() {
+                let time = formatter.string(from: event.startDate)
+                let location = event.location.map { " 📍 \($0)" } ?? ""
+                response += "\(startIndex + index + 1). **\(time)** - \(event.title)\(location)\n"
+            }
+            if timedEvents.count > 8 {
+                response += "\n...and \(timedEvents.count - 8) more events"
+            }
+        }
+
+        response += "\n💡 *Say \"open 1\" or \"open [event name]\" to view details*"
+
+        return ChatMessage(role: .assistant, content: response, type: .stats)
+    }
+
+    func generateTomorrowCalendarResponse(formatter: DateFormatter) async throws -> ChatMessage {
+        let calendar = Calendar.current
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: Date()))!
+        let dayAfter = calendar.date(byAdding: .day, value: 1, to: tomorrow)!
+        let events = try await calendarService.fetchEvents(from: tomorrow, to: dayAfter)
+        lastMentionedEvents = events
+
+        if events.isEmpty {
+            return ChatMessage(role: .assistant, content: "📅 **Tomorrow's Schedule**\n\nNo events scheduled for tomorrow.", type: .text)
+        }
+
+        var response = "📅 **Tomorrow's Schedule** (\(events.count) events)\n\n"
+        for (index, event) in events.prefix(8).enumerated() {
+            if event.isAllDay {
+                response += "\(index + 1). **All Day** - \(event.title)\n"
+            } else {
+                let time = formatter.string(from: event.startDate)
+                response += "\(index + 1). **\(time)** - \(event.title)\n"
+            }
+        }
+        if events.count > 8 {
+            response += "\n...and \(events.count - 8) more events"
+        }
+
+        response += "\n💡 *Say \"open 1\" or \"open [event name]\" to view details*"
+
+        return ChatMessage(role: .assistant, content: response, type: .stats)
+    }
+
+    func generateWeekCalendarResponse(formatter: DateFormatter) async throws -> ChatMessage {
+        let events = try await calendarService.fetchUpcomingEvents(days: 7)
+        lastMentionedEvents = events
+
+        if events.isEmpty {
+            return ChatMessage(role: .assistant, content: "📅 **This Week**\n\nNo events scheduled for the next 7 days.", type: .text)
+        }
+
+        let dayFormatter = DateFormatter()
+        dayFormatter.dateFormat = "EEEE, MMM d"
+
+        let grouped = Dictionary(grouping: events) { event in
+            Calendar.current.startOfDay(for: event.startDate)
+        }
+
+        var response = "📅 **Upcoming Events** (\(events.count) this week)\n\n"
+        var eventIndex = 1
+        for date in grouped.keys.sorted().prefix(5) {
+            let dayEvents = grouped[date] ?? []
+            response += "**\(dayFormatter.string(from: date)):**\n"
+            for event in dayEvents.prefix(3) {
+                if event.isAllDay {
+                    response += "\(eventIndex). \(event.title)\n"
+                } else {
+                    let time = formatter.string(from: event.startDate)
+                    response += "\(eventIndex). \(time) - \(event.title)\n"
+                }
+                eventIndex += 1
+            }
+            if dayEvents.count > 3 {
+                response += "  ...+\(dayEvents.count - 3) more\n"
+            }
+            response += "\n"
+        }
+
+        response += "💡 *Say \"open 1\" or \"open [event name]\" to view details*"
+
+        return ChatMessage(role: .assistant, content: response, type: .stats)
+    }
+
+    func generateDefaultCalendarResponse(formatter: DateFormatter) async throws -> ChatMessage {
+        let events = try await calendarService.fetchTodayEvents()
+        lastMentionedEvents = events
+
+        if events.isEmpty {
+            return ChatMessage(
+                role: .assistant,
+                content: "📅 **Calendar**\n\nNo events today. Ask me about \"tomorrow's events\" or \"this week's schedule\" for upcoming events!",
+                type: .text
+            )
+        }
+
+        var response = "📅 **Today** (\(events.count) events)\n\n"
+        for (index, event) in events.prefix(5).enumerated() {
+            if event.isAllDay {
+                response += "\(index + 1). **All Day** - \(event.title)\n"
+            } else {
+                let time = formatter.string(from: event.startDate)
+                response += "\(index + 1). **\(time)** - \(event.title)\n"
+            }
+        }
+        if events.count > 5 {
+            response += "\n...and \(events.count - 5) more events"
+        }
+
+        response += "\n💡 *Say \"open 1\" or \"open [event name]\" to view details*"
+
+        return ChatMessage(role: .assistant, content: response, type: .stats)
+    }
+}
+
+// MARK: - Budget Response
+
+private extension AssistantView {
     func generateBudgetResponse(for input: String) -> ChatMessage {
         if budgets.isEmpty {
             return ChatMessage(role: .assistant, content: "You haven't created any budgets yet. Set up budgets in the Finance tab to track your spending by category!", type: .text)
@@ -984,7 +1106,11 @@ private extension AssistantView {
             .filter { $0.date >= budget.currentPeriodStart && $0.date <= budget.currentPeriodEnd }
             .reduce(0) { $0 + $1.amount }
     }
+}
 
+// MARK: - Stocks Response
+
+private extension AssistantView {
     func generateStocksResponse(for input: String) -> ChatMessage {
         if stocks.isEmpty {
             return ChatMessage(role: .assistant, content: "You haven't added any stocks to your portfolio yet. Track your investments by adding stocks in the Finance > Stocks section!", type: .text)
@@ -1002,7 +1128,11 @@ private extension AssistantView {
             type: .stats
         )
     }
+}
 
+// MARK: - House Response
+
+private extension AssistantView {
     func generateHouseResponse(for input: String) -> ChatMessage {
         if houses.isEmpty {
             return ChatMessage(role: .assistant, content: "You haven't added any properties yet. Add your house or apartment in the Finance > House section to track utility bills!", type: .text)
@@ -1077,99 +1207,88 @@ private extension AssistantView {
         }
         return nil
     }
+}
 
+// MARK: - Open Action Parsing
+
+private extension AssistantView {
     func parseOpenAction(lowercased: String) -> ChatMessage? {
         let openPatterns = ["open ", "go to ", "show me ", "take me to ", "navigate to ", "switch to ", "view "]
 
         for pattern in openPatterns {
-            if lowercased.contains(pattern) {
-                // Check for specific event by number (e.g., "open 1", "open event 2")
-                if let eventResult = tryOpenEventByNumber(lowercased) {
-                    return eventResult
-                }
+            guard lowercased.contains(pattern) else { continue }
 
-                // Check for specific event by name (e.g., "open meeting with John")
-                if let eventResult = tryOpenEventByName(lowercased) {
-                    return eventResult
-                }
+            if let eventResult = tryOpenEventByNumber(lowercased) { return eventResult }
+            if let eventResult = tryOpenEventByName(lowercased) { return eventResult }
 
-                // Check for "open that", "open it" referring to last mentioned event
-                if lowercased.contains("that") || lowercased.contains(" it") || lowercased.contains("first") || lowercased.contains("last") {
-                    if let eventResult = tryOpenContextualEvent(lowercased) {
-                        return eventResult
-                    }
-                }
-
-                // Calendar
-                if lowercased.contains("calendar") || lowercased.contains("schedule") || lowercased.contains("events") {
-                    navigateAndDismiss(to: .calendar)
-                    return ChatMessage(role: .assistant, content: "📅 Opening Calendar...", type: .action(icon: "calendar", label: "Open Calendar"))
-                }
-
-                // Tasks
-                if lowercased.contains("task") || lowercased.contains("todo") || lowercased.contains("to-do") {
-                    navigateAndDismiss(to: .tab(.tasks))
-                    return ChatMessage(role: .assistant, content: "✅ Opening Tasks...", type: .action(icon: "checkmark.circle", label: "Open Tasks"))
-                }
-
-                // Finance
-                if lowercased.contains("finance") || lowercased.contains("money") || lowercased.contains("budget") ||
-                   lowercased.contains("expense") || lowercased.contains("transaction") {
-                    navigateAndDismiss(to: .tab(.finance))
-                    return ChatMessage(role: .assistant, content: "💰 Opening Finance...", type: .action(icon: "creditcard", label: "Open Finance"))
-                }
-
-                // Subscriptions
-                if lowercased.contains("subscription") {
-                    navigateAndDismiss(to: .tab(.finance))
-                    return ChatMessage(role: .assistant, content: "🔄 Opening Subscriptions...", type: .action(icon: "arrow.triangle.2.circlepath", label: "Open Subscriptions"))
-                }
-
-                // Stocks
-                if lowercased.contains("stock") || lowercased.contains("portfolio") || lowercased.contains("investment") {
-                    navigateAndDismiss(to: .tab(.finance))
-                    return ChatMessage(role: .assistant, content: "📈 Opening Stocks...", type: .action(icon: "chart.line.uptrend.xyaxis", label: "Open Stocks"))
-                }
-
-                // Health
-                if lowercased.contains("health") || lowercased.contains("wellness") || lowercased.contains("fitness") {
-                    navigateAndDismiss(to: .tab(.health))
-                    return ChatMessage(role: .assistant, content: "❤️ Opening Health...", type: .action(icon: "heart", label: "Open Health"))
-                }
-
-                // Home
-                if lowercased.contains("home") || lowercased.contains("dashboard") {
-                    navigateAndDismiss(to: .tab(.home))
-                    return ChatMessage(role: .assistant, content: "🏠 Opening Home...", type: .action(icon: "house", label: "Open Home"))
-                }
-
-                // Notes
-                if lowercased.contains("note") {
-                    navigateAndDismiss(to: .tab(.home))
-                    return ChatMessage(role: .assistant, content: "📝 Opening Notes...", type: .action(icon: "doc.text", label: "Open Notes"))
-                }
-
-                // Settings
-                if lowercased.contains("setting") {
-                    navigateAndDismiss(to: .settings)
-                    return ChatMessage(role: .assistant, content: "⚙️ Opening Settings...", type: .action(icon: "gear", label: "Open Settings"))
-                }
-
-                // House/Property
-                if lowercased.contains("house") || lowercased.contains("property") || lowercased.contains("utilit") {
-                    navigateAndDismiss(to: .tab(.finance))
-                    return ChatMessage(role: .assistant, content: "🏠 Opening House...", type: .action(icon: "house", label: "Open House"))
-                }
+            if lowercased.contains("that") || lowercased.contains(" it") || lowercased.contains("first") || lowercased.contains("last") {
+                if let eventResult = tryOpenContextualEvent(lowercased) { return eventResult }
             }
+
+            return parseNavigationDestination(lowercased)
         }
 
         return nil
     }
 
-    private func tryOpenEventByNumber(_ input: String) -> ChatMessage? {
+    func parseNavigationDestination(_ lowercased: String) -> ChatMessage? {
+        if lowercased.contains("calendar") || lowercased.contains("schedule") || lowercased.contains("events") {
+            navigateAndDismiss(to: .calendar)
+            return ChatMessage(role: .assistant, content: "📅 Opening Calendar...", type: .action(icon: "calendar", label: "Open Calendar"))
+        }
+
+        if lowercased.contains("task") || lowercased.contains("todo") || lowercased.contains("to-do") {
+            navigateAndDismiss(to: .tab(.tasks))
+            return ChatMessage(role: .assistant, content: "✅ Opening Tasks...", type: .action(icon: "checkmark.circle", label: "Open Tasks"))
+        }
+
+        if lowercased.contains("finance") || lowercased.contains("money") || lowercased.contains("budget") ||
+           lowercased.contains("expense") || lowercased.contains("transaction") {
+            navigateAndDismiss(to: .tab(.finance))
+            return ChatMessage(role: .assistant, content: "💰 Opening Finance...", type: .action(icon: "creditcard", label: "Open Finance"))
+        }
+
+        if lowercased.contains("subscription") {
+            navigateAndDismiss(to: .tab(.finance))
+            return ChatMessage(role: .assistant, content: "🔄 Opening Subscriptions...", type: .action(icon: "arrow.triangle.2.circlepath", label: "Open Subscriptions"))
+        }
+
+        if lowercased.contains("stock") || lowercased.contains("portfolio") || lowercased.contains("investment") {
+            navigateAndDismiss(to: .tab(.finance))
+            return ChatMessage(role: .assistant, content: "📈 Opening Stocks...", type: .action(icon: "chart.line.uptrend.xyaxis", label: "Open Stocks"))
+        }
+
+        if lowercased.contains("health") || lowercased.contains("wellness") || lowercased.contains("fitness") {
+            navigateAndDismiss(to: .tab(.health))
+            return ChatMessage(role: .assistant, content: "❤️ Opening Health...", type: .action(icon: "heart", label: "Open Health"))
+        }
+
+        if lowercased.contains("home") || lowercased.contains("dashboard") {
+            navigateAndDismiss(to: .tab(.home))
+            return ChatMessage(role: .assistant, content: "🏠 Opening Home...", type: .action(icon: "house", label: "Open Home"))
+        }
+
+        if lowercased.contains("note") {
+            navigateAndDismiss(to: .tab(.home))
+            return ChatMessage(role: .assistant, content: "📝 Opening Notes...", type: .action(icon: "doc.text", label: "Open Notes"))
+        }
+
+        if lowercased.contains("setting") {
+            navigateAndDismiss(to: .settings)
+            return ChatMessage(role: .assistant, content: "⚙️ Opening Settings...", type: .action(icon: "gear", label: "Open Settings"))
+        }
+
+        if lowercased.contains("house") || lowercased.contains("property") || lowercased.contains("utilit") {
+            navigateAndDismiss(to: .tab(.finance))
+            return ChatMessage(role: .assistant, content: "🏠 Opening House...", type: .action(icon: "house", label: "Open House"))
+        }
+
+        return nil
+    }
+
+    func tryOpenEventByNumber(_ input: String) -> ChatMessage? {
         guard !lastMentionedEvents.isEmpty else { return nil }
 
-        // Extract number from input (e.g., "open 1", "open event 3", "show me number 2")
         let pattern = #"(?:open|show|view)\s*(?:event|number|#)?\s*(\d+)"#
         guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
               let match = regex.firstMatch(in: input, range: NSRange(input.startIndex..., in: input)),
@@ -1178,7 +1297,7 @@ private extension AssistantView {
             return nil
         }
 
-        let index = number - 1 // Convert to 0-based index
+        let index = number - 1
         guard index >= 0, index < lastMentionedEvents.count else {
             return ChatMessage(
                 role: .assistant,
@@ -1196,15 +1315,13 @@ private extension AssistantView {
         )
     }
 
-    private func tryOpenEventByName(_ input: String) -> ChatMessage? {
+    func tryOpenEventByName(_ input: String) -> ChatMessage? {
         guard !lastMentionedEvents.isEmpty else { return nil }
 
-        // Try to match event by title
         for event in lastMentionedEvents {
             let titleLowercased = event.title.lowercased()
             let words = titleLowercased.split(separator: " ").map(String.init)
 
-            // Check if any significant word from the event title is in the input
             for word in words where word.count > 3 {
                 if input.contains(word) {
                     selectedEventToShow = event
@@ -1220,12 +1337,8 @@ private extension AssistantView {
         return nil
     }
 
-    private func tryOpenContextualEvent(_ input: String) -> ChatMessage? {
+    func tryOpenContextualEvent(_ input: String) -> ChatMessage? {
         guard !lastMentionedEvents.isEmpty else { return nil }
-
-        // "open that", "open it" - typically refers to first or most recent
-        // "open first" - first event
-        // "open last" - last event
 
         let event: CalendarEvent?
         if input.contains("last") {
@@ -1234,7 +1347,7 @@ private extension AssistantView {
             event = lastMentionedEvents.first
         }
 
-        if let event = event {
+        if let event {
             selectedEventToShow = event
             return ChatMessage(
                 role: .assistant,
@@ -1245,7 +1358,11 @@ private extension AssistantView {
 
         return nil
     }
+}
 
+// MARK: - Create Actions
+
+private extension AssistantView {
     func createSubscription(from content: String, input: String) -> ChatMessage {
         var name = content
         var amount: Double = 0
@@ -1561,6 +1678,8 @@ private extension AssistantView {
         return formatter.string(from: NSNumber(value: amount)) ?? "$0"
     }
 }
+
+// MARK: - Preview
 
 #Preview {
     AssistantView()
