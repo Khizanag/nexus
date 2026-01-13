@@ -28,8 +28,12 @@ struct CalendarMonthView: View {
         }
         .gesture(swipeGesture)
     }
+}
 
-    private var monthHeader: some View {
+// MARK: - Subviews
+
+private extension CalendarMonthView {
+    var monthHeader: some View {
         HStack {
             Button { previousMonth() } label: {
                 Image(systemName: "chevron.left")
@@ -63,7 +67,7 @@ struct CalendarMonthView: View {
         .padding(.horizontal, 8)
     }
 
-    private var weekdayHeaders: some View {
+    var weekdayHeaders: some View {
         LazyVGrid(columns: columns, spacing: 0) {
             ForEach(calendar.shortWeekdaySymbols, id: \.self) { symbol in
                 Text(symbol.prefix(2))
@@ -76,7 +80,7 @@ struct CalendarMonthView: View {
         .padding(.horizontal, 12)
     }
 
-    private var monthGrid: some View {
+    var monthGrid: some View {
         LazyVGrid(columns: columns, spacing: 4) {
             ForEach(daysInMonth, id: \.self) { date in
                 CalendarDayCell(
@@ -97,7 +101,7 @@ struct CalendarMonthView: View {
         .padding(.horizontal, 12)
     }
 
-    private var selectedDayEventsSection: some View {
+    var selectedDayEventsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text(selectedDate.formatted(.dateTime.weekday(.wide).month().day()))
@@ -124,7 +128,7 @@ struct CalendarMonthView: View {
         }
     }
 
-    private var swipeGesture: some Gesture {
+    var swipeGesture: some Gesture {
         DragGesture()
             .updating($dragOffset) { value, state, _ in
                 state = value.translation.width
@@ -138,8 +142,12 @@ struct CalendarMonthView: View {
                 }
             }
     }
+}
 
-    private var daysInMonth: [Date] {
+// MARK: - Computed Properties
+
+private extension CalendarMonthView {
+    var daysInMonth: [Date] {
         guard let monthInterval = calendar.dateInterval(of: .month, for: currentMonth),
               let monthFirstWeek = calendar.dateInterval(of: .weekOfMonth, for: monthInterval.start),
               let monthLastWeek = calendar.dateInterval(of: .weekOfMonth, for: monthInterval.end - 1) else {
@@ -157,11 +165,11 @@ struct CalendarMonthView: View {
         return dates
     }
 
-    private var selectedDayEvents: [CalendarEvent] {
+    var selectedDayEvents: [CalendarEvent] {
         eventsFor(selectedDate)
     }
 
-    private func eventsFor(_ date: Date) -> [CalendarEvent] {
+    func eventsFor(_ date: Date) -> [CalendarEvent] {
         events.filter { event in
             if event.isAllDay {
                 return calendar.isDate(event.startDate, inSameDayAs: date)
@@ -171,12 +179,16 @@ struct CalendarMonthView: View {
         }
         .sorted { $0.startDate < $1.startDate }
     }
+}
 
-    private func previousMonth() {
+// MARK: - Actions
+
+private extension CalendarMonthView {
+    func previousMonth() {
         currentMonth = calendar.date(byAdding: .month, value: -1, to: currentMonth) ?? currentMonth
     }
 
-    private func nextMonth() {
+    func nextMonth() {
         currentMonth = calendar.date(byAdding: .month, value: 1, to: currentMonth) ?? currentMonth
     }
 }
