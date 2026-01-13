@@ -135,8 +135,12 @@ struct TransactionEditorView: View {
             }
         }
     }
+}
 
-    private func saveTransaction() {
+// MARK: - Actions
+
+private extension TransactionEditorView {
+    func saveTransaction() {
         guard let amountValue = Double(amount) else { return }
 
         if let existingTransaction = transaction {
@@ -163,7 +167,7 @@ struct TransactionEditorView: View {
         dismiss()
     }
 
-    private func deleteTransaction() {
+    func deleteTransaction() {
         if let transaction {
             modelContext.delete(transaction)
         }

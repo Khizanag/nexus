@@ -6,6 +6,7 @@ final class TaskModel {
     var id: UUID = UUID()
     var title: String = ""
     var notes: String = ""
+    var url: String?
     var isCompleted: Bool = false
     var priority: TaskPriority = TaskPriority.medium
     var dueDate: Date?
@@ -23,10 +24,14 @@ final class TaskModel {
     @Relationship
     var group: TaskGroupModel?
 
+    @Relationship(deleteRule: .nullify)
+    var assignees: [PersonModel]?
+
     init(
         id: UUID = UUID(),
         title: String = "",
         notes: String = "",
+        url: String? = nil,
         isCompleted: Bool = false,
         priority: TaskPriority = .medium,
         dueDate: Date? = nil,
@@ -36,11 +41,13 @@ final class TaskModel {
         reminderDate: Date? = nil,
         tags: [TagModel]? = nil,
         subtasks: [SubtaskModel]? = nil,
-        group: TaskGroupModel? = nil
+        group: TaskGroupModel? = nil,
+        assignees: [PersonModel]? = nil
     ) {
         self.id = id
         self.title = title
         self.notes = notes
+        self.url = url
         self.isCompleted = isCompleted
         self.priority = priority
         self.dueDate = dueDate
@@ -51,6 +58,7 @@ final class TaskModel {
         self.tags = tags
         self.subtasks = subtasks
         self.group = group
+        self.assignees = assignees
     }
 }
 

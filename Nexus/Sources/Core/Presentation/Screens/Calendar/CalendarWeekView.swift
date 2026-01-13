@@ -61,8 +61,12 @@ struct CalendarWeekView: View {
                 }
         )
     }
+}
 
-    private var weekHeader: some View {
+// MARK: - Subviews
+
+private extension CalendarWeekView {
+    var weekHeader: some View {
         HStack {
             Button {
                 withAnimation(.spring(response: 0.3)) {
@@ -105,7 +109,7 @@ struct CalendarWeekView: View {
         .padding(.vertical, 4)
     }
 
-    private var weekDayHeaders: some View {
+    var weekDayHeaders: some View {
         HStack(spacing: 0) {
             Text("")
                 .frame(width: 50)
@@ -137,7 +141,7 @@ struct CalendarWeekView: View {
         .background(Color.nexusSurface)
     }
 
-    private var weekTimeGrid: some View {
+    var weekTimeGrid: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 ZStack(alignment: .topLeading) {
@@ -162,7 +166,7 @@ struct CalendarWeekView: View {
         }
     }
 
-    private var timeLabels: some View {
+    var timeLabels: some View {
         VStack(spacing: 0) {
             ForEach(0..<24) { hour in
                 Text(formatHour(hour))
@@ -175,7 +179,7 @@ struct CalendarWeekView: View {
         }
     }
 
-    private var daysColumns: some View {
+    var daysColumns: some View {
         HStack(spacing: 0) {
             ForEach(weekDates, id: \.self) { date in
                 ZStack(alignment: .top) {
@@ -199,7 +203,7 @@ struct CalendarWeekView: View {
         }
     }
 
-    private func weekEventBlock(event: CalendarEvent, date: Date) -> some View {
+    func weekEventBlock(event: CalendarEvent, date: Date) -> some View {
         let startOfDay = calendar.startOfDay(for: date)
         let startMinutes = calendar.dateComponents([.hour, .minute], from: event.startDate)
         let endMinutes = calendar.dateComponents([.hour, .minute], from: event.endDate)
@@ -229,7 +233,7 @@ struct CalendarWeekView: View {
     }
 
     @ViewBuilder
-    private var currentTimeIndicatorForWeek: some View {
+    var currentTimeIndicatorForWeek: some View {
         if weekOffset == 0 {
             let now = Date()
             let todayIndex = weekDates.firstIndex(where: { calendar.isDate($0, inSameDayAs: now) })
@@ -256,21 +260,25 @@ struct CalendarWeekView: View {
             }
         }
     }
+}
 
-    private func eventsFor(_ date: Date) -> [CalendarEvent] {
+// MARK: - Helpers
+
+private extension CalendarWeekView {
+    func eventsFor(_ date: Date) -> [CalendarEvent] {
         events.filter { event in
             calendar.isDate(event.startDate, inSameDayAs: date) ||
             (event.startDate < date && event.endDate > date)
         }
     }
 
-    private func dayOfWeek(_ date: Date) -> String {
+    func dayOfWeek(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "EEE"
         return formatter.string(from: date).uppercased()
     }
 
-    private func formatHour(_ hour: Int) -> String {
+    func formatHour(_ hour: Int) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "ha"
         let date = calendar.date(bySettingHour: hour, minute: 0, second: 0, of: Date())!

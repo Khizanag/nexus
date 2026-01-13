@@ -84,7 +84,7 @@ struct TasksView: View {
                     filterBar
 
                     ScrollView {
-                        LazyVStack(spacing: 16) {
+                        LazyVStack(spacing: 24) {
                             ForEach(groupedTasks, id: \.0) { title, tasks, group in
                                 if let group {
                                     projectSection(group: group, tasks: tasks)
@@ -337,12 +337,12 @@ struct TasksView: View {
             }
 
             if !isCollapsed, !tasks.isEmpty {
-                VStack(spacing: 8) {
+                VStack(spacing: 10) {
                     ForEach(tasks) { task in
                         taskRowView(task)
                     }
                 }
-                .padding(.top, 8)
+                .padding(.top, 12)
                 .padding(.leading, 4)
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
@@ -428,12 +428,12 @@ struct TasksView: View {
             .buttonStyle(.plain)
 
             if !isCollapsed, !tasks.isEmpty {
-                VStack(spacing: 8) {
+                VStack(spacing: 10) {
                     ForEach(tasks) { task in
                         taskRowView(task)
                     }
                 }
-                .padding(.top, 8)
+                .padding(.top, 12)
                 .padding(.leading, 4)
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
@@ -909,8 +909,16 @@ private extension TaskRow {
                 .animation(.easeInOut(duration: 0.4), value: showStrikethrough)
                 .lineLimit(2)
 
-            if !task.notes.isEmpty || task.dueDate != nil || task.reminderDate != nil {
-                HStack(spacing: 10) {
+            if !task.notes.isEmpty {
+                Text(task.notes)
+                    .font(.nexusCaption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .opacity(task.isCompleted ? 0.6 : 1)
+            }
+
+            if hasBadges {
+                HStack(spacing: 8) {
                     if let dueDate = task.dueDate {
                         dueDateBadge(dueDate)
                     }
@@ -919,12 +927,23 @@ private extension TaskRow {
                         reminderBadge
                     }
 
-                    if !task.notes.isEmpty {
-                        notesBadge
+                    if task.url != nil {
+                        urlBadge
+                    }
+
+                    if let assignees = task.assignees, !assignees.isEmpty {
+                        assigneesBadge(assignees)
                     }
                 }
             }
         }
+    }
+
+    var hasBadges: Bool {
+        task.dueDate != nil ||
+        task.reminderDate != nil ||
+        task.url != nil ||
+        (task.assignees?.isEmpty == false)
     }
 
     func dueDateBadge(_ dueDate: Date) -> some View {
@@ -959,17 +978,40 @@ private extension TaskRow {
         .opacity(task.isCompleted ? 0.5 : 1)
     }
 
-    var notesBadge: some View {
+    var urlBadge: some View {
         HStack(spacing: 3) {
-            Image(systemName: "note.text")
+            Image(systemName: "link")
                 .font(.system(size: 9, weight: .semibold))
         }
-        .foregroundStyle(Color.nexusTextTertiary)
+        .foregroundStyle(Color.nexusBlue)
         .padding(.horizontal, 6)
         .padding(.vertical, 4)
         .background {
             Capsule()
-                .fill(Color.nexusTextTertiary.opacity(0.12))
+                .fill(Color.nexusBlue.opacity(0.12))
+        }
+        .opacity(task.isCompleted ? 0.5 : 1)
+    }
+
+    func assigneesBadge(_ assignees: [PersonModel]) -> some View {
+        HStack(spacing: -4) {
+            ForEach(Array(assignees.prefix(2))) { person in
+                Text(person.initials)
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 18, height: 18)
+                    .background(Circle().fill(Color(hex: person.colorHex) ?? .nexusPurple))
+                    .overlay(Circle().strokeBorder(Color.nexusSurface, lineWidth: 1))
+            }
+
+            if assignees.count > 2 {
+                Text("+\(assignees.count - 2)")
+                    .font(.system(size: 7, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 18, height: 18)
+                    .background(Circle().fill(Color.nexusBorder))
+                    .overlay(Circle().strokeBorder(Color.nexusSurface, lineWidth: 1))
+            }
         }
         .opacity(task.isCompleted ? 0.5 : 1)
     }

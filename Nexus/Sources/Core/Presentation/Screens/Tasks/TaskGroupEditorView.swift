@@ -139,8 +139,12 @@ struct TaskGroupEditorView: View {
             }
         }
     }
+}
 
-    private func iconButton(_ icon: String) -> some View {
+// MARK: - Subviews
+
+private extension TaskGroupEditorView {
+    func iconButton(_ icon: String) -> some View {
         Button {
             withAnimation(.spring(response: 0.2)) {
                 selectedIcon = icon
@@ -171,7 +175,7 @@ struct TaskGroupEditorView: View {
         .buttonStyle(.plain)
     }
 
-    private func colorButton(_ colorHex: String) -> some View {
+    func colorButton(_ colorHex: String) -> some View {
         let color = Color(hex: colorHex) ?? .nexusPurple
 
         return Button {
@@ -197,8 +201,12 @@ struct TaskGroupEditorView: View {
         }
         .buttonStyle(.plain)
     }
+}
 
-    private func save() {
+// MARK: - Actions
+
+private extension TaskGroupEditorView {
+    func save() {
         guard canSave else { return }
 
         if let group {
@@ -218,7 +226,7 @@ struct TaskGroupEditorView: View {
         dismiss()
     }
 
-    private func deleteGroup() {
+    func deleteGroup() {
         if let group {
             modelContext.delete(group)
         }

@@ -245,8 +245,12 @@ struct NoteEditorView: View {
         default: .nexusSurface
         }
     }
+}
 
-    private func insertBulletList() {
+// MARK: - Formatting Actions
+
+private extension NoteEditorView {
+    func insertBulletList() {
         if content.isEmpty || content.hasSuffix("\n") {
             content += "• "
         } else {
@@ -255,7 +259,7 @@ struct NoteEditorView: View {
         focusedField = .content
     }
 
-    private func insertNumberedList() {
+    func insertNumberedList() {
         let lines = content.components(separatedBy: "\n")
         var maxNumber = 0
         for line in lines {
@@ -275,7 +279,7 @@ struct NoteEditorView: View {
         focusedField = .content
     }
 
-    private func insertChecklist() {
+    func insertChecklist() {
         if content.isEmpty || content.hasSuffix("\n") {
             content += "☐ "
         } else {
@@ -284,7 +288,7 @@ struct NoteEditorView: View {
         focusedField = .content
     }
 
-    private func insertIndent() {
+    func insertIndent() {
         if content.isEmpty || content.hasSuffix("\n") {
             content += "    "
         } else {
@@ -293,7 +297,7 @@ struct NoteEditorView: View {
         focusedField = .content
     }
 
-    private func insertQuote() {
+    func insertQuote() {
         if content.isEmpty || content.hasSuffix("\n") {
             content += "> "
         } else {
@@ -302,7 +306,7 @@ struct NoteEditorView: View {
         focusedField = .content
     }
 
-    private func insertSeparator() {
+    func insertSeparator() {
         if content.isEmpty {
             content = "---\n"
         } else if content.hasSuffix("\n") {
@@ -313,7 +317,7 @@ struct NoteEditorView: View {
         focusedField = .content
     }
 
-    private func handleContentChange(oldValue: String, newValue: String) {
+    func handleContentChange(oldValue: String, newValue: String) {
         guard newValue.count > oldValue.count else { return }
         guard newValue.hasSuffix("\n") else { return }
         guard !oldValue.hasSuffix("\n") else { return }
@@ -353,8 +357,12 @@ struct NoteEditorView: View {
             }
         }
     }
+}
 
-    private func saveNote() {
+// MARK: - Actions
+
+private extension NoteEditorView {
+    func saveNote() {
         if let existingNote = note {
             existingNote.title = title
             existingNote.content = content

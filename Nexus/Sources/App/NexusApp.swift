@@ -23,6 +23,7 @@ struct NexusApp: App {
             TaskModel.self,
             SubtaskModel.self,
             TaskGroupModel.self,
+            PersonModel.self,
             TransactionModel.self,
             HealthEntryModel.self,
             TagModel.self,

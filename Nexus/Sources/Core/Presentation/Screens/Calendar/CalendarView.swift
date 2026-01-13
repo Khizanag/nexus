@@ -82,8 +82,12 @@ struct CalendarView: View {
             .refreshable { await loadEvents() }
         }
     }
+}
 
-    private var viewModePicker: some View {
+// MARK: - Subviews
+
+private extension CalendarView {
+    var viewModePicker: some View {
         HStack(spacing: 0) {
             ForEach(CalendarViewMode.allCases) { mode in
                 Button {
@@ -121,7 +125,7 @@ struct CalendarView: View {
     }
 
     @ViewBuilder
-    private var calendarContent: some View {
+    var calendarContent: some View {
         switch viewMode {
         case .day:
             CalendarDayView(
@@ -165,7 +169,7 @@ struct CalendarView: View {
         }
     }
 
-    private var authorizationView: some View {
+    var authorizationView: some View {
         VStack(spacing: 24) {
             Spacer()
 
@@ -211,7 +215,7 @@ struct CalendarView: View {
         .padding(20)
     }
 
-    private var loadingView: some View {
+    var loadingView: some View {
         VStack {
             Spacer()
             ProgressView()
@@ -223,8 +227,12 @@ struct CalendarView: View {
             Spacer()
         }
     }
+}
 
-    private var eventsForSelectedDate: [CalendarEvent] {
+// MARK: - Computed Properties
+
+private extension CalendarView {
+    var eventsForSelectedDate: [CalendarEvent] {
         let calendar = Calendar.current
         return events.filter { event in
             if event.isAllDay {
@@ -236,14 +244,18 @@ struct CalendarView: View {
         .sorted { $0.startDate < $1.startDate }
     }
 
-    private var upcomingEvents: [CalendarEvent] {
+    var upcomingEvents: [CalendarEvent] {
         let now = Date()
         return events
             .filter { $0.endDate >= now }
             .sorted { $0.startDate < $1.startDate }
     }
+}
 
-    private func initialize() async {
+// MARK: - Actions
+
+private extension CalendarView {
+    func initialize() async {
         guard calendarService.isAuthorized else {
             isLoading = false
             return
@@ -257,7 +269,7 @@ struct CalendarView: View {
         }
     }
 
-    private func loadEvents() async {
+    func loadEvents() async {
         isLoading = true
         do {
             let calendar = Calendar.current

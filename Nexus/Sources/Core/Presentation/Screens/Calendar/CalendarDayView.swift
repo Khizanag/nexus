@@ -80,8 +80,12 @@ struct CalendarDayView: View {
         }
         .gesture(daySwipeGesture)
     }
+}
 
-    private var dayNavigationHeader: some View {
+// MARK: - Subviews
+
+private extension CalendarDayView {
+    var dayNavigationHeader: some View {
         HStack {
             Button { previousDay() } label: {
                 Image(systemName: "chevron.left")
@@ -121,7 +125,7 @@ struct CalendarDayView: View {
         .padding(.vertical, 8)
     }
 
-    private var allDayEventsSection: some View {
+    var allDayEventsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("All-day")
                 .font(.nexusCaption)
@@ -142,7 +146,7 @@ struct CalendarDayView: View {
         .background(Color.nexusSurface)
     }
 
-    private var daySwipeGesture: some Gesture {
+    var daySwipeGesture: some Gesture {
         DragGesture()
             .updating($dragOffset) { value, state, _ in
                 state = value.translation.width
@@ -156,12 +160,16 @@ struct CalendarDayView: View {
                 }
             }
     }
+}
 
-    private func previousDay() {
+// MARK: - Actions
+
+private extension CalendarDayView {
+    func previousDay() {
         selectedDate = calendar.date(byAdding: .day, value: -1, to: selectedDate) ?? selectedDate
     }
 
-    private func nextDay() {
+    func nextDay() {
         selectedDate = calendar.date(byAdding: .day, value: 1, to: selectedDate) ?? selectedDate
     }
 }
