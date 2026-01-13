@@ -12,60 +12,67 @@ struct FinanceView: View {
     @State private var showStocks = false
     @State private var showAddTransaction = false
 
+    // MARK: - Body
+
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 0) {
-                    quickActionsSection
-                        .padding(.bottom, 24)
+            scrollContent
+                .background(Color.nexusBackground)
+                .navigationTitle("Finance")
+                .toolbar { toolbarContent }
+                .modifier(SheetModifier(
+                    showTransactions: $showTransactions,
+                    showBudgets: $showBudgets,
+                    showSubscriptions: $showSubscriptions,
+                    showHouse: $showHouse,
+                    showStocks: $showStocks,
+                    showAddTransaction: $showAddTransaction
+                ))
+        }
+    }
+}
 
-                    SectionDivider()
-                    featuresSection
-                        .padding(.vertical, 20)
+// MARK: - Toolbar
 
-                    SectionDivider()
-                    toolsSection
-                        .padding(.vertical, 20)
-
-                    SectionDivider()
-                    recentTransactionsSection
-                        .padding(.vertical, 20)
-                }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 80)
-            }
-            .background(Color.nexusBackground)
-            .navigationTitle("Finance")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { showAddTransaction = true } label: {
-                        Image(systemName: "plus")
-                    }
-                }
-            }
-            .sheet(isPresented: $showTransactions) {
-                TransactionsView()
-            }
-            .sheet(isPresented: $showBudgets) {
-                BudgetView()
-            }
-            .sheet(isPresented: $showSubscriptions) {
-                SubscriptionsView()
-            }
-            .sheet(isPresented: $showHouse) {
-                HouseView()
-            }
-            .sheet(isPresented: $showStocks) {
-                StocksView()
-            }
-            .sheet(isPresented: $showAddTransaction) {
-                TransactionEditorView(transaction: nil)
+private extension FinanceView {
+    @ToolbarContentBuilder
+    var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            Button { showAddTransaction = true } label: {
+                Image(systemName: "plus")
             }
         }
     }
 }
 
-// MARK: - Quick Actions
+// MARK: - Main Content
+
+private extension FinanceView {
+    var scrollContent: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                quickActionsSection
+                    .padding(.bottom, 24)
+
+                SectionDivider()
+                featuresSection
+                    .padding(.vertical, 20)
+
+                SectionDivider()
+                toolsSection
+                    .padding(.vertical, 20)
+
+                SectionDivider()
+                recentTransactionsSection
+                    .padding(.vertical, 20)
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 80)
+        }
+    }
+}
+
+// MARK: - Quick Actions Section
 
 private extension FinanceView {
     var quickActionsSection: some View {
@@ -74,36 +81,40 @@ private extension FinanceView {
                 .font(.nexusHeadline)
                 .foregroundStyle(.secondary)
 
-            HStack(spacing: 12) {
-                QuickActionButton(
-                    title: "Add",
-                    subtitle: "Transaction",
-                    icon: "plus.circle.fill",
-                    color: .nexusGreen
-                ) {
-                    showAddTransaction = true
-                }
-
-                QuickActionButton(
-                    title: "View",
-                    subtitle: "Transactions",
-                    icon: "list.bullet.rectangle",
-                    color: .nexusBlue
-                ) {
-                    showTransactions = true
-                }
-
-                QuickActionButton(
-                    title: "Manage",
-                    subtitle: "Budgets",
-                    icon: "chart.pie.fill",
-                    color: .nexusPurple
-                ) {
-                    showBudgets = true
-                }
-            }
+            quickActionsRow
         }
         .padding(.top, 16)
+    }
+
+    var quickActionsRow: some View {
+        HStack(spacing: 12) {
+            QuickActionButton(
+                title: "Add",
+                subtitle: "Transaction",
+                icon: "plus.circle.fill",
+                color: .nexusGreen
+            ) {
+                showAddTransaction = true
+            }
+
+            QuickActionButton(
+                title: "View",
+                subtitle: "Transactions",
+                icon: "list.bullet.rectangle",
+                color: .nexusBlue
+            ) {
+                showTransactions = true
+            }
+
+            QuickActionButton(
+                title: "Manage",
+                subtitle: "Budgets",
+                icon: "chart.pie.fill",
+                color: .nexusPurple
+            ) {
+                showBudgets = true
+            }
+        }
     }
 }
 
@@ -116,42 +127,46 @@ private extension FinanceView {
                 .font(.nexusHeadline)
                 .foregroundStyle(.secondary)
 
-            VStack(spacing: 10) {
-                FeatureCard(
-                    icon: "repeat.circle.fill",
-                    title: "Subscriptions",
-                    subtitle: "Track recurring payments",
-                    color: .nexusOrange
-                ) {
-                    showSubscriptions = true
-                }
+            featureCards
+        }
+    }
 
-                FeatureCard(
-                    icon: "house.fill",
-                    title: "House & Utilities",
-                    subtitle: "Manage property expenses",
-                    color: .nexusTeal
-                ) {
-                    showHouse = true
-                }
+    var featureCards: some View {
+        VStack(spacing: 10) {
+            FeatureCard(
+                icon: "repeat.circle.fill",
+                title: "Subscriptions",
+                subtitle: "Track recurring payments",
+                color: .nexusOrange
+            ) {
+                showSubscriptions = true
+            }
 
-                FeatureCard(
-                    icon: "chart.line.uptrend.xyaxis",
-                    title: "Stocks & Investments",
-                    subtitle: "Monitor your portfolio",
-                    color: .nexusGreen
-                ) {
-                    showStocks = true
-                }
+            FeatureCard(
+                icon: "house.fill",
+                title: "House & Utilities",
+                subtitle: "Manage property expenses",
+                color: .nexusTeal
+            ) {
+                showHouse = true
+            }
 
-                FeatureCard(
-                    icon: "chart.pie.fill",
-                    title: "Budgets",
-                    subtitle: budgetSubtitle,
-                    color: .nexusPurple
-                ) {
-                    showBudgets = true
-                }
+            FeatureCard(
+                icon: "chart.line.uptrend.xyaxis",
+                title: "Stocks & Investments",
+                subtitle: "Monitor your portfolio",
+                color: .nexusGreen
+            ) {
+                showStocks = true
+            }
+
+            FeatureCard(
+                icon: "chart.pie.fill",
+                title: "Budgets",
+                subtitle: budgetSubtitle,
+                color: .nexusPurple
+            ) {
+                showBudgets = true
             }
         }
     }
@@ -183,28 +198,34 @@ private extension FinanceView {
 private extension FinanceView {
     var recentTransactionsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Recent Transactions")
-                    .font(.nexusHeadline)
-                    .foregroundStyle(.secondary)
-
-                Spacer()
-
-                Button("View All") {
-                    showTransactions = true
-                }
-                .font(.nexusSubheadline)
-                .foregroundStyle(Color.nexusPurple)
-            }
+            recentTransactionsHeader
 
             if transactions.isEmpty {
                 emptyTransactionsState
             } else {
-                VStack(spacing: 8) {
-                    ForEach(transactions.prefix(5)) { transaction in
-                        TransactionRow(transaction: transaction)
-                    }
-                }
+                transactionsList
+            }
+        }
+    }
+
+    var recentTransactionsHeader: some View {
+        HStack {
+            Text("Recent Transactions")
+                .font(.nexusHeadline)
+                .foregroundStyle(.secondary)
+
+            Spacer()
+
+            Button("View All") { showTransactions = true }
+                .font(.nexusSubheadline)
+                .foregroundStyle(Color.nexusPurple)
+        }
+    }
+
+    var transactionsList: some View {
+        VStack(spacing: 8) {
+            ForEach(transactions.prefix(5)) { transaction in
+                TransactionRow(transaction: transaction)
             }
         }
     }
@@ -214,8 +235,10 @@ private extension FinanceView {
             Image(systemName: "creditcard")
                 .font(.system(size: 40))
                 .foregroundStyle(.secondary)
+
             Text("No Transactions Yet")
                 .font(.nexusHeadline)
+
             Text("Tap + to add your first transaction")
                 .font(.nexusSubheadline)
                 .foregroundStyle(.secondary)
@@ -225,7 +248,28 @@ private extension FinanceView {
     }
 }
 
-// MARK: - Supporting Views
+// MARK: - Sheet Modifier
+
+private struct SheetModifier: ViewModifier {
+    @Binding var showTransactions: Bool
+    @Binding var showBudgets: Bool
+    @Binding var showSubscriptions: Bool
+    @Binding var showHouse: Bool
+    @Binding var showStocks: Bool
+    @Binding var showAddTransaction: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(isPresented: $showTransactions) { TransactionsView() }
+            .sheet(isPresented: $showBudgets) { BudgetView() }
+            .sheet(isPresented: $showSubscriptions) { SubscriptionsView() }
+            .sheet(isPresented: $showHouse) { HouseView() }
+            .sheet(isPresented: $showStocks) { StocksView() }
+            .sheet(isPresented: $showAddTransaction) { TransactionEditorView(transaction: nil) }
+    }
+}
+
+// MARK: - Quick Action Button
 
 private struct QuickActionButton: View {
     let title: String
@@ -236,34 +280,49 @@ private struct QuickActionButton: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.system(size: 24))
-                    .foregroundStyle(color)
-
-                VStack(spacing: 2) {
-                    Text(title)
-                        .font(.nexusCaption)
-                        .fontWeight(.semibold)
-                    Text(subtitle)
-                        .font(.nexusCaption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .background {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.nexusSurface)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 12)
-                            .strokeBorder(Color.nexusBorder, lineWidth: 1)
-                    }
-            }
+            buttonContent
         }
         .buttonStyle(.plain)
     }
+
+    private var buttonContent: some View {
+        VStack(spacing: 8) {
+            iconView
+            textContent
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 16)
+        .background { cardBackground }
+    }
+
+    private var iconView: some View {
+        Image(systemName: icon)
+            .font(.system(size: 24))
+            .foregroundStyle(color)
+    }
+
+    private var textContent: some View {
+        VStack(spacing: 2) {
+            Text(title)
+                .font(.nexusCaption)
+                .fontWeight(.semibold)
+            Text(subtitle)
+                .font(.nexusCaption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var cardBackground: some View {
+        RoundedRectangle(cornerRadius: 12)
+            .fill(Color.nexusSurface)
+            .overlay {
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(Color.nexusBorder, lineWidth: 1)
+            }
+    }
 }
+
+// MARK: - Feature Card
 
 private struct FeatureCard: View {
     let icon: String
@@ -274,44 +333,61 @@ private struct FeatureCard: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 14) {
-                Image(systemName: icon)
-                    .font(.system(size: 20))
-                    .foregroundStyle(color)
-                    .frame(width: 40, height: 40)
-                    .background {
-                        Circle()
-                            .fill(color.opacity(0.15))
-                    }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.nexusSubheadline)
-                        .fontWeight(.medium)
-                    Text(subtitle)
-                        .font(.nexusCaption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(14)
-            .background {
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(Color.nexusSurface)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 14)
-                            .strokeBorder(Color.nexusBorder, lineWidth: 1)
-                    }
-            }
+            cardContent
         }
         .buttonStyle(.plain)
     }
+
+    private var cardContent: some View {
+        HStack(spacing: 14) {
+            iconView
+            textContent
+            Spacer()
+            chevronIcon
+        }
+        .padding(14)
+        .background { cardBackground }
+    }
+
+    private var iconView: some View {
+        Image(systemName: icon)
+            .font(.system(size: 20))
+            .foregroundStyle(color)
+            .frame(width: 40, height: 40)
+            .background {
+                Circle()
+                    .fill(color.opacity(0.15))
+            }
+    }
+
+    private var textContent: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.nexusSubheadline)
+                .fontWeight(.medium)
+            Text(subtitle)
+                .font(.nexusCaption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var chevronIcon: some View {
+        Image(systemName: "chevron.right")
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(.tertiary)
+    }
+
+    private var cardBackground: some View {
+        RoundedRectangle(cornerRadius: 14)
+            .fill(Color.nexusSurface)
+            .overlay {
+                RoundedRectangle(cornerRadius: 14)
+                    .strokeBorder(Color.nexusBorder, lineWidth: 1)
+            }
+    }
 }
+
+// MARK: - Preview
 
 #Preview {
     FinanceView()
