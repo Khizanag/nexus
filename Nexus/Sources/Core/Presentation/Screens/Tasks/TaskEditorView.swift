@@ -31,6 +31,8 @@ struct TaskEditorView: View {
 
     private static let lastUsedProjectKey = "lastUsedProjectId"
 
+    // MARK: - Initialization
+
     init(task: TaskModel?) {
         self.task = task
         _title = State(initialValue: task?.title ?? "")
@@ -45,25 +47,7 @@ struct TaskEditorView: View {
         _selectedAssigneeIds = State(initialValue: Set(task?.assignees?.map { $0.id } ?? []))
     }
 
-    private static var lastUsedProjectId: UUID? {
-        get {
-            guard let uuidString = UserDefaults.standard.string(forKey: lastUsedProjectKey) else {
-                return nil
-            }
-            return UUID(uuidString: uuidString)
-        }
-        set {
-            if let uuid = newValue {
-                UserDefaults.standard.set(uuid.uuidString, forKey: lastUsedProjectKey)
-            } else {
-                UserDefaults.standard.removeObject(forKey: lastUsedProjectKey)
-            }
-        }
-    }
-
-    private var selectedAssignees: [PersonModel] {
-        allPeople.filter { selectedAssigneeIds.contains($0.id) }
-    }
+    // MARK: - Body
 
     var body: some View {
         NavigationStack {
@@ -85,26 +69,8 @@ struct TaskEditorView: View {
             .background(Color.nexusBackground)
             .navigationTitle(task == nil ? "New Task" : "Edit Task")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                }
-
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Save") {
-                        saveTask()
-                    }
-                    .fontWeight(.semibold)
-                    .disabled(title.isEmpty)
-                }
-            }
-            .onAppear {
-                if task == nil {
-                    focusedField = .title
-                }
-            }
+            .toolbar { toolbarContent }
+            .onAppear { handleOnAppear() }
             .sheet(isPresented: $showNewProject) {
                 TaskGroupEditorView(group: nil)
             }
@@ -117,6 +83,23 @@ struct TaskEditorView: View {
                     onAddNew: { showNewPerson = true }
                 )
             }
+        }
+    }
+}
+
+// MARK: - Toolbar
+
+private extension TaskEditorView {
+    @ToolbarContentBuilder
+    var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            Button("Cancel") { dismiss() }
+        }
+
+        ToolbarItem(placement: .topBarTrailing) {
+            Button("Save") { saveTask() }
+                .fontWeight(.semibold)
+                .disabled(title.isEmpty)
         }
     }
 }
@@ -140,45 +123,61 @@ private extension TaskEditorView {
                 .scrollContentBackground(.hidden)
                 .focused($focusedField, equals: .notes)
                 .overlay(alignment: .topLeading) {
-                    if notes.isEmpty {
-                        Text("Add notes...")
-                            .font(.nexusBody)
-                            .foregroundStyle(.tertiary)
-                            .padding(.top, 8)
-                            .allowsHitTesting(false)
-                    }
+                    notesPlaceholder
                 }
         } header: {
             Text("Notes")
         }
     }
 
+    @ViewBuilder
+    var notesPlaceholder: some View {
+        if notes.isEmpty {
+            Text("Add notes...")
+                .font(.nexusBody)
+                .foregroundStyle(.tertiary)
+                .padding(.top, 8)
+                .allowsHitTesting(false)
+        }
+    }
+
     var urlSection: some View {
         Section {
             HStack(spacing: 12) {
-                Image(systemName: "link")
-                    .font(.system(size: 16))
-                    .foregroundStyle(url.isEmpty ? Color.gray.opacity(0.5) : Color.nexusBlue)
-                    .frame(width: 24)
-
-                TextField("Add URL or link", text: $url)
-                    .font(.nexusBody)
-                    .keyboardType(.URL)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .focused($focusedField, equals: .url)
-
-                if !url.isEmpty {
-                    Button {
-                        url = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 16))
-                            .foregroundStyle(.tertiary)
-                    }
-                    .buttonStyle(.plain)
-                }
+                urlIcon
+                urlTextField
+                urlClearButton
             }
+        }
+    }
+
+    var urlIcon: some View {
+        Image(systemName: "link")
+            .font(.system(size: 16))
+            .foregroundStyle(url.isEmpty ? Color.gray.opacity(0.5) : Color.nexusBlue)
+            .frame(width: 24)
+    }
+
+    var urlTextField: some View {
+        TextField("Add URL or link", text: $url)
+            .font(.nexusBody)
+            .keyboardType(.URL)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .focused($focusedField, equals: .url)
+    }
+
+    @ViewBuilder
+    var urlClearButton: some View {
+        if !url.isEmpty {
+            Button {
+                url = ""
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 16))
+                    .foregroundStyle(.tertiary)
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -186,16 +185,20 @@ private extension TaskEditorView {
         Section {
             Picker("Priority", selection: $priority) {
                 ForEach(TaskPriority.allCases, id: \.self) { priority in
-                    HStack {
-                        Circle()
-                            .fill(colorForPriority(priority))
-                            .frame(width: 8, height: 8)
-                        Text(priority.rawValue.capitalized)
-                    }
-                    .tag(priority)
+                    priorityOption(priority)
                 }
             }
         }
+    }
+
+    func priorityOption(_ priority: TaskPriority) -> some View {
+        HStack {
+            Circle()
+                .fill(colorForPriority(priority))
+                .frame(width: 8, height: 8)
+            Text(priority.rawValue.capitalized)
+        }
+        .tag(priority)
     }
 
     var projectSection: some View {
@@ -203,53 +206,66 @@ private extension TaskEditorView {
             HStack {
                 Text("Project")
                 Spacer()
-                Menu {
-                    Button {
-                        selectedGroupId = nil
-                    } label: {
-                        Label("Inbox", systemImage: selectedGroupId == nil ? "checkmark" : "tray.fill")
-                    }
-
-                    ForEach(taskGroups) { group in
-                        Button {
-                            selectedGroupId = group.id
-                        } label: {
-                            Label(
-                                group.name,
-                                systemImage: selectedGroupId == group.id ? "checkmark" : group.icon
-                            )
-                        }
-                    }
-
-                    Divider()
-
-                    Button {
-                        showNewProject = true
-                    } label: {
-                        Label("New Project", systemImage: "plus.circle")
-                    }
-                } label: {
-                    HStack(spacing: 6) {
-                        if let groupId = selectedGroupId,
-                           let group = taskGroups.first(where: { $0.id == groupId }) {
-                            Image(systemName: group.icon)
-                                .font(.system(size: 14))
-                                .foregroundStyle(Color(hex: group.colorHex) ?? Color.nexusPurple)
-                            Text(group.name)
-                                .foregroundStyle(.primary)
-                        } else {
-                            Image(systemName: "tray.fill")
-                                .font(.system(size: 14))
-                                .foregroundStyle(Color.nexusBlue)
-                            Text("Inbox")
-                                .foregroundStyle(.primary)
-                        }
-                        Image(systemName: "chevron.up.chevron.down")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                projectMenu
             }
+        }
+    }
+
+    var projectMenu: some View {
+        Menu {
+            projectMenuItems
+        } label: {
+            projectMenuLabel
+        }
+    }
+
+    @ViewBuilder
+    var projectMenuItems: some View {
+        Button {
+            selectedGroupId = nil
+        } label: {
+            Label("Inbox", systemImage: selectedGroupId == nil ? "checkmark" : "tray.fill")
+        }
+
+        ForEach(taskGroups) { group in
+            Button {
+                selectedGroupId = group.id
+            } label: {
+                Label(
+                    group.name,
+                    systemImage: selectedGroupId == group.id ? "checkmark" : group.icon
+                )
+            }
+        }
+
+        Divider()
+
+        Button {
+            showNewProject = true
+        } label: {
+            Label("New Project", systemImage: "plus.circle")
+        }
+    }
+
+    var projectMenuLabel: some View {
+        HStack(spacing: 6) {
+            if let groupId = selectedGroupId,
+               let group = taskGroups.first(where: { $0.id == groupId }) {
+                Image(systemName: group.icon)
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color(hex: group.colorHex) ?? Color.nexusPurple)
+                Text(group.name)
+                    .foregroundStyle(.primary)
+            } else {
+                Image(systemName: "tray.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color.nexusBlue)
+                Text("Inbox")
+                    .foregroundStyle(.primary)
+            }
+            Image(systemName: "chevron.up.chevron.down")
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -258,52 +274,30 @@ private extension TaskEditorView {
             Button {
                 showPeoplePicker = true
             } label: {
-                HStack {
-                    Text("Assignees")
-                        .foregroundStyle(.primary)
-
-                    Spacer()
-
-                    if selectedAssignees.isEmpty {
-                        Text("None")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        assigneeAvatars
-                    }
-
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.tertiary)
-                }
+                assigneesRow
             }
             .buttonStyle(.plain)
         }
     }
 
-    var assigneeAvatars: some View {
-        HStack(spacing: -8) {
-            ForEach(Array(selectedAssignees.prefix(3))) { person in
-                personAvatar(person, size: 28)
+    var assigneesRow: some View {
+        HStack {
+            Text("Assignees")
+                .foregroundStyle(.primary)
+
+            Spacer()
+
+            if selectedAssignees.isEmpty {
+                Text("None")
+                    .foregroundStyle(.secondary)
+            } else {
+                assigneeAvatars
             }
 
-            if selectedAssignees.count > 3 {
-                Text("+\(selectedAssignees.count - 3)")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 28, height: 28)
-                    .background(Circle().fill(Color.nexusSurface))
-                    .overlay(Circle().strokeBorder(Color.nexusBorder, lineWidth: 2))
-            }
+            Image(systemName: "chevron.right")
+                .font(.system(size: 12))
+                .foregroundStyle(.tertiary)
         }
-    }
-
-    func personAvatar(_ person: PersonModel, size: CGFloat) -> some View {
-        Text(person.initials)
-            .font(.system(size: size * 0.4, weight: .semibold))
-            .foregroundStyle(.white)
-            .frame(width: size, height: size)
-            .background(Circle().fill(Color(hex: person.colorHex) ?? .nexusPurple))
-            .overlay(Circle().strokeBorder(Color.nexusBackground, lineWidth: 2))
     }
 
     var dueDateSection: some View {
@@ -316,16 +310,20 @@ private extension TaskEditorView {
                 }
 
             if hasDueDate {
-                DatePicker(
-                    "Date",
-                    selection: Binding(
-                        get: { dueDate ?? Date() },
-                        set: { dueDate = $0 }
-                    ),
-                    displayedComponents: [.date]
-                )
+                dueDatePicker
             }
         }
+    }
+
+    var dueDatePicker: some View {
+        DatePicker(
+            "Date",
+            selection: Binding(
+                get: { dueDate ?? Date() },
+                set: { dueDate = $0 }
+            ),
+            displayedComponents: [.date]
+        )
     }
 
     var reminderSection: some View {
@@ -338,16 +336,20 @@ private extension TaskEditorView {
                 }
 
             if hasReminder {
-                DatePicker(
-                    "Remind at",
-                    selection: Binding(
-                        get: { reminderDate ?? Date() },
-                        set: { reminderDate = $0 }
-                    ),
-                    displayedComponents: [.date, .hourAndMinute]
-                )
+                reminderPicker
             }
         }
+    }
+
+    var reminderPicker: some View {
+        DatePicker(
+            "Remind at",
+            selection: Binding(
+                get: { reminderDate ?? Date() },
+                set: { reminderDate = $0 }
+            ),
+            displayedComponents: [.date, .hourAndMinute]
+        )
     }
 
     var deleteSection: some View {
@@ -364,15 +366,75 @@ private extension TaskEditorView {
     }
 }
 
+// MARK: - Assignee Avatars
+
+private extension TaskEditorView {
+    var selectedAssignees: [PersonModel] {
+        allPeople.filter { selectedAssigneeIds.contains($0.id) }
+    }
+
+    var assigneeAvatars: some View {
+        HStack(spacing: -8) {
+            ForEach(Array(selectedAssignees.prefix(3))) { person in
+                personAvatar(person, size: 28)
+            }
+
+            if selectedAssignees.count > 3 {
+                overflowBadge
+            }
+        }
+    }
+
+    func personAvatar(_ person: PersonModel, size: CGFloat) -> some View {
+        Text(person.initials)
+            .font(.system(size: size * 0.4, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: size, height: size)
+            .background(Circle().fill(Color(hex: person.colorHex) ?? .nexusPurple))
+            .overlay(Circle().strokeBorder(Color.nexusBackground, lineWidth: 2))
+    }
+
+    var overflowBadge: some View {
+        Text("+\(selectedAssignees.count - 3)")
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: 28, height: 28)
+            .background(Circle().fill(Color.nexusSurface))
+            .overlay(Circle().strokeBorder(Color.nexusBorder, lineWidth: 2))
+    }
+}
+
 // MARK: - Helpers
 
 private extension TaskEditorView {
+    static var lastUsedProjectId: UUID? {
+        get {
+            guard let uuidString = UserDefaults.standard.string(forKey: lastUsedProjectKey) else {
+                return nil
+            }
+            return UUID(uuidString: uuidString)
+        }
+        set {
+            if let uuid = newValue {
+                UserDefaults.standard.set(uuid.uuidString, forKey: lastUsedProjectKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: lastUsedProjectKey)
+            }
+        }
+    }
+
     func colorForPriority(_ priority: TaskPriority) -> Color {
         switch priority {
         case .low: .secondary
         case .medium: .nexusBlue
         case .high: .nexusOrange
         case .urgent: .nexusRed
+        }
+    }
+
+    func handleOnAppear() {
+        if task == nil {
+            focusedField = .title
         }
     }
 }
@@ -391,44 +453,55 @@ private extension TaskEditorView {
         let taskToSchedule: TaskModel
 
         if let existingTask = task {
-            existingTask.title = title
-            existingTask.notes = notes
-            existingTask.url = url.isEmpty ? nil : url
-            existingTask.priority = priority
-            existingTask.dueDate = finalDueDate
-            existingTask.reminderDate = finalReminder
-            existingTask.group = selectedGroup
-            existingTask.assignees = assignees.isEmpty ? nil : assignees
-            existingTask.updatedAt = .now
+            updateExistingTask(existingTask, dueDate: finalDueDate, reminder: finalReminder, group: selectedGroup, assignees: assignees)
             taskToSchedule = existingTask
         } else {
-            let newTask = TaskModel(
-                title: title,
-                notes: notes,
-                url: url.isEmpty ? nil : url,
-                priority: priority,
-                dueDate: finalDueDate,
-                reminderDate: finalReminder,
-                group: selectedGroup,
-                assignees: assignees.isEmpty ? nil : assignees
-            )
-            modelContext.insert(newTask)
-            taskToSchedule = newTask
+            taskToSchedule = createNewTask(dueDate: finalDueDate, reminder: finalReminder, group: selectedGroup, assignees: assignees)
         }
 
-        if finalReminder != nil {
+        scheduleReminderIfNeeded(for: taskToSchedule, reminder: finalReminder)
+        dismiss()
+    }
+
+    func updateExistingTask(_ existingTask: TaskModel, dueDate: Date?, reminder: Date?, group: TaskGroupModel?, assignees: [PersonModel]) {
+        existingTask.title = title
+        existingTask.notes = notes
+        existingTask.url = url.isEmpty ? nil : url
+        existingTask.priority = priority
+        existingTask.dueDate = dueDate
+        existingTask.reminderDate = reminder
+        existingTask.group = group
+        existingTask.assignees = assignees.isEmpty ? nil : assignees
+        existingTask.updatedAt = .now
+    }
+
+    func createNewTask(dueDate: Date?, reminder: Date?, group: TaskGroupModel?, assignees: [PersonModel]) -> TaskModel {
+        let newTask = TaskModel(
+            title: title,
+            notes: notes,
+            url: url.isEmpty ? nil : url,
+            priority: priority,
+            dueDate: dueDate,
+            reminderDate: reminder,
+            group: group,
+            assignees: assignees.isEmpty ? nil : assignees
+        )
+        modelContext.insert(newTask)
+        return newTask
+    }
+
+    func scheduleReminderIfNeeded(for task: TaskModel, reminder: Date?) {
+        if reminder != nil {
             Task {
                 let notificationService = DefaultTaskNotificationService.shared
                 let granted = await notificationService.requestAuthorization()
                 if granted {
-                    await notificationService.scheduleReminder(for: taskToSchedule)
+                    await notificationService.scheduleReminder(for: task)
                 }
             }
         } else {
-            DefaultTaskNotificationService.shared.cancelReminder(for: taskToSchedule)
+            DefaultTaskNotificationService.shared.cancelReminder(for: task)
         }
-
-        dismiss()
     }
 
     func deleteTask() {
@@ -456,37 +529,50 @@ struct PeoplePickerSheet: View {
                 if allPeople.isEmpty {
                     emptyState
                 } else {
-                    ForEach(allPeople) { person in
-                        personRow(person)
-                    }
-                    .onDelete(perform: deletePeople)
+                    peopleList
                 }
             }
             .navigationTitle("Assignees")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                }
-
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        dismiss()
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            onAddNew()
-                        }
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                }
-            }
+            .toolbar { toolbarContent }
         }
         .presentationDetents([.medium, .large])
     }
+}
 
-    private var emptyState: some View {
+// MARK: - PeoplePickerSheet Toolbar
+
+private extension PeoplePickerSheet {
+    @ToolbarContentBuilder
+    var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            Button("Done") { dismiss() }
+        }
+
+        ToolbarItem(placement: .topBarTrailing) {
+            Button {
+                dismiss()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    onAddNew()
+                }
+            } label: {
+                Image(systemName: "plus")
+            }
+        }
+    }
+}
+
+// MARK: - PeoplePickerSheet Content
+
+private extension PeoplePickerSheet {
+    var peopleList: some View {
+        ForEach(allPeople) { person in
+            personRow(person)
+        }
+        .onDelete(perform: deletePeople)
+    }
+
+    var emptyState: some View {
         VStack(spacing: 16) {
             Image(systemName: "person.2")
                 .font(.system(size: 40))
@@ -500,67 +586,93 @@ struct PeoplePickerSheet: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
-            Button {
-                dismiss()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    onAddNew()
-                }
-            } label: {
-                Label("Add Person", systemImage: "plus")
-                    .font(.nexusSubheadline)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 12)
-                    .background(Capsule().fill(Color.nexusPurple))
-            }
+            addPersonButton
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 40)
         .listRowBackground(Color.clear)
     }
 
-    private func personRow(_ person: PersonModel) -> some View {
+    var addPersonButton: some View {
         Button {
-            if selectedIds.contains(person.id) {
-                selectedIds.remove(person.id)
-            } else {
-                selectedIds.insert(person.id)
+            dismiss()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                onAddNew()
             }
         } label: {
-            HStack(spacing: 12) {
-                Text(person.initials)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 36, height: 36)
-                    .background(Circle().fill(Color(hex: person.colorHex) ?? .nexusPurple))
+            Label("Add Person", systemImage: "plus")
+                .font(.nexusSubheadline)
+                .fontWeight(.semibold)
+                .foregroundStyle(.white)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+                .background(Capsule().fill(Color.nexusPurple))
+        }
+    }
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(person.name)
-                        .font(.nexusSubheadline)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.primary)
-
-                    if let email = person.email, !email.isEmpty {
-                        Text(email)
-                            .font(.nexusCaption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Spacer()
-
-                if selectedIds.contains(person.id) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 22))
-                        .foregroundStyle(Color.nexusGreen)
-                }
-            }
+    func personRow(_ person: PersonModel) -> some View {
+        Button {
+            toggleSelection(person)
+        } label: {
+            personRowContent(person)
         }
         .buttonStyle(.plain)
     }
 
-    private func deletePeople(at offsets: IndexSet) {
+    func personRowContent(_ person: PersonModel) -> some View {
+        HStack(spacing: 12) {
+            personAvatar(person)
+            personInfo(person)
+            Spacer()
+            selectionIndicator(person)
+        }
+    }
+
+    func personAvatar(_ person: PersonModel) -> some View {
+        Text(person.initials)
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: 36, height: 36)
+            .background(Circle().fill(Color(hex: person.colorHex) ?? .nexusPurple))
+    }
+
+    func personInfo(_ person: PersonModel) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(person.name)
+                .font(.nexusSubheadline)
+                .fontWeight(.medium)
+                .foregroundStyle(.primary)
+
+            if let email = person.email, !email.isEmpty {
+                Text(email)
+                    .font(.nexusCaption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    func selectionIndicator(_ person: PersonModel) -> some View {
+        if selectedIds.contains(person.id) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 22))
+                .foregroundStyle(Color.nexusGreen)
+        }
+    }
+}
+
+// MARK: - PeoplePickerSheet Actions
+
+private extension PeoplePickerSheet {
+    func toggleSelection(_ person: PersonModel) {
+        if selectedIds.contains(person.id) {
+            selectedIds.remove(person.id)
+        } else {
+            selectedIds.insert(person.id)
+        }
+    }
+
+    func deletePeople(at offsets: IndexSet) {
         for index in offsets {
             let person = allPeople[index]
             selectedIds.remove(person.id)
@@ -568,6 +680,8 @@ struct PeoplePickerSheet: View {
         }
     }
 }
+
+// MARK: - Preview
 
 #Preview {
     TaskEditorView(task: nil)
