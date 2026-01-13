@@ -9,86 +9,90 @@ struct NotesView: View {
     @State private var showNewNote = false
     @State private var selectedNote: NoteModel?
 
-    private var filteredNotes: [NoteModel] {
-        guard !searchText.isEmpty else { return notes }
-        return notes.filter {
-            $0.title.localizedCaseInsensitiveContains(searchText) ||
-            $0.content.localizedCaseInsensitiveContains(searchText)
-        }
-    }
-
-    private var pinnedNotes: [NoteModel] {
-        filteredNotes.filter { $0.isPinned }
-    }
-
-    private var unpinnedNotes: [NoteModel] {
-        filteredNotes.filter { !$0.isPinned }
-    }
+    // MARK: - Body
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 16) {
-                    if !pinnedNotes.isEmpty {
-                        noteSection(title: "Pinned", notes: pinnedNotes)
-                    }
+            scrollContent
+                .background(Color.nexusBackground)
+                .navigationTitle("Notes")
+                .searchable(text: $searchText, prompt: "Search notes...")
+                .toolbar { toolbarContent }
+                .sheet(isPresented: $showNewNote) { NoteEditorView(note: nil) }
+                .sheet(item: $selectedNote) { note in NoteEditorView(note: note) }
+        }
+    }
+}
 
-                    if !unpinnedNotes.isEmpty {
-                        noteSection(title: pinnedNotes.isEmpty ? nil : "All Notes", notes: unpinnedNotes)
-                    }
+// MARK: - Toolbar
 
-                    if filteredNotes.isEmpty {
-                        emptyState
-                    }
-                }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 120)
-            }
-            .background(Color.nexusBackground)
-            .navigationTitle("Notes")
-            .searchable(text: $searchText, prompt: "Search notes...")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showNewNote = true
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                }
-            }
-            .sheet(isPresented: $showNewNote) {
-                NoteEditorView(note: nil)
-            }
-            .sheet(item: $selectedNote) { note in
-                NoteEditorView(note: note)
+private extension NotesView {
+    @ToolbarContentBuilder
+    var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            Button { showNewNote = true } label: {
+                Image(systemName: "plus")
             }
         }
     }
+}
 
+// MARK: - Main Content
+
+private extension NotesView {
+    var scrollContent: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 16) {
+                if !pinnedNotes.isEmpty {
+                    noteSection(title: "Pinned", notes: pinnedNotes)
+                }
+
+                if !unpinnedNotes.isEmpty {
+                    noteSection(title: pinnedNotes.isEmpty ? nil : "All Notes", notes: unpinnedNotes)
+                }
+
+                if filteredNotes.isEmpty {
+                    emptyState
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 120)
+        }
+    }
+}
+
+// MARK: - Sections
+
+private extension NotesView {
     @ViewBuilder
-    private func noteSection(title: String?, notes: [NoteModel]) -> some View {
+    func noteSection(title: String?, notes: [NoteModel]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             if let title {
-                Text(title)
-                    .font(.nexusHeadline)
-                    .foregroundStyle(.secondary)
+                sectionHeader(title)
             }
+            notesGrid(notes)
+        }
+    }
 
-            LazyVGrid(columns: [
-                GridItem(.flexible(), spacing: 12),
-                GridItem(.flexible(), spacing: 12)
-            ], spacing: 12) {
-                ForEach(notes) { note in
-                    NoteCard(note: note)
-                        .onTapGesture {
-                            selectedNote = note
-                        }
-                }
+    func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.nexusHeadline)
+            .foregroundStyle(.secondary)
+    }
+
+    func notesGrid(_ notes: [NoteModel]) -> some View {
+        LazyVGrid(columns: [
+            GridItem(.flexible(), spacing: 12),
+            GridItem(.flexible(), spacing: 12)
+        ], spacing: 12) {
+            ForEach(notes) { note in
+                NoteCard(note: note)
+                    .onTapGesture { selectedNote = note }
             }
         }
     }
 
-    private var emptyState: some View {
+    var emptyState: some View {
         VStack(spacing: 16) {
             Image(systemName: "doc.text")
                 .font(.system(size: 48))
@@ -106,6 +110,26 @@ struct NotesView: View {
     }
 }
 
+// MARK: - Computed Properties
+
+private extension NotesView {
+    var filteredNotes: [NoteModel] {
+        guard !searchText.isEmpty else { return notes }
+        return notes.filter {
+            $0.title.localizedCaseInsensitiveContains(searchText) ||
+            $0.content.localizedCaseInsensitiveContains(searchText)
+        }
+    }
+
+    var pinnedNotes: [NoteModel] {
+        filteredNotes.filter { $0.isPinned }
+    }
+
+    var unpinnedNotes: [NoteModel] {
+        filteredNotes.filter { !$0.isPinned }
+    }
+}
+
 // MARK: - Note Card
 
 private struct NoteCard: View {
@@ -113,62 +137,106 @@ private struct NoteCard: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            if note.color != nil {
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(accentColor)
-                    .frame(width: 4)
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    if note.isPinned {
-                        Image(systemName: "pin.fill")
-                            .font(.caption)
-                            .foregroundStyle(Color.nexusOrange)
-                    }
-
-                    Spacer()
-
-                    if note.isFavorite {
-                        Image(systemName: "heart.fill")
-                            .font(.caption)
-                            .foregroundStyle(Color.nexusRed)
-                    }
-                }
-
-                Text(note.title.isEmpty ? "Untitled" : note.title)
-                    .font(.nexusHeadline)
-                    .lineLimit(2)
-
-                Text(note.content.isEmpty ? "No content" : note.content)
-                    .font(.nexusCaption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(4)
-
-                Spacer(minLength: 0)
-
-                Text(note.updatedAt.formatted(date: .abbreviated, time: .omitted))
-                    .font(.nexusCaption2)
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(12)
+            accentStripe
+            cardContent
         }
         .frame(height: 160)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            RoundedRectangle(cornerRadius: 16)
-                .fill(noteColor)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 16)
-                        .strokeBorder(borderColor, lineWidth: 1)
-                }
-        }
+        .background { cardBackground }
         .clipShape(RoundedRectangle(cornerRadius: 16))
     }
+}
 
-    private var accentColor: Color {
+// MARK: - Note Card Subviews
+
+private extension NoteCard {
+    @ViewBuilder
+    var accentStripe: some View {
+        if note.color != nil {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(accentColor)
+                .frame(width: 4)
+        }
+    }
+
+    var cardContent: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            cardHeader
+            cardTitle
+            cardPreview
+            Spacer(minLength: 0)
+            cardDate
+        }
+        .padding(12)
+    }
+
+    var cardHeader: some View {
+        HStack {
+            if note.isPinned {
+                Image(systemName: "pin.fill")
+                    .font(.caption)
+                    .foregroundStyle(Color.nexusOrange)
+            }
+
+            Spacer()
+
+            if note.isFavorite {
+                Image(systemName: "heart.fill")
+                    .font(.caption)
+                    .foregroundStyle(Color.nexusRed)
+            }
+        }
+    }
+
+    var cardTitle: some View {
+        Text(note.title.isEmpty ? "Untitled" : note.title)
+            .font(.nexusHeadline)
+            .lineLimit(2)
+    }
+
+    var cardPreview: some View {
+        Text(note.content.isEmpty ? "No content" : note.content)
+            .font(.nexusCaption)
+            .foregroundStyle(.secondary)
+            .lineLimit(4)
+    }
+
+    var cardDate: some View {
+        Text(note.updatedAt.formatted(date: .abbreviated, time: .omitted))
+            .font(.nexusCaption2)
+            .foregroundStyle(.tertiary)
+    }
+
+    var cardBackground: some View {
+        RoundedRectangle(cornerRadius: 16)
+            .fill(noteColor)
+            .overlay {
+                RoundedRectangle(cornerRadius: 16)
+                    .strokeBorder(borderColor, lineWidth: 1)
+            }
+    }
+}
+
+// MARK: - Note Card Colors
+
+private extension NoteCard {
+    var accentColor: Color {
         guard let colorName = note.color else { return .clear }
-        switch colorName {
+        return colorFromName(colorName)
+    }
+
+    var noteColor: Color {
+        guard let colorName = note.color else { return .nexusSurface }
+        return colorFromName(colorName).opacity(0.15)
+    }
+
+    var borderColor: Color {
+        guard let colorName = note.color else { return .nexusBorder }
+        return colorFromName(colorName).opacity(0.3)
+    }
+
+    func colorFromName(_ name: String) -> Color {
+        switch name {
         case "purple": return .nexusPurple
         case "blue": return .nexusBlue
         case "green": return .nexusGreen
@@ -178,33 +246,9 @@ private struct NoteCard: View {
         default: return .clear
         }
     }
-
-    private var noteColor: Color {
-        guard let colorName = note.color else { return .nexusSurface }
-        switch colorName {
-        case "purple": return .nexusPurple.opacity(0.15)
-        case "blue": return .nexusBlue.opacity(0.15)
-        case "green": return .nexusGreen.opacity(0.15)
-        case "orange": return .nexusOrange.opacity(0.15)
-        case "red": return .nexusRed.opacity(0.15)
-        case "pink": return .nexusPink.opacity(0.15)
-        default: return .nexusSurface
-        }
-    }
-
-    private var borderColor: Color {
-        guard let colorName = note.color else { return .nexusBorder }
-        switch colorName {
-        case "purple": return .nexusPurple.opacity(0.3)
-        case "blue": return .nexusBlue.opacity(0.3)
-        case "green": return .nexusGreen.opacity(0.3)
-        case "orange": return .nexusOrange.opacity(0.3)
-        case "red": return .nexusRed.opacity(0.3)
-        case "pink": return .nexusPink.opacity(0.3)
-        default: return .nexusBorder
-        }
-    }
 }
+
+// MARK: - Preview
 
 #Preview {
     NotesView()
