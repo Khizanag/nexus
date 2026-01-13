@@ -21,35 +21,48 @@ struct HealthView: View {
     private let healthKitService = DefaultHealthKitService()
     private let metrics = HealthMetricType.allCases
 
+    // MARK: - Body
+
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 20) {
-                    healthKitBanner
-                    todayOverview
-                    metricsGrid
-                    recentEntries
-                }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 120)
+            scrollContent
+                .background(Color.nexusBackground)
+                .navigationTitle("Health")
+                .toolbar { toolbarContent }
+                .sheet(isPresented: $showAddEntry) { HealthEntryEditorView() }
+                .sheet(item: $selectedMetric) { metric in MetricDetailView(metric: metric) }
+                .task { await loadHealthKitData() }
+                .refreshable { await loadHealthKitData() }
+        }
+    }
+}
+
+// MARK: - Toolbar
+
+private extension HealthView {
+    @ToolbarContentBuilder
+    var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            Button { showAddEntry = true } label: {
+                Image(systemName: "plus")
             }
-            .background(Color.nexusBackground)
-            .navigationTitle("Health")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { showAddEntry = true } label: {
-                        Image(systemName: "plus")
-                    }
-                }
+        }
+    }
+}
+
+// MARK: - Main Content
+
+private extension HealthView {
+    var scrollContent: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                healthKitBanner
+                todayOverview
+                metricsGrid
+                recentEntries
             }
-            .sheet(isPresented: $showAddEntry) {
-                HealthEntryEditorView()
-            }
-            .sheet(item: $selectedMetric) { metric in
-                MetricDetailView(metric: metric)
-            }
-            .task { await loadHealthKitData() }
-            .refreshable { await loadHealthKitData() }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 120)
         }
     }
 }
@@ -61,29 +74,42 @@ private extension HealthView {
     var healthKitBanner: some View {
         if healthKitService.isAvailable, !healthKitService.isAuthorized {
             NexusCard {
-                HStack(spacing: 12) {
-                    Image(systemName: "heart.circle.fill")
-                        .font(.system(size: 32))
-                        .foregroundStyle(Color.nexusRed)
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Connect HealthKit")
-                            .font(.nexusHeadline)
-                        Text("Sync your health data from Apple Health")
-                            .font(.nexusCaption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-
-                    Button("Connect") {
-                        Task { await requestHealthKitAuthorization() }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(Color.nexusRed)
-                }
+                bannerContent
             }
         }
+    }
+
+    var bannerContent: some View {
+        HStack(spacing: 12) {
+            bannerIcon
+            bannerText
+            Spacer()
+            connectButton
+        }
+    }
+
+    var bannerIcon: some View {
+        Image(systemName: "heart.circle.fill")
+            .font(.system(size: 32))
+            .foregroundStyle(Color.nexusRed)
+    }
+
+    var bannerText: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Connect HealthKit")
+                .font(.nexusHeadline)
+            Text("Sync your health data from Apple Health")
+                .font(.nexusCaption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    var connectButton: some View {
+        Button("Connect") {
+            Task { await requestHealthKitAuthorization() }
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(Color.nexusRed)
     }
 }
 
@@ -92,27 +118,73 @@ private extension HealthView {
 private extension HealthView {
     var todayOverview: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Today")
-                    .font(.nexusHeadline)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                if isLoadingHealthKit {
-                    ProgressView().scaleEffect(0.8)
-                }
-            }
+            todayHeader
+            todayTopRow
+            todayBottomRow
+        }
+    }
 
-            HStack(spacing: 12) {
-                TodayMetricCard(icon: "figure.walk", title: "Steps", value: displaySteps, color: .nexusGreen, isFromHealthKit: healthKitSteps != nil)
-                TodayMetricCard(icon: "flame.fill", title: "Calories", value: displayCalories, color: .nexusOrange, isFromHealthKit: healthKitCalories != nil)
-                TodayMetricCard(icon: "moon.fill", title: "Sleep", value: displaySleep, color: .indigo, isFromHealthKit: healthKitSleep != nil)
+    var todayHeader: some View {
+        HStack {
+            Text("Today")
+                .font(.nexusHeadline)
+                .foregroundStyle(.secondary)
+            Spacer()
+            if isLoadingHealthKit {
+                ProgressView().scaleEffect(0.8)
             }
+        }
+    }
 
-            HStack(spacing: 12) {
-                TodayMetricCard(icon: "heart.fill", title: "Heart Rate", value: displayHeartRate, color: .nexusRed, isFromHealthKit: healthKitHeartRate != nil)
-                TodayMetricCard(icon: "figure.walk.motion", title: "Distance", value: displayDistance, color: .nexusBlue, isFromHealthKit: healthKitDistance != nil)
-                TodayMetricCard(icon: "drop.fill", title: "Water", value: latestValue(for: .waterIntake).map { "\(Int($0)) ml" } ?? "--", color: .nexusTeal, isFromHealthKit: false)
-            }
+    var todayTopRow: some View {
+        HStack(spacing: 12) {
+            TodayMetricCard(
+                icon: "figure.walk",
+                title: "Steps",
+                value: displaySteps,
+                color: .nexusGreen,
+                isFromHealthKit: healthKitSteps != nil
+            )
+            TodayMetricCard(
+                icon: "flame.fill",
+                title: "Calories",
+                value: displayCalories,
+                color: .nexusOrange,
+                isFromHealthKit: healthKitCalories != nil
+            )
+            TodayMetricCard(
+                icon: "moon.fill",
+                title: "Sleep",
+                value: displaySleep,
+                color: .indigo,
+                isFromHealthKit: healthKitSleep != nil
+            )
+        }
+    }
+
+    var todayBottomRow: some View {
+        HStack(spacing: 12) {
+            TodayMetricCard(
+                icon: "heart.fill",
+                title: "Heart Rate",
+                value: displayHeartRate,
+                color: .nexusRed,
+                isFromHealthKit: healthKitHeartRate != nil
+            )
+            TodayMetricCard(
+                icon: "figure.walk.motion",
+                title: "Distance",
+                value: displayDistance,
+                color: .nexusBlue,
+                isFromHealthKit: healthKitDistance != nil
+            )
+            TodayMetricCard(
+                icon: "drop.fill",
+                title: "Water",
+                value: latestValue(for: .waterIntake).map { "\(Int($0)) ml" } ?? "--",
+                color: .nexusTeal,
+                isFromHealthKit: false
+            )
         }
     }
 }
@@ -126,11 +198,19 @@ private extension HealthView {
                 .font(.nexusHeadline)
                 .foregroundStyle(.secondary)
 
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
-                ForEach(metrics, id: \.self) { metric in
-                    MetricCard(metric: metric, latestValue: combinedValue(for: metric), isFromHealthKit: isHealthKitValue(for: metric))
-                        .onTapGesture { selectedMetric = metric }
-                }
+            metricsGridContent
+        }
+    }
+
+    var metricsGridContent: some View {
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+            ForEach(metrics, id: \.self) { metric in
+                MetricCard(
+                    metric: metric,
+                    latestValue: combinedValue(for: metric),
+                    isFromHealthKit: isHealthKitValue(for: metric)
+                )
+                .onTapGesture { selectedMetric = metric }
             }
         }
     }
@@ -148,11 +228,15 @@ private extension HealthView {
             if entries.isEmpty {
                 emptyState
             } else {
-                LazyVStack(spacing: 8) {
-                    ForEach(entries.prefix(10)) { entry in
-                        HealthEntryRow(entry: entry)
-                    }
-                }
+                entriesList
+            }
+        }
+    }
+
+    var entriesList: some View {
+        LazyVStack(spacing: 8) {
+            ForEach(entries.prefix(10)) { entry in
+                HealthEntryRow(entry: entry)
             }
         }
     }
@@ -162,14 +246,45 @@ private extension HealthView {
             Image(systemName: "heart.text.square")
                 .font(.system(size: 40))
                 .foregroundStyle(.secondary)
+
             Text("No Health Data")
                 .font(.nexusHeadline)
+
             Text("Start tracking your health metrics")
                 .font(.nexusSubheadline)
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 40)
+    }
+}
+
+// MARK: - Display Values
+
+private extension HealthView {
+    var displaySteps: String {
+        if let steps = healthKitSteps { return "\(Int(steps))" }
+        return latestValue(for: .steps).map { "\(Int($0))" } ?? "--"
+    }
+
+    var displayCalories: String {
+        if let calories = healthKitCalories { return "\(Int(calories))" }
+        return latestValue(for: .calories).map { "\(Int($0))" } ?? "--"
+    }
+
+    var displaySleep: String {
+        if let sleep = healthKitSleep { return String(format: "%.1fh", sleep) }
+        return latestValue(for: .sleep).map { String(format: "%.1fh", $0) } ?? "--"
+    }
+
+    var displayHeartRate: String {
+        if let heartRate = healthKitHeartRate { return "\(Int(heartRate)) bpm" }
+        return latestValue(for: .heartRate).map { "\(Int($0)) bpm" } ?? "--"
+    }
+
+    var displayDistance: String {
+        if let distance = healthKitDistance { return String(format: "%.1f km", distance) }
+        return "--"
     }
 }
 
@@ -203,35 +318,6 @@ private extension HealthView {
     }
 }
 
-// MARK: - Display Values
-
-private extension HealthView {
-    var displaySteps: String {
-        if let steps = healthKitSteps { return "\(Int(steps))" }
-        return latestValue(for: .steps).map { "\(Int($0))" } ?? "--"
-    }
-
-    var displayCalories: String {
-        if let calories = healthKitCalories { return "\(Int(calories))" }
-        return latestValue(for: .calories).map { "\(Int($0))" } ?? "--"
-    }
-
-    var displaySleep: String {
-        if let sleep = healthKitSleep { return String(format: "%.1fh", sleep) }
-        return latestValue(for: .sleep).map { String(format: "%.1fh", $0) } ?? "--"
-    }
-
-    var displayHeartRate: String {
-        if let heartRate = healthKitHeartRate { return "\(Int(heartRate)) bpm" }
-        return latestValue(for: .heartRate).map { "\(Int($0)) bpm" } ?? "--"
-    }
-
-    var displayDistance: String {
-        if let distance = healthKitDistance { return String(format: "%.1f km", distance) }
-        return "--"
-    }
-}
-
 // MARK: - HealthKit Integration
 
 private extension HealthView {
@@ -251,36 +337,48 @@ private extension HealthView {
         }
 
         await withTaskGroup(of: Void.self) { group in
-            group.addTask {
-                if let steps = try? await healthKitService.fetchTodaySteps() {
-                    await MainActor.run { healthKitSteps = steps }
-                }
-            }
-            group.addTask {
-                if let calories = try? await healthKitService.fetchTodayActiveEnergy() {
-                    await MainActor.run { healthKitCalories = calories }
-                }
-            }
-            group.addTask {
-                if let distance = try? await healthKitService.fetchTodayDistance() {
-                    await MainActor.run { healthKitDistance = distance }
-                }
-            }
-            group.addTask {
-                if let heartRate = try? await healthKitService.fetchLatestHeartRate() {
-                    await MainActor.run { healthKitHeartRate = heartRate }
-                }
-            }
-            group.addTask {
-                if let sleep = try? await healthKitService.fetchTodaySleep() {
-                    await MainActor.run { healthKitSleep = sleep }
-                }
-            }
-            group.addTask {
-                if let weight = try? await healthKitService.fetchLatestWeight() {
-                    await MainActor.run { healthKitWeight = weight }
-                }
-            }
+            group.addTask { await fetchSteps() }
+            group.addTask { await fetchCalories() }
+            group.addTask { await fetchDistance() }
+            group.addTask { await fetchHeartRate() }
+            group.addTask { await fetchSleep() }
+            group.addTask { await fetchWeight() }
+        }
+    }
+
+    func fetchSteps() async {
+        if let steps = try? await healthKitService.fetchTodaySteps() {
+            await MainActor.run { healthKitSteps = steps }
+        }
+    }
+
+    func fetchCalories() async {
+        if let calories = try? await healthKitService.fetchTodayActiveEnergy() {
+            await MainActor.run { healthKitCalories = calories }
+        }
+    }
+
+    func fetchDistance() async {
+        if let distance = try? await healthKitService.fetchTodayDistance() {
+            await MainActor.run { healthKitDistance = distance }
+        }
+    }
+
+    func fetchHeartRate() async {
+        if let heartRate = try? await healthKitService.fetchLatestHeartRate() {
+            await MainActor.run { healthKitHeartRate = heartRate }
+        }
+    }
+
+    func fetchSleep() async {
+        if let sleep = try? await healthKitService.fetchTodaySleep() {
+            await MainActor.run { healthKitSleep = sleep }
+        }
+    }
+
+    func fetchWeight() async {
+        if let weight = try? await healthKitService.fetchLatestWeight() {
+            await MainActor.run { healthKitWeight = weight }
         }
     }
 
@@ -294,9 +392,13 @@ private extension HealthView {
     }
 }
 
+// MARK: - HealthMetricType Extension
+
 extension HealthMetricType: Identifiable {
     var id: String { rawValue }
 }
+
+// MARK: - Preview
 
 #Preview {
     HealthView()
