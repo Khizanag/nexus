@@ -523,18 +523,41 @@ struct PeoplePickerSheet: View {
     @Binding var selectedIds: Set<UUID>
     let onAddNew: () -> Void
 
+    @State private var showContactsPicker = false
+    @State private var contactsAccessDenied = false
+    @State private var searchText = ""
+
     var body: some View {
         NavigationStack {
             List {
+                if searchText.isEmpty {
+                    importFromContactsSection
+                }
+
                 if allPeople.isEmpty {
                     emptyState
                 } else {
                     peopleList
                 }
             }
+            .searchable(text: $searchText, prompt: "Search people")
             .navigationTitle("Assignees")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbarContent }
+            .sheet(isPresented: $showContactsPicker) {
+                ContactsPickerView(
+                    existingContactIds: existingContactIdentifiers,
+                    onSelect: { contacts in
+                        importContacts(contacts)
+                    }
+                )
+            }
+            .alert("Contacts Access Denied", isPresented: $contactsAccessDenied) {
+                Button("Open Settings") { openSettings() }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("Please enable Contacts access in Settings to import people from your contacts.")
+            }
         }
         .presentationDetents([.medium, .large])
     }
@@ -565,31 +588,84 @@ private extension PeoplePickerSheet {
 // MARK: - PeoplePickerSheet Content
 
 private extension PeoplePickerSheet {
-    var peopleList: some View {
-        ForEach(allPeople) { person in
-            personRow(person)
+    var importFromContactsSection: some View {
+        Section {
+            Button {
+                requestContactsAccess()
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "person.crop.circle.badge.plus")
+                        .font(.system(size: 20))
+                        .foregroundStyle(Color.nexusBlue)
+                        .frame(width: 36)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Import from Contacts")
+                            .font(.nexusSubheadline)
+                            .fontWeight(.medium)
+                            .foregroundStyle(.primary)
+
+                        Text("Add people from your address book")
+                            .font(.nexusCaption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
         }
-        .onDelete(perform: deletePeople)
+    }
+
+    var filteredPeople: [PersonModel] {
+        if searchText.isEmpty {
+            return allPeople
+        }
+        return allPeople.filter { person in
+            person.name.localizedCaseInsensitiveContains(searchText) ||
+            person.email?.localizedCaseInsensitiveContains(searchText) == true ||
+            person.phone?.contains(searchText) == true
+        }
+    }
+
+    var peopleList: some View {
+        Section {
+            ForEach(filteredPeople) { person in
+                personRow(person)
+            }
+            .onDelete(perform: deletePeople)
+        } header: {
+            if !allPeople.isEmpty {
+                Text("People")
+            }
+        }
     }
 
     var emptyState: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "person.2")
-                .font(.system(size: 40))
-                .foregroundStyle(.secondary)
+        Section {
+            VStack(spacing: 16) {
+                Image(systemName: "person.2")
+                    .font(.system(size: 40))
+                    .foregroundStyle(.secondary)
 
-            Text("No People Yet")
-                .font(.nexusHeadline)
+                Text("No People Yet")
+                    .font(.nexusHeadline)
 
-            Text("Add people to assign them to tasks")
-                .font(.nexusSubheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+                Text("Import from Contacts or add manually")
+                    .font(.nexusSubheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
 
-            addPersonButton
+                addPersonButton
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 40)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 40)
         .listRowBackground(Color.clear)
     }
 
@@ -600,7 +676,7 @@ private extension PeoplePickerSheet {
                 onAddNew()
             }
         } label: {
-            Label("Add Person", systemImage: "plus")
+            Label("Add Manually", systemImage: "plus")
                 .font(.nexusSubheadline)
                 .fontWeight(.semibold)
                 .foregroundStyle(.white)
@@ -611,29 +687,34 @@ private extension PeoplePickerSheet {
     }
 
     func personRow(_ person: PersonModel) -> some View {
-        Button {
-            toggleSelection(person)
-        } label: {
-            personRowContent(person)
-        }
-        .buttonStyle(.plain)
-    }
-
-    func personRowContent(_ person: PersonModel) -> some View {
         HStack(spacing: 12) {
             personAvatar(person)
             personInfo(person)
             Spacer()
             selectionIndicator(person)
         }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            toggleSelection(person)
+        }
     }
 
     func personAvatar(_ person: PersonModel) -> some View {
-        Text(person.initials)
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(.white)
-            .frame(width: 36, height: 36)
-            .background(Circle().fill(Color(hex: person.colorHex) ?? .nexusPurple))
+        ZStack {
+            Text(person.initials)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 36, height: 36)
+                .background(Circle().fill(Color(hex: person.colorHex) ?? .nexusPurple))
+
+            if person.isLinkedToContact {
+                Image(systemName: "link.circle.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white)
+                    .background(Circle().fill(Color.nexusBlue).frame(width: 14, height: 14))
+                    .offset(x: 12, y: 12)
+            }
+        }
     }
 
     func personInfo(_ person: PersonModel) -> some View {
@@ -647,6 +728,10 @@ private extension PeoplePickerSheet {
                 Text(email)
                     .font(.nexusCaption)
                     .foregroundStyle(.secondary)
+            } else if let phone = person.phone, !phone.isEmpty {
+                Text(phone)
+                    .font(.nexusCaption)
+                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -657,6 +742,10 @@ private extension PeoplePickerSheet {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 22))
                 .foregroundStyle(Color.nexusGreen)
+        } else {
+            Circle()
+                .strokeBorder(Color.nexusBorder, lineWidth: 2)
+                .frame(width: 22, height: 22)
         }
     }
 }
@@ -664,11 +753,17 @@ private extension PeoplePickerSheet {
 // MARK: - PeoplePickerSheet Actions
 
 private extension PeoplePickerSheet {
+    var existingContactIdentifiers: Set<String> {
+        Set(allPeople.compactMap { $0.contactIdentifier })
+    }
+
     func toggleSelection(_ person: PersonModel) {
-        if selectedIds.contains(person.id) {
-            selectedIds.remove(person.id)
-        } else {
-            selectedIds.insert(person.id)
+        withAnimation(.easeInOut(duration: 0.15)) {
+            if selectedIds.contains(person.id) {
+                selectedIds.remove(person.id)
+            } else {
+                selectedIds.insert(person.id)
+            }
         }
     }
 
@@ -677,6 +772,43 @@ private extension PeoplePickerSheet {
             let person = allPeople[index]
             selectedIds.remove(person.id)
             modelContext.delete(person)
+        }
+    }
+
+    func requestContactsAccess() {
+        Task {
+            let status = await ContactsService.requestAccess()
+            await MainActor.run {
+                switch status {
+                case .authorized:
+                    showContactsPicker = true
+                case .denied, .restricted:
+                    contactsAccessDenied = true
+                case .notDetermined:
+                    break
+                @unknown default:
+                    break
+                }
+            }
+        }
+    }
+
+    func importContacts(_ contacts: [ImportedContact]) {
+        for contact in contacts {
+            let person = PersonModel(
+                name: contact.name,
+                email: contact.email,
+                phone: contact.phone,
+                colorHex: PersonModel.defaultColors.randomElement() ?? "#8B5CF6",
+                contactIdentifier: contact.identifier
+            )
+            modelContext.insert(person)
+        }
+    }
+
+    func openSettings() {
+        if let url = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(url)
         }
     }
 }

@@ -38,6 +38,8 @@
 	<string>Nexus accesses your calendar to display your events and help you manage your schedule.</string>
 	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
 	<string>Nexus needs permission to create and update calendar events.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Nexus accesses your contacts to let you quickly add people as task assignees from your address book.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
