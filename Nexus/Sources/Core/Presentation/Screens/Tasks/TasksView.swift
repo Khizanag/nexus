@@ -1276,21 +1276,46 @@ private extension TaskRow {
     func assigneesBadge(_ assignees: [PersonModel]) -> some View {
         HStack(spacing: -4) {
             ForEach(Array(assignees.prefix(2))) { person in
+                let avatarColor = Color(hex: person.colorHex) ?? .nexusPurple
+
                 Text(person.initials)
                     .font(.system(size: 8, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 18, height: 18)
-                    .background(Circle().fill(Color(hex: person.colorHex) ?? .nexusPurple))
-                    .overlay(Circle().strokeBorder(Color.nexusSurface, lineWidth: 1))
+                    .background(Circle().fill(avatarColor))
+                    .overlay(
+                        Circle()
+                            .strokeBorder(
+                                LinearGradient(
+                                    colors: [.white.opacity(0.4), .white.opacity(0.1)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1
+                            )
+                    )
             }
 
             if assignees.count > 2 {
-                Text("+\(assignees.count - 2)")
+                let overflowCount = assignees.count - 2
+                let displayText = overflowCount > 99 ? "+99" : "+\(overflowCount)"
+
+                Text(displayText)
                     .font(.system(size: 7, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .frame(width: 18, height: 18)
-                    .background(Circle().fill(Color.nexusBorder))
-                    .overlay(Circle().strokeBorder(Color.nexusSurface, lineWidth: 1))
+                    .background(Circle().fill(.ultraThinMaterial))
+                    .overlay(
+                        Circle()
+                            .strokeBorder(
+                                LinearGradient(
+                                    colors: [.white.opacity(0.3), .white.opacity(0.1)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1
+                            )
+                    )
             }
         }
         .opacity(task.isCompleted ? 0.5 : 1)

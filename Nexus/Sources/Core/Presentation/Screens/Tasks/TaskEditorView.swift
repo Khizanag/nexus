@@ -386,21 +386,50 @@ private extension TaskEditorView {
     }
 
     func personAvatar(_ person: PersonModel, size: CGFloat) -> some View {
-        Text(person.initials)
+        let avatarColor = Color(hex: person.colorHex) ?? .nexusPurple
+
+        return Text(person.initials)
             .font(.system(size: size * 0.4, weight: .semibold))
             .foregroundStyle(.white)
             .frame(width: size, height: size)
-            .background(Circle().fill(Color(hex: person.colorHex) ?? .nexusPurple))
-            .overlay(Circle().strokeBorder(Color.nexusBackground, lineWidth: 2))
+            .background(Circle().fill(avatarColor))
+            .overlay(
+                Circle()
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [.white.opacity(0.4), .white.opacity(0.1)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1.5
+                    )
+            )
+            .shadow(color: avatarColor.opacity(0.3), radius: 2, x: 0, y: 1)
     }
 
     var overflowBadge: some View {
-        Text("+\(selectedAssignees.count - 3)")
-            .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(.white)
+        let overflowCount = selectedAssignees.count - 3
+        let displayText = overflowCount > 99 ? "+99" : "+\(overflowCount)"
+
+        return Text(displayText)
+            .font(.system(size: 9, weight: .semibold))
+            .foregroundStyle(.secondary)
             .frame(width: 28, height: 28)
-            .background(Circle().fill(Color.nexusSurface))
-            .overlay(Circle().strokeBorder(Color.nexusBorder, lineWidth: 2))
+            .background(
+                Circle()
+                    .fill(.ultraThinMaterial)
+            )
+            .overlay(
+                Circle()
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [.white.opacity(0.3), .white.opacity(0.1)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
+            )
     }
 }
 
