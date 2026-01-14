@@ -754,17 +754,22 @@ private extension PeoplePickerSheet {
         }
     }
 
-    @ViewBuilder
     func selectionIndicator(_ person: PersonModel) -> some View {
-        if selectedIds.contains(person.id) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 22))
-                .foregroundStyle(Color.nexusGreen)
-        } else {
+        let isSelected = selectedIds.contains(person.id)
+
+        return ZStack {
             Circle()
                 .strokeBorder(Color.nexusBorder, lineWidth: 2)
                 .frame(width: 22, height: 22)
+                .opacity(isSelected ? 0 : 1)
+
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 22))
+                .foregroundStyle(Color.nexusGreen)
+                .scaleEffect(isSelected ? 1 : 0.5)
+                .opacity(isSelected ? 1 : 0)
         }
+        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isSelected)
     }
 }
 
@@ -776,8 +781,16 @@ private extension PeoplePickerSheet {
     }
 
     func toggleSelection(_ person: PersonModel) {
-        withAnimation(.easeInOut(duration: 0.15)) {
-            if selectedIds.contains(person.id) {
+        let isCurrentlySelected = selectedIds.contains(person.id)
+
+        if isCurrentlySelected {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        } else {
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        }
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            if isCurrentlySelected {
                 selectedIds.remove(person.id)
             } else {
                 selectedIds.insert(person.id)
