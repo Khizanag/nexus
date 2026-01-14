@@ -16,6 +16,7 @@ struct TasksView: View {
     @State private var toastMessage: String?
     @State private var toastIsCompletion = true
     @State private var recentlyChangedTaskId: UUID?
+    @State private var recentlyChangedTask: TaskModel?
     @State private var taskIsLeaving = false
     @State private var showGroupEditor = false
     @State private var editingGroup: TaskGroupModel?
@@ -501,7 +502,7 @@ private extension TasksView {
             VStack {
                 Spacer()
                 statusToast(message: message, isCompletion: toastIsCompletion)
-                    .padding(.bottom, 60)
+                    .padding(.bottom, 20)
             }
             .transition(.asymmetric(
                 insertion: .move(edge: .bottom).combined(with: .opacity),
@@ -514,19 +515,26 @@ private extension TasksView {
     func statusToast(message: String, isCompletion: Bool) -> some View {
         HStack(spacing: 12) {
             toastIcon(isCompletion: isCompletion)
-            toastText(message: message)
+
+            VStack(alignment: .leading, spacing: 2) {
+                toastText(message: message)
+                toastStatus(isCompletion: isCompletion)
+            }
+
             Spacer()
-            toastStatus(isCompletion: isCompletion)
+
+            undoButton
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.leading, 16)
+        .padding(.trailing, 10)
+        .padding(.vertical, 12)
         .background { toastBackground(isCompletion: isCompletion) }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, 16)
     }
 
     func toastIcon(isCompletion: Bool) -> some View {
         Image(systemName: isCompletion ? "checkmark.circle.fill" : "arrow.uturn.backward.circle.fill")
-            .font(.system(size: 20))
+            .font(.system(size: 24))
             .foregroundStyle(isCompletion ? Color.nexusGreen : Color.nexusOrange)
     }
 
@@ -538,16 +546,33 @@ private extension TasksView {
     }
 
     func toastStatus(isCompletion: Bool) -> some View {
-        Text(isCompletion ? "Moved to Completed" : "Restored")
+        Text(isCompletion ? "Completed" : "Restored")
             .font(.nexusCaption)
             .foregroundStyle(.secondary)
     }
 
+    var undoButton: some View {
+        Button {
+            undoTaskChange()
+        } label: {
+            Text("Undo")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(
+                    Capsule()
+                        .fill(toastIsCompletion ? Color.nexusGreen : Color.nexusOrange)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
     func toastBackground(isCompletion: Bool) -> some View {
-        RoundedRectangle(cornerRadius: 16)
+        RoundedRectangle(cornerRadius: 20)
             .fill(.ultraThinMaterial)
             .overlay {
-                RoundedRectangle(cornerRadius: 16)
+                RoundedRectangle(cornerRadius: 20)
                     .strokeBorder(
                         (isCompletion ? Color.nexusGreen : Color.nexusOrange).opacity(0.3),
                         lineWidth: 1
@@ -731,6 +756,7 @@ private extension TasksView {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
 
         recentlyChangedTaskId = task.id
+        recentlyChangedTask = task
         taskIsLeaving = false
 
         if !wasCompleted {
@@ -761,11 +787,14 @@ private extension TasksView {
             }
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
             withAnimation(.spring(response: 0.4)) {
-                toastMessage = nil
-                recentlyChangedTaskId = nil
-                taskIsLeaving = false
+                if recentlyChangedTaskId == task.id {
+                    toastMessage = nil
+                    recentlyChangedTaskId = nil
+                    recentlyChangedTask = nil
+                    taskIsLeaving = false
+                }
             }
         }
 
@@ -793,11 +822,14 @@ private extension TasksView {
             }
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
             withAnimation(.spring(response: 0.4)) {
-                toastMessage = nil
-                recentlyChangedTaskId = nil
-                taskIsLeaving = false
+                if recentlyChangedTaskId == task.id {
+                    toastMessage = nil
+                    recentlyChangedTaskId = nil
+                    recentlyChangedTask = nil
+                    taskIsLeaving = false
+                }
             }
         }
 
@@ -805,6 +837,41 @@ private extension TasksView {
             Task {
                 await DefaultTaskNotificationService.shared.scheduleReminder(for: task)
             }
+        }
+    }
+
+    func undoTaskChange() {
+        guard let task = recentlyChangedTask else { return }
+
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+
+        withAnimation(.spring(response: 0.4)) {
+            toastMessage = nil
+            recentlyChangedTaskId = nil
+            recentlyChangedTask = nil
+            taskIsLeaving = false
+        }
+
+        if task.isCompleted {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+                task.isCompleted = false
+                task.completedAt = nil
+                task.updatedAt = .now
+            }
+
+            if task.reminderDate != nil {
+                Task {
+                    await DefaultTaskNotificationService.shared.scheduleReminder(for: task)
+                }
+            }
+        } else {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+                task.isCompleted = true
+                task.completedAt = .now
+                task.updatedAt = .now
+            }
+
+            DefaultTaskNotificationService.shared.cancelReminder(for: task)
         }
     }
 
