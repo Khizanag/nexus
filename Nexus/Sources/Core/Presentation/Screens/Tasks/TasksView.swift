@@ -11,7 +11,8 @@ struct TasksView: View {
     @State private var sortMode: TaskSorting = .dateCreated
     @State private var sortAscending = false
     @State private var showNewTask = false
-    @State private var selectedTask: TaskModel?
+    @State private var viewingTask: TaskModel?
+    @State private var editingTask: TaskModel?
     @State private var toastMessage: String?
     @State private var toastIsCompletion = true
     @State private var recentlyChangedTaskId: UUID?
@@ -33,7 +34,10 @@ struct TasksView: View {
             .sheet(isPresented: $showNewTask) {
                 TaskEditorView(task: nil)
             }
-            .sheet(item: $selectedTask) { task in
+            .sheet(item: $viewingTask) { task in
+                TaskDetailView(task: task)
+            }
+            .sheet(item: $editingTask) { task in
                 TaskEditorView(task: task)
             }
             .sheet(isPresented: $showGroupEditor) {
@@ -348,7 +352,7 @@ private extension TasksView {
             onToggle: { toggleTask(task) }
         )
         .onTapGesture {
-            selectedTask = task
+            viewingTask = task
         }
         .contextMenu {
             taskContextMenu(task)
@@ -358,7 +362,13 @@ private extension TasksView {
     @ViewBuilder
     func taskContextMenu(_ task: TaskModel) -> some View {
         Button {
-            selectedTask = task
+            viewingTask = task
+        } label: {
+            Label("View Task", systemImage: "eye")
+        }
+
+        Button {
+            editingTask = task
         } label: {
             Label("Edit Task", systemImage: "pencil")
         }
