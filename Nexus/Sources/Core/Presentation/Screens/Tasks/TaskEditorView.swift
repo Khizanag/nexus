@@ -555,6 +555,7 @@ struct PeoplePickerSheet: View {
     @State private var showContactsPicker = false
     @State private var contactsAccessDenied = false
     @State private var searchText = ""
+    @State private var viewingTasksForPerson: PersonModel?
 
     var body: some View {
         NavigationStack {
@@ -580,6 +581,9 @@ struct PeoplePickerSheet: View {
                         importContacts(contacts)
                     }
                 )
+            }
+            .sheet(item: $viewingTasksForPerson) { person in
+                PersonTasksView(person: person)
             }
             .alert("Contacts Access Denied", isPresented: $contactsAccessDenied) {
                 Button("Open Settings") { openSettings() }
@@ -723,6 +727,9 @@ private extension PeoplePickerSheet {
             selectionIndicator(person)
         }
         .contentShape(Rectangle())
+        .contextMenu {
+            personContextMenu(person)
+        }
         .onTapGesture {
             toggleSelection(person)
         }
@@ -800,6 +807,33 @@ private extension PeoplePickerSheet {
         }
         .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isSelected)
     }
+
+    @ViewBuilder
+    func personContextMenu(_ person: PersonModel) -> some View {
+        Button {
+            toggleSelection(person)
+        } label: {
+            if selectedIds.contains(person.id) {
+                Label("Deselect", systemImage: "minus.circle")
+            } else {
+                Label("Select", systemImage: "checkmark.circle")
+            }
+        }
+
+        Button {
+            viewingTasksForPerson = person
+        } label: {
+            Label("View Assigned Tasks", systemImage: "checklist")
+        }
+
+        Divider()
+
+        Button(role: .destructive) {
+            deletePerson(person)
+        } label: {
+            Label("Delete Person", systemImage: "trash")
+        }
+    }
 }
 
 // MARK: - PeoplePickerSheet Actions
@@ -833,6 +867,12 @@ private extension PeoplePickerSheet {
             selectedIds.remove(person.id)
             modelContext.delete(person)
         }
+    }
+
+    func deletePerson(_ person: PersonModel) {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        selectedIds.remove(person.id)
+        modelContext.delete(person)
     }
 
     func requestContactsAccess() {
