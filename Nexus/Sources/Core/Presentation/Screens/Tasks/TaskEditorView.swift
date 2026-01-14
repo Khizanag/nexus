@@ -700,7 +700,7 @@ private extension PeoplePickerSheet {
     }
 
     func personAvatar(_ person: PersonModel) -> some View {
-        ZStack {
+        ZStack(alignment: .bottomTrailing) {
             Text(person.initials)
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.white)
@@ -708,21 +708,39 @@ private extension PeoplePickerSheet {
                 .background(Circle().fill(Color(hex: person.colorHex) ?? .nexusPurple))
 
             if person.isLinkedToContact {
-                Image(systemName: "link.circle.fill")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.white)
-                    .background(Circle().fill(Color.nexusBlue).frame(width: 14, height: 14))
-                    .offset(x: 12, y: 12)
+                Image(systemName: "person.crop.circle.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color.nexusBlue)
+                    .background(
+                        Circle()
+                            .fill(Color.nexusSurface)
+                            .frame(width: 16, height: 16)
+                    )
+                    .offset(x: 2, y: 2)
             }
         }
     }
 
     func personInfo(_ person: PersonModel) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(person.name)
-                .font(.nexusSubheadline)
-                .fontWeight(.medium)
-                .foregroundStyle(.primary)
+            HStack(spacing: 6) {
+                Text(person.name)
+                    .font(.nexusSubheadline)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.primary)
+
+                if person.isLinkedToContact {
+                    Text("Contacts")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(Color.nexusBlue)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(
+                            Capsule()
+                                .fill(Color.nexusBlue.opacity(0.15))
+                        )
+                }
+            }
 
             if let email = person.email, !email.isEmpty {
                 Text(email)
