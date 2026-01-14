@@ -350,6 +350,98 @@ private extension TasksView {
         .onTapGesture {
             selectedTask = task
         }
+        .contextMenu {
+            taskContextMenu(task)
+        }
+    }
+
+    @ViewBuilder
+    func taskContextMenu(_ task: TaskModel) -> some View {
+        Button {
+            selectedTask = task
+        } label: {
+            Label("Edit Task", systemImage: "pencil")
+        }
+
+        Button {
+            toggleTask(task)
+        } label: {
+            if task.isCompleted {
+                Label("Mark as Incomplete", systemImage: "arrow.uturn.backward")
+            } else {
+                Label("Mark as Complete", systemImage: "checkmark.circle")
+            }
+        }
+
+        Divider()
+
+        Button {
+            duplicateTask(task)
+        } label: {
+            Label("Duplicate", systemImage: "doc.on.doc")
+        }
+
+        if let url = task.url, let taskURL = URL(string: url) {
+            Button {
+                UIApplication.shared.open(taskURL)
+            } label: {
+                Label("Open Link", systemImage: "link")
+            }
+        }
+
+        Divider()
+
+        Menu {
+            ForEach(TaskPriority.allCases, id: \.self) { priority in
+                Button {
+                    changePriority(task, to: priority)
+                } label: {
+                    if task.priority == priority {
+                        Label(priority.rawValue.capitalized, systemImage: "checkmark")
+                    } else {
+                        Text(priority.rawValue.capitalized)
+                    }
+                }
+            }
+        } label: {
+            Label("Priority", systemImage: "flag")
+        }
+
+        if !taskGroups.isEmpty {
+            Menu {
+                Button {
+                    moveToProject(task, project: nil)
+                } label: {
+                    if task.group == nil {
+                        Label("Inbox", systemImage: "checkmark")
+                    } else {
+                        Label("Inbox", systemImage: "tray")
+                    }
+                }
+
+                ForEach(taskGroups) { group in
+                    Button {
+                        moveToProject(task, project: group)
+                    } label: {
+                        if task.group?.id == group.id {
+                            Label(group.name, systemImage: "checkmark")
+                        } else {
+                            Label(group.name, systemImage: group.icon)
+                        }
+                    }
+                }
+            } label: {
+                Label("Move to Project", systemImage: "folder")
+            }
+        }
+
+        Divider()
+
+        Button(role: .destructive) {
+            deleteTask(task)
+        } label: {
+            Label("Delete", systemImage: "trash")
+        }
     }
 }
 
@@ -703,6 +795,50 @@ private extension TasksView {
             Task {
                 await DefaultTaskNotificationService.shared.scheduleReminder(for: task)
             }
+        }
+    }
+
+    func duplicateTask(_ task: TaskModel) {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+
+        let newTask = TaskModel(
+            title: task.title,
+            notes: task.notes,
+            url: task.url,
+            priority: task.priority,
+            dueDate: task.dueDate,
+            reminderDate: nil,
+            group: task.group,
+            assignees: task.assignees
+        )
+        modelContext.insert(newTask)
+    }
+
+    func changePriority(_ task: TaskModel, to priority: TaskPriority) {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+
+        withAnimation(.spring(response: 0.3)) {
+            task.priority = priority
+            task.updatedAt = .now
+        }
+    }
+
+    func moveToProject(_ task: TaskModel, project: TaskGroupModel?) {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+
+        withAnimation(.spring(response: 0.3)) {
+            task.group = project
+            task.updatedAt = .now
+        }
+    }
+
+    func deleteTask(_ task: TaskModel) {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+
+        DefaultTaskNotificationService.shared.cancelReminder(for: task)
+
+        withAnimation(.spring(response: 0.3)) {
+            modelContext.delete(task)
         }
     }
 }

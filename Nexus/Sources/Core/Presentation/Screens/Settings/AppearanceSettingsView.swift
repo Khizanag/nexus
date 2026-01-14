@@ -9,7 +9,7 @@ struct AppearanceSettingsView: View {
         ("green", .nexusGreen),
         ("orange", .nexusOrange),
         ("pink", .nexusPink),
-        ("teal", .nexusTeal)
+        ("teal", .nexusTeal),
     ]
 
     var body: some View {

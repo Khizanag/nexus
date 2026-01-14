@@ -9,6 +9,7 @@ final class PersonModel {
     var phone: String?
     var colorHex: String = "#8B5CF6"
     var createdAt: Date = Date()
+    var contactIdentifier: String?
 
     @Relationship(deleteRule: .nullify, inverse: \TaskModel.assignees)
     var tasks: [TaskModel]?
@@ -20,6 +21,7 @@ final class PersonModel {
         phone: String? = nil,
         colorHex: String = "#8B5CF6",
         createdAt: Date = .now,
+        contactIdentifier: String? = nil,
         tasks: [TaskModel]? = nil
     ) {
         self.id = id
@@ -28,7 +30,12 @@ final class PersonModel {
         self.phone = phone
         self.colorHex = colorHex
         self.createdAt = createdAt
+        self.contactIdentifier = contactIdentifier
         self.tasks = tasks
+    }
+
+    var isLinkedToContact: Bool {
+        contactIdentifier != nil
     }
 
     var initials: String {
