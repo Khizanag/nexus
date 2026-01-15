@@ -26,6 +26,8 @@ struct NexusApp: App {
             PersonModel.self,
             TransactionModel.self,
             HealthEntryModel.self,
+            NutritionEntryModel.self,
+            ProductModel.self,
             TagModel.self,
             ChatMessageModel.self,
             CurrencyRateCacheModel.self,
