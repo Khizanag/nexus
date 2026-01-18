@@ -4,10 +4,14 @@ import SwiftData
 struct HealthView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \HealthEntryModel.date, order: .reverse) private var entries: [HealthEntryModel]
+    @Query(sort: \NutritionEntryModel.date, order: .reverse) private var nutritionEntries: [NutritionEntryModel]
+
+    @AppStorage("dailyCalorieGoal") private var calorieGoal = 2000
 
     @State private var showAddEntry = false
     @State private var selectedMetric: HealthMetricType?
     @State private var showHealthKitAuth = false
+    @State private var showNutritionHub = false
 
     @State private var healthKitSteps: Double?
     @State private var healthKitCalories: Double?
@@ -31,6 +35,7 @@ struct HealthView: View {
                 .toolbar { toolbarContent }
                 .sheet(isPresented: $showAddEntry) { HealthEntryEditorView() }
                 .sheet(item: $selectedMetric) { metric in MetricDetailView(metric: metric) }
+                .fullScreenCover(isPresented: $showNutritionHub) { NutritionHubView() }
                 .task { await loadHealthKitData() }
                 .refreshable { await loadHealthKitData() }
         }
@@ -58,12 +63,63 @@ private extension HealthView {
             VStack(spacing: 20) {
                 healthKitBanner
                 todayOverview
+                nutritionHubCard
                 metricsGrid
                 recentEntries
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 120)
         }
+    }
+
+    var nutritionHubCard: some View {
+        Button { showNutritionHub = true } label: {
+            NexusCard {
+                HStack(spacing: 16) {
+                    Image(systemName: "fork.knife")
+                        .font(.system(size: 28))
+                        .foregroundStyle(Color.nexusOrange)
+                        .frame(width: 44, height: 44)
+                        .background {
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Color.nexusOrange.opacity(0.15))
+                        }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Nutrition")
+                            .font(.nexusHeadline)
+                            .foregroundStyle(Color.nexusTextPrimary)
+
+                        HStack(spacing: 8) {
+                            Text("\(Int(todayNutritionCalories)) / \(calorieGoal) kcal")
+                                .font(.nexusCaption)
+                                .foregroundStyle(Color.nexusTextSecondary)
+
+                            ProgressBar(progress: nutritionProgress, color: .nexusOrange, height: 4)
+                                .frame(width: 60)
+                        }
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.nexusCaption)
+                        .foregroundStyle(Color.nexusTextTertiary)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var todayNutritionCalories: Double {
+        nutritionEntries
+            .filter { Calendar.current.isDateInToday($0.date) }
+            .reduce(0) { $0 + $1.calories }
+    }
+
+    private var nutritionProgress: Double {
+        guard calorieGoal > 0 else { return 0 }
+        return todayNutritionCalories / Double(calorieGoal)
     }
 }
 
