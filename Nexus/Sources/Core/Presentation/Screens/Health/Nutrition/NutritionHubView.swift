@@ -19,6 +19,7 @@ struct NutritionHubView: View {
     @State private var showGoals = false
     @State private var showHistory = false
     @State private var showProductLibrary = false
+    @State private var logTrigger = false
 
     private var todayEntries: [NutritionEntryModel] {
         allEntries.filter { Calendar.current.isDate($0.date, inSameDayAs: selectedDate) }
@@ -40,10 +41,6 @@ struct NutritionHubView: View {
         Array(products.prefix(6))
     }
 
-    private var favoriteProducts: [ProductModel] {
-        products.filter { $0.isFavorite }
-    }
-
     var body: some View {
         NavigationStack {
             ZStack(alignment: .bottomTrailing) {
@@ -53,6 +50,7 @@ struct NutritionHubView: View {
             .background(Color.nexusBackground)
             .navigationTitle("Nutrition")
             .toolbar { toolbarContent }
+            .sensoryFeedback(.impact(weight: .medium), trigger: logTrigger)
             .sheet(isPresented: $showQuickLog) {
                 QuickLogView(
                     mealType: selectedMealType,
@@ -97,15 +95,16 @@ struct NutritionHubView: View {
 private extension NutritionHubView {
     var scrollContent: some View {
         ScrollView {
-            VStack(spacing: 20) {
+            VStack(spacing: DesignSystem.Spacing.lg) {
                 dateHeader
                 summaryCard
                 quickAccessSection
                 mealSections
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, DesignSystem.Spacing.lg)
             .padding(.bottom, 100)
         }
+        .scrollEdgeEffectStyle(.soft, for: .top)
     }
 
     var dateHeader: some View {
@@ -117,6 +116,7 @@ private extension NutritionHubView {
                     .font(.nexusHeadline)
                     .foregroundStyle(Color.nexusTextSecondary)
             }
+            .accessibilityLabel("Previous day")
 
             Spacer()
 
@@ -139,6 +139,7 @@ private extension NutritionHubView {
                     .font(.nexusCaption)
                     .foregroundStyle(Color.nexusTextSecondary)
             }
+            .accessibilityElement(children: .combine)
 
             Spacer()
 
@@ -150,8 +151,9 @@ private extension NutritionHubView {
                     .foregroundStyle(Calendar.current.isDateInToday(selectedDate) ? Color.nexusTextTertiary : Color.nexusTextSecondary)
             }
             .disabled(Calendar.current.isDateInToday(selectedDate))
+            .accessibilityLabel("Next day")
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, DesignSystem.Spacing.xs)
     }
 
     var summaryCard: some View {
@@ -170,7 +172,7 @@ private extension NutritionHubView {
     @ViewBuilder
     var quickAccessSection: some View {
         if !recentProducts.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
                 HStack {
                     Text("Quick Add")
                         .font(.nexusHeadline)
@@ -185,10 +187,11 @@ private extension NutritionHubView {
                             .font(.nexusCaption)
                             .foregroundStyle(Color.nexusBlue)
                     }
+                    .accessibilityLabel("See all products")
                 }
 
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
+                    HStack(spacing: DesignSystem.Spacing.sm) {
                         ForEach(recentProducts, id: \.id) { product in
                             QuickAddTile(product: product) {
                                 quickLogProduct(product)
@@ -201,7 +204,7 @@ private extension NutritionHubView {
     }
 
     var mealSections: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: DesignSystem.Spacing.md) {
             ForEach(MealType.allCases, id: \.self) { mealType in
                 MealSectionCard(
                     mealType: mealType,
@@ -223,19 +226,17 @@ private extension NutritionHubView {
             selectedMealType = suggestedMealType
             showQuickLog = true
         } label: {
-            Image(systemName: "plus")
+            Label("Log food", systemImage: "plus")
                 .font(.nexusTitle2)
                 .fontWeight(.semibold)
-                .foregroundStyle(.white)
+                .labelStyle(.iconOnly)
                 .frame(width: 56, height: 56)
-                .background {
-                    Circle()
-                        .fill(Color.nexusOrange)
-                        .shadow(color: .nexusOrange.opacity(0.4), radius: 8, x: 0, y: 4)
-                }
         }
-        .padding(.trailing, 20)
-        .padding(.bottom, 20)
+        .buttonStyle(.glassProminent)
+        .padding(.trailing, DesignSystem.Spacing.lg)
+        .padding(.bottom, DesignSystem.Spacing.lg)
+        .accessibilityLabel("Log food")
+        .accessibilityHint("Opens quick food logging")
     }
 
     @ToolbarContentBuilder
@@ -247,6 +248,7 @@ private extension NutritionHubView {
                 Image(systemName: "chart.bar.fill")
                     .foregroundStyle(Color.nexusTextSecondary)
             }
+            .accessibilityLabel("View history")
         }
 
         ToolbarItem(placement: .topBarTrailing) {
@@ -256,6 +258,7 @@ private extension NutritionHubView {
                 Image(systemName: "target")
                     .foregroundStyle(Color.nexusTextSecondary)
             }
+            .accessibilityLabel("Set daily goals")
         }
     }
 }
@@ -293,14 +296,11 @@ private extension NutritionHubView {
         product.lastUsed = Date()
 
         showQuickLog = false
-
-        let generator = UIImpactFeedbackGenerator(style: .medium)
-        generator.impactOccurred()
+        logTrigger.toggle()
     }
 }
 
 #Preview {
     NutritionHubView()
         .modelContainer(for: [NutritionEntryModel.self, ProductModel.self], inMemory: true)
-        .preferredColorScheme(.dark)
 }

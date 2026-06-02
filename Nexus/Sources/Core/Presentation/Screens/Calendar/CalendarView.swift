@@ -2,6 +2,7 @@ import SwiftUI
 
 struct CalendarView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var selectedDate = Date()
     @State private var currentMonth = Date()
@@ -35,16 +36,19 @@ struct CalendarView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Done") { dismiss() }
+                        .buttonStyle(.glass)
                 }
 
                 ToolbarItem(placement: .topBarTrailing) {
-                    HStack(spacing: 12) {
-                        if calendarService.isAuthorized {
+                    if calendarService.isAuthorized {
+                        GlassEffectContainer(spacing: DesignSystem.Spacing.xs) {
                             Button {
                                 showSettings = true
                             } label: {
                                 Image(systemName: "line.3.horizontal.decrease.circle")
                             }
+                            .buttonStyle(.glass)
+                            .accessibilityLabel("Filter calendars")
 
                             Button {
                                 eventEditorInitialDate = selectedDate
@@ -52,6 +56,8 @@ struct CalendarView: View {
                             } label: {
                                 Image(systemName: "plus")
                             }
+                            .buttonStyle(.glass)
+                            .accessibilityLabel("New event")
                         }
                     }
                 }
@@ -62,6 +68,8 @@ struct CalendarView: View {
                         events.append(newEvent)
                     }
                 }
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
             }
             .onChange(of: showEventEditor) { _, newValue in
                 if newValue, eventEditorInitialDate == Date() {
@@ -72,11 +80,15 @@ struct CalendarView: View {
                 CalendarEventDetailView(event: event) {
                     Task { await loadEvents() }
                 }
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
             }
             .sheet(isPresented: $showSettings) {
                 CalendarSettingsView(calendars: $calendars) {
                     Task { await loadEvents() }
                 }
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
             }
             .task { await initialize() }
             .refreshable { await loadEvents() }
@@ -88,40 +100,15 @@ struct CalendarView: View {
 
 private extension CalendarView {
     var viewModePicker: some View {
-        HStack(spacing: 0) {
+        Picker("View mode", selection: $viewMode) {
             ForEach(CalendarViewMode.allCases) { mode in
-                Button {
-                    withAnimation(.spring(response: 0.3)) {
-                        viewMode = mode
-                    }
-                } label: {
-                    Text(mode.title)
-                        .font(.nexusSubheadline)
-                        .fontWeight(viewMode == mode ? .semibold : .regular)
-                        .foregroundStyle(viewMode == mode ? .white : .secondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background {
-                            if viewMode == mode {
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(Color.nexusTeal)
-                            }
-                        }
-                }
-                .buttonStyle(.plain)
+                Text(mode.title).tag(mode)
             }
         }
-        .padding(4)
-        .background {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.nexusSurface)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 12)
-                        .strokeBorder(Color.nexusBorder, lineWidth: 1)
-                }
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
+        .pickerStyle(.segmented)
+        .padding(.horizontal, DesignSystem.Spacing.md)
+        .padding(.vertical, DesignSystem.Spacing.sm)
+        .accessibilityLabel("Calendar view mode")
     }
 
     @ViewBuilder
@@ -170,23 +157,11 @@ private extension CalendarView {
     }
 
     var authorizationView: some View {
-        VStack(spacing: 24) {
-            Spacer()
-
-            Image(systemName: "calendar.badge.exclamationmark")
-                .font(.system(size: 64))
-                .foregroundStyle(Color.nexusTeal)
-
-            VStack(spacing: 8) {
-                Text("Calendar Access Required")
-                    .font(.nexusTitle3)
-
-                Text("Allow Nexus to access your calendar to view and manage events.")
-                    .font(.nexusSubheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-
+        ContentUnavailableView {
+            Label("Calendar Access Required", systemImage: "calendar.badge.exclamationmark")
+        } description: {
+            Text("Allow Nexus to access your calendar to view and manage events.")
+        } actions: {
             Button {
                 Task {
                     do {
@@ -198,33 +173,17 @@ private extension CalendarView {
                 }
             } label: {
                 Text("Allow Access")
-                    .font(.nexusSubheadline)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background {
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.nexusTeal)
-                    }
             }
-            .padding(.horizontal, 40)
-
-            Spacer()
+            .buttonStyle(.borderedProminent)
+            .tint(Color.nexusTeal)
         }
-        .padding(20)
     }
 
     var loadingView: some View {
-        VStack {
-            Spacer()
-            ProgressView()
-                .scaleEffect(1.2)
-            Text("Loading calendar...")
-                .font(.nexusSubheadline)
-                .foregroundStyle(.secondary)
-                .padding(.top, 12)
-            Spacer()
+        ContentUnavailableView {
+            Label("Loading Calendar", systemImage: "calendar")
+        } description: {
+            Text("Fetching your events…")
         }
     }
 }
@@ -304,5 +263,4 @@ enum CalendarViewMode: String, CaseIterable, Identifiable {
 
 #Preview {
     CalendarView()
-        .preferredColorScheme(.dark)
 }

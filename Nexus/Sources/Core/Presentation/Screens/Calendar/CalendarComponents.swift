@@ -12,7 +12,7 @@ struct CalendarDayCell: View {
     private let calendar = Calendar.current
 
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: DesignSystem.Spacing.xxs) {
             ZStack {
                 if isSelected {
                     Circle()
@@ -36,6 +36,7 @@ struct CalendarDayCell: View {
                         Circle()
                             .fill(events[index].calendarColor)
                             .frame(width: 5, height: 5)
+                            .accessibilityHidden(true)
                     }
                 }
                 .frame(height: 5)
@@ -44,12 +45,30 @@ struct CalendarDayCell: View {
             }
         }
         .frame(height: 52)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityValue(accessibilityValue)
+        .accessibilityAddTraits(isToday ? [.isSelected] : [])
     }
 
     private var dayTextColor: Color {
         if isSelected { return .white }
         if !isCurrentMonth { return .nexusTextTertiary }
         return .primary
+    }
+
+    private var accessibilityLabel: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .full
+        formatter.timeStyle = .none
+        var label = formatter.string(from: date)
+        if isToday { label += ", today" }
+        if isSelected { label += ", selected" }
+        return label
+    }
+
+    private var accessibilityValue: String {
+        if events.isEmpty { return "No events" }
+        return "^[\(events.count) event](inflect: true)"
     }
 }
 
@@ -65,18 +84,19 @@ struct CalendarEventRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DesignSystem.Spacing.sm) {
             RoundedRectangle(cornerRadius: 2)
                 .fill(event.calendarColor)
                 .frame(width: 4)
+                .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.xxs) {
                 Text(event.title)
                     .font(.nexusSubheadline)
                     .fontWeight(.medium)
                     .lineLimit(1)
 
-                HStack(spacing: 8) {
+                HStack(spacing: DesignSystem.Spacing.xs) {
                     if showDate {
                         Text(event.startDate.formatted(date: .abbreviated, time: .omitted))
                             .font(.nexusCaption)
@@ -90,7 +110,8 @@ struct CalendarEventRow: View {
                     if let location = event.location, !location.isEmpty {
                         HStack(spacing: 2) {
                             Image(systemName: "location.fill")
-                                .font(.system(size: 8))
+                                .imageScale(.small)
+                                .accessibilityHidden(true)
                             Text(location)
                                 .lineLimit(1)
                         }
@@ -103,16 +124,18 @@ struct CalendarEventRow: View {
             Spacer()
 
             Image(systemName: "chevron.right")
-                .font(.system(size: 12, weight: .semibold))
+                .imageScale(.small)
+                .fontWeight(.semibold)
                 .foregroundStyle(.tertiary)
+                .accessibilityHidden(true)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, DesignSystem.Spacing.sm)
+        .padding(.vertical, DesignSystem.Spacing.xs)
         .background {
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.card)
                 .fill(Color.nexusSurface)
                 .overlay {
-                    RoundedRectangle(cornerRadius: 12)
+                    RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.card)
                         .strokeBorder(Color.nexusBorder, lineWidth: 1)
                 }
         }
@@ -129,13 +152,14 @@ struct AllDayEventChip: View {
             Circle()
                 .fill(event.calendarColor)
                 .frame(width: 8, height: 8)
+                .accessibilityHidden(true)
 
             Text(event.title)
                 .font(.nexusCaption)
                 .fontWeight(.medium)
                 .lineLimit(1)
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, DesignSystem.Spacing.xs)
         .padding(.vertical, 6)
         .background {
             Capsule()
@@ -167,6 +191,7 @@ struct CurrentTimeIndicator: View {
                 .frame(height: 1)
         }
         .offset(y: currentTimeOffset)
+        .accessibilityHidden(true)
     }
 }
 
@@ -184,7 +209,7 @@ struct HourGridLines: View {
     var body: some View {
         VStack(spacing: 0) {
             ForEach(0..<24, id: \.self) { hour in
-                HStack(alignment: .top, spacing: 8) {
+                HStack(alignment: .top, spacing: DesignSystem.Spacing.xs) {
                     if showLabels {
                         Text(formatHour(hour))
                             .font(.nexusCaption2)
@@ -202,6 +227,7 @@ struct HourGridLines: View {
                 .id("hour-\(hour)")
             }
         }
+        .accessibilityHidden(true)
     }
 
     private func formatHour(_ hour: Int) -> String {
@@ -244,8 +270,8 @@ struct DayEventBlock: View {
                     .foregroundStyle(.white.opacity(0.8))
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.horizontal, DesignSystem.Spacing.xs)
+        .padding(.vertical, DesignSystem.Spacing.xxs)
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: height)
         .background {
@@ -253,43 +279,7 @@ struct DayEventBlock: View {
                 .fill(event.calendarColor)
         }
         .offset(y: topOffset)
-    }
-}
-
-// MARK: - Empty State
-
-struct CalendarEmptyState: View {
-    let message: String
-    let actionTitle: String?
-    let action: (() -> Void)?
-
-    init(message: String, actionTitle: String? = nil, action: (() -> Void)? = nil) {
-        self.message = message
-        self.actionTitle = actionTitle
-        self.action = action
-    }
-
-    var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "calendar.badge.clock")
-                .font(.system(size: 48))
-                .foregroundStyle(.secondary)
-
-            Text(message)
-                .font(.nexusSubheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-
-            if let actionTitle, let action {
-                Button(action: action) {
-                    Text(actionTitle)
-                        .font(.nexusSubheadline)
-                        .fontWeight(.medium)
-                        .foregroundStyle(Color.nexusTeal)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 60)
+        .accessibilityLabel(event.title)
+        .accessibilityValue(event.formattedTime)
     }
 }

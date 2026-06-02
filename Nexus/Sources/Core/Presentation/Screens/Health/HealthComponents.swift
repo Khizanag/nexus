@@ -10,17 +10,19 @@ struct TodayMetricCard: View {
     var isFromHealthKit: Bool = false
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: DesignSystem.Spacing.xs) {
             ZStack(alignment: .topTrailing) {
                 Image(systemName: icon)
-                    .font(.system(size: 20))
+                    .font(.nexusTitle2)
                     .foregroundStyle(color)
+                    .accessibilityHidden(true)
 
                 if isFromHealthKit {
                     Image(systemName: "heart.fill")
-                        .font(.system(size: 8))
+                        .font(.nexusCaption2)
                         .foregroundStyle(Color.nexusRed)
                         .offset(x: 8, y: -4)
+                        .accessibilityHidden(true)
                 }
             }
 
@@ -32,15 +34,11 @@ struct TodayMetricCard: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
-        .background {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.nexusSurface)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 12)
-                        .strokeBorder(Color.nexusBorder, lineWidth: 1)
-                }
-        }
+        .padding(.vertical, DesignSystem.Spacing.md)
+        .glassBackground(in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.card, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(title)
+        .accessibilityValue(value)
     }
 }
 
@@ -52,29 +50,32 @@ struct MetricCard: View {
     var isFromHealthKit: Bool = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
             HStack {
                 ZStack(alignment: .topTrailing) {
                     Image(systemName: metric.icon)
-                        .font(.system(size: 18))
+                        .font(.nexusTitle3)
                         .foregroundStyle(metricColor)
+                        .accessibilityHidden(true)
 
                     if isFromHealthKit {
                         Image(systemName: "heart.fill")
-                            .font(.system(size: 8))
+                            .font(.nexusCaption2)
                             .foregroundStyle(Color.nexusRed)
                             .offset(x: 6, y: -4)
+                            .accessibilityHidden(true)
                     }
                 }
 
                 Spacer()
 
                 Image(systemName: "chevron.right")
-                    .font(.caption)
+                    .font(.nexusCaption)
                     .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
             }
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.xxs) {
                 Text(metric.displayName)
                     .font(.nexusSubheadline)
 
@@ -89,15 +90,9 @@ struct MetricCard: View {
                 }
             }
         }
-        .padding(16)
-        .background {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.nexusSurface)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 12)
-                        .strokeBorder(Color.nexusBorder, lineWidth: 1)
-                }
-        }
+        .padding(DesignSystem.Spacing.md)
+        .glassBackground(in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.card, style: .continuous))
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -107,7 +102,9 @@ private extension MetricCard {
     }
 
     func formattedValue(_ value: Double) -> String {
-        value.truncatingRemainder(dividingBy: 1) == 0 ? String(format: "%.0f", value) : String(format: "%.1f", value)
+        value.truncatingRemainder(dividingBy: 1) == 0
+            ? String(format: "%.0f", value)
+            : String(format: "%.1f", value)
     }
 }
 
@@ -117,16 +114,15 @@ struct HealthEntryRow: View {
     let entry: HealthEntryModel
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DesignSystem.Spacing.sm) {
             Image(systemName: entry.type.icon)
-                .font(.system(size: 16))
+                .font(.nexusSubheadline)
                 .foregroundStyle(metricColor)
                 .frame(width: 36, height: 36)
-                .background {
-                    Circle().fill(metricColor.opacity(0.15))
-                }
+                .background(metricColor.opacity(0.15), in: Circle())
+                .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.xxs) {
                 Text(entry.type.displayName)
                     .font(.nexusSubheadline)
 
@@ -141,11 +137,11 @@ struct HealthEntryRow: View {
                 .font(.nexusHeadline)
                 .foregroundStyle(metricColor)
         }
-        .padding(12)
-        .background {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.nexusSurface)
-        }
+        .padding(DesignSystem.Spacing.sm)
+        .glassBackground(in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.card, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(entry.type.displayName)
+        .accessibilityValue("\(formattedValue(entry.value)) \(entry.unit), \(entry.date.formatted(date: .abbreviated, time: .shortened))")
     }
 }
 
@@ -155,7 +151,9 @@ private extension HealthEntryRow {
     }
 
     func formattedValue(_ value: Double) -> String {
-        value.truncatingRemainder(dividingBy: 1) == 0 ? String(format: "%.0f", value) : String(format: "%.1f", value)
+        value.truncatingRemainder(dividingBy: 1) == 0
+            ? String(format: "%.0f", value)
+            : String(format: "%.1f", value)
     }
 }
 

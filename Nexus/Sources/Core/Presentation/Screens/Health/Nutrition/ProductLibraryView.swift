@@ -10,6 +10,7 @@ struct ProductLibraryView: View {
     @State private var selectedTab: ProductTab = .recent
     @State private var showAddProduct = false
     @State private var selectedProduct: ProductModel?
+    @State private var favoriteTrigger = false
 
     private var filteredProducts: [ProductModel] {
         let baseProducts: [ProductModel]
@@ -31,14 +32,20 @@ struct ProductLibraryView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                tabPicker
-                productList
+            List {
+                listContent
             }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
             .background(Color.nexusBackground)
+            .scrollEdgeEffectStyle(.soft, for: .top)
             .navigationTitle("Products")
             .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $searchText, prompt: "Search products")
+            .safeAreaInset(edge: .top, spacing: 0) {
+                tabPicker
+            }
+            .sensoryFeedback(.impact(weight: .light), trigger: favoriteTrigger)
             .toolbar { toolbarContent }
             .sheet(isPresented: $showAddProduct) {
                 ProductEditorView()
@@ -52,7 +59,7 @@ struct ProductLibraryView: View {
 
 // MARK: - Tab Type
 
-private enum ProductTab: String, CaseIterable {
+enum ProductTab: String, CaseIterable {
     case recent = "Recent"
     case favorites = "Favorites"
     case all = "All"
@@ -68,78 +75,71 @@ private extension ProductLibraryView {
             }
         }
         .pickerStyle(.segmented)
-        .padding()
+        .padding(.horizontal, DesignSystem.Spacing.md)
+        .padding(.vertical, DesignSystem.Spacing.xs)
+        .background(Color.nexusBackground)
     }
 
-    var productList: some View {
-        List {
-            if filteredProducts.isEmpty {
-                emptyState
-            } else {
-                ForEach(filteredProducts, id: \.id) { product in
-                    ProductLibraryRow(product: product) {
-                        selectedProduct = product
-                    }
-                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        Button(role: .destructive) {
-                            deleteProduct(product)
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    }
-                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                        Button {
-                            toggleFavorite(product)
-                        } label: {
-                            Label(
-                                product.isFavorite ? "Unfavorite" : "Favorite",
-                                systemImage: product.isFavorite ? "star.slash" : "star.fill"
-                            )
-                        }
-                        .tint(.nexusOrange)
+    @ViewBuilder
+    var listContent: some View {
+        if filteredProducts.isEmpty {
+            emptyState
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+        } else {
+            ForEach(filteredProducts, id: \.id) { product in
+                ProductLibraryRow(product: product) {
+                    selectedProduct = product
+                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    Button(role: .destructive) {
+                        deleteProduct(product)
+                    } label: {
+                        Label("Delete", systemImage: "trash")
                     }
                 }
+                .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                    Button {
+                        toggleFavorite(product)
+                    } label: {
+                        Label(
+                            product.isFavorite ? "Unfavorite" : "Favorite",
+                            systemImage: product.isFavorite ? "star.slash" : "star.fill"
+                        )
+                    }
+                    .tint(.nexusOrange)
+                }
+                .listRowBackground(Color.nexusSurface)
             }
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
     }
 
+    @ViewBuilder
     var emptyState: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "bookmark.slash")
-                .font(.system(size: 48))
-                .foregroundStyle(Color.nexusTextTertiary)
-
-            Text(emptyStateTitle)
-                .font(.nexusHeadline)
-                .foregroundStyle(Color.nexusTextPrimary)
-
-            Text(emptyStateMessage)
-                .font(.nexusCaption)
-                .foregroundStyle(Color.nexusTextSecondary)
-                .multilineTextAlignment(.center)
+        if !searchText.isEmpty {
+            ContentUnavailableView.search(text: searchText)
+        } else {
+            ContentUnavailableView(
+                emptyStateTitle,
+                systemImage: "bookmark.slash",
+                description: Text(emptyStateMessage)
+            )
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 60)
-        .listRowBackground(Color.clear)
     }
 
     var emptyStateTitle: String {
-        if !searchText.isEmpty { return "No Results" }
         switch selectedTab {
-        case .recent: return "No Recent Products"
-        case .favorites: return "No Favorites"
-        case .all: return "No Products Yet"
+        case .recent: "No Recent Products"
+        case .favorites: "No Favorites"
+        case .all: "No Products Yet"
         }
     }
 
     var emptyStateMessage: String {
-        if !searchText.isEmpty { return "Try a different search term" }
         switch selectedTab {
-        case .recent: return "Products you've logged will appear here"
-        case .favorites: return "Star products to add them to favorites"
-        case .all: return "Save products when logging entries"
+        case .recent: "Products you've logged will appear here"
+        case .favorites: "Star products to add them to favorites"
+        case .all: "Save products when logging entries"
         }
     }
 
@@ -155,6 +155,7 @@ private extension ProductLibraryView {
             } label: {
                 Image(systemName: "plus")
             }
+            .accessibilityLabel("Add product")
         }
     }
 }
@@ -168,8 +169,7 @@ private extension ProductLibraryView {
 
     func toggleFavorite(_ product: ProductModel) {
         product.isFavorite.toggle()
-        let generator = UIImpactFeedbackGenerator(style: .light)
-        generator.impactOccurred()
+        favoriteTrigger.toggle()
     }
 }
 
@@ -181,17 +181,18 @@ private struct ProductLibraryRow: View {
 
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 6) {
+            HStack(spacing: DesignSystem.Spacing.sm) {
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.xxs) {
+                    HStack(spacing: DesignSystem.Spacing.xs) {
                         Text(product.name)
                             .font(.nexusBody)
                             .foregroundStyle(Color.nexusTextPrimary)
 
                         if product.isFavorite {
                             Image(systemName: "star.fill")
-                                .font(.system(size: 10))
+                                .font(.nexusCaption2)
                                 .foregroundStyle(Color.nexusOrange)
+                                .accessibilityLabel("Favorite")
                         }
                     }
 
@@ -201,7 +202,7 @@ private struct ProductLibraryRow: View {
                             .foregroundStyle(Color.nexusTextTertiary)
                     }
 
-                    HStack(spacing: 8) {
+                    HStack(spacing: DesignSystem.Spacing.xs) {
                         Text("C: \(Int(product.carbs))g")
                             .foregroundStyle(Color.nexusBlue)
                         Text("P: \(Int(product.protein))g")
@@ -209,7 +210,8 @@ private struct ProductLibraryRow: View {
                         Text("F: \(Int(product.fats))g")
                             .foregroundStyle(Color.nexusPurple)
                     }
-                    .font(.system(size: 11))
+                    .font(.nexusCaption2)
+                    .accessibilityHidden(true)
                 }
 
                 Spacer()
@@ -224,16 +226,25 @@ private struct ProductLibraryRow: View {
                         .font(.nexusCaption)
                         .foregroundStyle(Color.nexusTextTertiary)
                 }
+                .accessibilityHidden(true)
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, DesignSystem.Spacing.xxs)
         }
         .buttonStyle(.plain)
-        .listRowBackground(Color.nexusSurface)
+        .accessibilityLabel(rowAccessibilityLabel)
+        .accessibilityHint("Edit product")
+    }
+
+    private var rowAccessibilityLabel: String {
+        var parts = [product.name]
+        if !product.brand.isEmpty { parts.append(product.brand) }
+        parts.append("\(Int(product.calories)) calories per \(product.servingUnit)")
+        if product.isFavorite { parts.append("Favorite") }
+        return parts.joined(separator: ", ")
     }
 }
 
 #Preview {
     ProductLibraryView()
         .modelContainer(for: ProductModel.self, inMemory: true)
-        .preferredColorScheme(.dark)
 }

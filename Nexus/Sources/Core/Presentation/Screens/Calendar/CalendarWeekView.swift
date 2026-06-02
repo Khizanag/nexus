@@ -5,6 +5,8 @@ struct CalendarWeekView: View {
     let events: [CalendarEvent]
     let onEventTapped: (CalendarEvent) -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     @State private var weekOffset: Int = 0
 
     private let calendar = Calendar.current
@@ -50,12 +52,12 @@ struct CalendarWeekView: View {
             DragGesture()
                 .onEnded { value in
                     if value.translation.width < -50 {
-                        withAnimation(.spring(response: 0.3)) {
-                            weekOffset += 1
+                        if reduceMotion { weekOffset += 1 } else {
+                            withAnimation(.spring(response: 0.3)) { weekOffset += 1 }
                         }
                     } else if value.translation.width > 50 {
-                        withAnimation(.spring(response: 0.3)) {
-                            weekOffset -= 1
+                        if reduceMotion { weekOffset -= 1 } else {
+                            withAnimation(.spring(response: 0.3)) { weekOffset -= 1 }
                         }
                     }
                 }
@@ -69,15 +71,16 @@ private extension CalendarWeekView {
     var weekHeader: some View {
         HStack {
             Button {
-                withAnimation(.spring(response: 0.3)) {
-                    weekOffset -= 1
+                if reduceMotion { weekOffset -= 1 } else {
+                    withAnimation(.spring(response: 0.3)) { weekOffset -= 1 }
                 }
             } label: {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 16, weight: .semibold))
+                    .fontWeight(.semibold)
                     .foregroundStyle(Color.nexusTeal)
-                    .frame(width: 44, height: 44)
+                    .frame(width: DesignSystem.Size.Button.tap, height: DesignSystem.Size.Button.tap)
             }
+            .accessibilityLabel("Previous week")
 
             Spacer()
 
@@ -95,18 +98,19 @@ private extension CalendarWeekView {
             Spacer()
 
             Button {
-                withAnimation(.spring(response: 0.3)) {
-                    weekOffset += 1
+                if reduceMotion { weekOffset += 1 } else {
+                    withAnimation(.spring(response: 0.3)) { weekOffset += 1 }
                 }
             } label: {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 16, weight: .semibold))
+                    .fontWeight(.semibold)
                     .foregroundStyle(Color.nexusTeal)
-                    .frame(width: 44, height: 44)
+                    .frame(width: DesignSystem.Size.Button.tap, height: DesignSystem.Size.Button.tap)
             }
+            .accessibilityLabel("Next week")
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.horizontal, DesignSystem.Spacing.xs)
+        .padding(.vertical, DesignSystem.Spacing.xxs)
     }
 
     var weekDayHeaders: some View {
@@ -115,29 +119,32 @@ private extension CalendarWeekView {
                 .frame(width: 50)
 
             ForEach(weekDates, id: \.self) { date in
-                VStack(spacing: 4) {
-                    Text(dayOfWeek(date))
-                        .font(.nexusCaption2)
-                        .foregroundStyle(.secondary)
-
-                    Text("\(calendar.component(.day, from: date))")
-                        .font(.nexusSubheadline)
-                        .fontWeight(calendar.isDateInToday(date) ? .bold : .regular)
-                        .foregroundStyle(calendar.isDateInToday(date) ? .white : .primary)
-                        .frame(width: 28, height: 28)
-                        .background {
-                            if calendar.isDateInToday(date) {
-                                Circle().fill(Color.nexusTeal)
-                            }
-                        }
-                }
-                .frame(maxWidth: .infinity)
-                .onTapGesture {
+                Button {
                     selectedDate = date
+                } label: {
+                    VStack(spacing: 4) {
+                        Text(dayOfWeek(date))
+                            .font(.nexusCaption2)
+                            .foregroundStyle(.secondary)
+
+                        Text("\(calendar.component(.day, from: date))")
+                            .font(.nexusSubheadline)
+                            .fontWeight(calendar.isDateInToday(date) ? .bold : .regular)
+                            .foregroundStyle(calendar.isDateInToday(date) ? .white : .primary)
+                            .frame(width: 28, height: 28)
+                            .background {
+                                if calendar.isDateInToday(date) {
+                                    Circle().fill(Color.nexusTeal)
+                                }
+                            }
+                    }
+                    .frame(maxWidth: .infinity)
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel(accessibilityLabel(for: date))
             }
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, DesignSystem.Spacing.xs)
         .background(Color.nexusSurface)
     }
 
@@ -157,6 +164,7 @@ private extension CalendarWeekView {
                 }
                 .id("weekGrid")
             }
+            .scrollEdgeEffectStyle(.soft, for: .top)
             .onAppear {
                 let currentHour = calendar.component(.hour, from: Date())
                 if currentHour >= 8 {
@@ -173,10 +181,11 @@ private extension CalendarWeekView {
                     .font(.nexusCaption2)
                     .foregroundStyle(.secondary)
                     .frame(width: 50, height: hourHeight, alignment: .topTrailing)
-                    .padding(.trailing, 8)
+                    .padding(.trailing, DesignSystem.Spacing.xs)
                     .offset(y: -6)
             }
         }
+        .accessibilityHidden(true)
     }
 
     var daysColumns: some View {
@@ -204,7 +213,6 @@ private extension CalendarWeekView {
     }
 
     func weekEventBlock(event: CalendarEvent, date: Date) -> some View {
-        let startOfDay = calendar.startOfDay(for: date)
         let startMinutes = calendar.dateComponents([.hour, .minute], from: event.startDate)
         let endMinutes = calendar.dateComponents([.hour, .minute], from: event.endDate)
 
@@ -216,7 +224,8 @@ private extension CalendarWeekView {
             onEventTapped(event)
         } label: {
             Text(event.title)
-                .font(.system(size: 10, weight: .medium))
+                .font(.nexusCaption2)
+                .fontWeight(.medium)
                 .foregroundStyle(.white)
                 .lineLimit(2)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -230,6 +239,8 @@ private extension CalendarWeekView {
         .buttonStyle(.plain)
         .padding(.horizontal, 2)
         .offset(y: startOffset)
+        .accessibilityLabel(event.title)
+        .accessibilityValue(event.formattedTime)
     }
 
     @ViewBuilder
@@ -248,15 +259,16 @@ private extension CalendarWeekView {
 
                     HStack(spacing: 0) {
                         Circle()
-                            .fill(Color.red)
+                            .fill(Color.nexusRed)
                             .frame(width: 8, height: 8)
 
                         Rectangle()
-                            .fill(Color.red)
+                            .fill(Color.nexusRed)
                             .frame(width: dayWidth - 4, height: 2)
                     }
                     .offset(x: xOffset - 4, y: offset - 4)
                 }
+                .accessibilityHidden(true)
             }
         }
     }
@@ -284,6 +296,15 @@ private extension CalendarWeekView {
         let date = calendar.date(bySettingHour: hour, minute: 0, second: 0, of: Date())!
         return formatter.string(from: date).lowercased()
     }
+
+    func accessibilityLabel(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .full
+        formatter.timeStyle = .none
+        var label = formatter.string(from: date)
+        if calendar.isDateInToday(date) { label += ", today" }
+        return label
+    }
 }
 
 private extension Calendar {
@@ -299,5 +320,4 @@ private extension Calendar {
         events: [],
         onEventTapped: { _ in }
     )
-    .preferredColorScheme(.dark)
 }

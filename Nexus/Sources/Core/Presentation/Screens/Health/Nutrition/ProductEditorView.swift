@@ -17,8 +17,8 @@ struct ProductEditorView: View {
     @State private var servingSize: Double = 1
     @State private var servingUnit = "serving"
     @State private var isFavorite = false
-
     @State private var showDeleteConfirmation = false
+    @State private var saveTrigger = false
 
     private var isEditing: Bool { product != nil }
     private var isValid: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -44,6 +44,7 @@ struct ProductEditorView: View {
             .navigationTitle(isEditing ? "Edit Product" : "New Product")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbarContent }
+            .sensoryFeedback(.success, trigger: saveTrigger)
             .onAppear { loadProductData() }
             .confirmationDialog(
                 "Delete Product",
@@ -67,13 +68,16 @@ private extension ProductEditorView {
         Section {
             TextField("Product name", text: $name)
                 .font(.nexusBody)
+                .accessibilityLabel("Product name")
 
             TextField("Brand (optional)", text: $brand)
                 .font(.nexusBody)
+                .accessibilityLabel("Brand, optional")
 
             TextField("Barcode (optional)", text: $barcode)
                 .font(.nexusBody)
                 .keyboardType(.numberPad)
+                .accessibilityLabel("Barcode, optional")
         } header: {
             Text("Product Info")
                 .font(.nexusCaption)
@@ -84,7 +88,7 @@ private extension ProductEditorView {
 
     var macrosSection: some View {
         Section {
-            VStack(spacing: 16) {
+            VStack(spacing: DesignSystem.Spacing.md) {
                 MacroInputField(
                     title: "Calories",
                     icon: "flame.fill",
@@ -93,7 +97,7 @@ private extension ProductEditorView {
                     unit: "kcal"
                 )
 
-                HStack(spacing: 12) {
+                HStack(spacing: DesignSystem.Spacing.sm) {
                     MacroInputField(
                         title: "Carbs",
                         icon: "leaf.fill",
@@ -114,7 +118,7 @@ private extension ProductEditorView {
                     )
                 }
             }
-            .padding(.vertical, 8)
+            .padding(.vertical, DesignSystem.Spacing.xs)
         } header: {
             Text("Nutrition per Serving")
                 .font(.nexusCaption)
@@ -125,8 +129,8 @@ private extension ProductEditorView {
 
     var servingSection: some View {
         Section {
-            HStack(spacing: 16) {
-                VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: DesignSystem.Spacing.md) {
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
                     Text("Default Serving")
                         .font(.nexusCaption)
                         .foregroundStyle(Color.nexusTextSecondary)
@@ -134,15 +138,17 @@ private extension ProductEditorView {
                     TextField("1", value: $servingSize, format: .number)
                         .font(.nexusHeadline)
                         .keyboardType(.decimalPad)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
+                        .padding(.horizontal, DesignSystem.Spacing.sm)
+                        .padding(.vertical, DesignSystem.Spacing.sm - 2)
                         .background {
-                            RoundedRectangle(cornerRadius: 10)
+                            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md - 2)
                                 .fill(Color.nexusSurfaceSecondary)
                         }
+                        .accessibilityLabel("Default serving size")
+                        .accessibilityValue("\(servingSize)")
                 }
 
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
                     Text("Unit")
                         .font(.nexusCaption)
                         .foregroundStyle(Color.nexusTextSecondary)
@@ -160,17 +166,19 @@ private extension ProductEditorView {
                             Image(systemName: "chevron.up.chevron.down")
                                 .font(.nexusCaption)
                                 .foregroundStyle(Color.nexusTextTertiary)
+                                .accessibilityHidden(true)
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
+                        .padding(.horizontal, DesignSystem.Spacing.sm)
+                        .padding(.vertical, DesignSystem.Spacing.sm - 2)
                         .background {
-                            RoundedRectangle(cornerRadius: 10)
+                            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md - 2)
                                 .fill(Color.nexusSurfaceSecondary)
                         }
                     }
+                    .accessibilityLabel("Serving unit: \(servingUnit)")
                 }
             }
-            .padding(.vertical, 8)
+            .padding(.vertical, DesignSystem.Spacing.xs)
         } header: {
             Text("Serving Size")
                 .font(.nexusCaption)
@@ -182,9 +190,10 @@ private extension ProductEditorView {
     var favoriteSection: some View {
         Section {
             Toggle(isOn: $isFavorite) {
-                HStack(spacing: 8) {
+                HStack(spacing: DesignSystem.Spacing.xs) {
                     Image(systemName: "star.fill")
                         .foregroundStyle(Color.nexusOrange)
+                        .accessibilityHidden(true)
                     Text("Add to Favorites")
                         .font(.nexusBody)
                 }
@@ -272,9 +281,7 @@ private extension ProductEditorView {
             modelContext.insert(newProduct)
         }
 
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(.success)
-
+        saveTrigger.toggle()
         dismiss()
     }
 
@@ -289,5 +296,4 @@ private extension ProductEditorView {
 #Preview {
     ProductEditorView()
         .modelContainer(for: ProductModel.self, inMemory: true)
-        .preferredColorScheme(.dark)
 }

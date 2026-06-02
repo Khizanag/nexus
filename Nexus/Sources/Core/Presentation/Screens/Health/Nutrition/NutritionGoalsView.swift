@@ -8,6 +8,8 @@ struct NutritionGoalsView: View {
     @AppStorage("dailyProteinGoal") private var proteinGoal = 150
     @AppStorage("dailyFatsGoal") private var fatsGoal = 65
 
+    @State private var presetTrigger = false
+
     var body: some View {
         NavigationStack {
             Form {
@@ -20,6 +22,7 @@ struct NutritionGoalsView: View {
             .background(Color.nexusBackground)
             .navigationTitle("Daily Goals")
             .navigationBarTitleDisplayMode(.inline)
+            .sensoryFeedback(.impact(weight: .medium), trigger: presetTrigger)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
@@ -106,25 +109,25 @@ private extension NutritionGoalsView {
         Section {
             presetButton(
                 title: "Weight Loss",
-                subtitle: "1,500 kcal • Low carb, high protein",
+                subtitle: "1,500 kcal · Low carb, high protein",
                 calories: 1500, carbs: 150, protein: 180, fats: 55
             )
 
             presetButton(
                 title: "Maintenance",
-                subtitle: "2,000 kcal • Balanced macros",
+                subtitle: "2,000 kcal · Balanced macros",
                 calories: 2000, carbs: 250, protein: 150, fats: 65
             )
 
             presetButton(
                 title: "Muscle Gain",
-                subtitle: "2,500 kcal • High protein, moderate carbs",
+                subtitle: "2,500 kcal · High protein, moderate carbs",
                 calories: 2500, carbs: 300, protein: 200, fats: 75
             )
 
             presetButton(
                 title: "Athlete",
-                subtitle: "3,000 kcal • High carb, high protein",
+                subtitle: "3,000 kcal · High carb, high protein",
                 calories: 3000, carbs: 400, protein: 200, fats: 80
             )
         } header: {
@@ -137,7 +140,7 @@ private extension NutritionGoalsView {
 
     var infoSection: some View {
         Section {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
                 Text("About Daily Goals")
                     .font(.nexusHeadline)
                     .foregroundStyle(Color.nexusTextPrimary)
@@ -151,7 +154,7 @@ private extension NutritionGoalsView {
                     .foregroundStyle(Color.nexusTextTertiary)
                     .italic()
             }
-            .padding(.vertical, 8)
+            .padding(.vertical, DesignSystem.Spacing.xs)
         }
         .listRowBackground(Color.nexusSurface)
     }
@@ -164,7 +167,7 @@ private extension NutritionGoalsView {
         Button {
             applyPreset(calories: calories, carbs: carbs, protein: protein, fats: fats)
         } label: {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.xxs) {
                 Text(title)
                     .font(.nexusBody)
                     .foregroundStyle(Color.nexusTextPrimary)
@@ -176,6 +179,9 @@ private extension NutritionGoalsView {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("\(title) preset")
+        .accessibilityValue(subtitle)
+        .accessibilityHint("Apply preset goals")
     }
 
     func applyPreset(calories: Int, carbs: Int, protein: Int, fats: Int) {
@@ -185,9 +191,7 @@ private extension NutritionGoalsView {
             proteinGoal = protein
             fatsGoal = fats
         }
-
-        let generator = UIImpactFeedbackGenerator(style: .medium)
-        generator.impactOccurred()
+        presetTrigger.toggle()
     }
 }
 
@@ -203,11 +207,12 @@ private struct GoalSlider: View {
     let unit: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
             HStack {
                 Image(systemName: icon)
                     .font(.nexusCaption)
                     .foregroundStyle(color)
+                    .accessibilityHidden(true)
 
                 Text(title)
                     .font(.nexusSubheadline)
@@ -218,16 +223,18 @@ private struct GoalSlider: View {
                 Text("\(Int(value)) \(unit)")
                     .font(.nexusHeadline)
                     .foregroundStyle(color)
+                    .accessibilityHidden(true)
             }
 
             Slider(value: $value, in: range, step: step)
                 .tint(color)
+                .accessibilityLabel(title)
+                .accessibilityValue("\(Int(value)) \(unit)")
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, DesignSystem.Spacing.xs)
     }
 }
 
 #Preview {
     NutritionGoalsView()
-        .preferredColorScheme(.dark)
 }

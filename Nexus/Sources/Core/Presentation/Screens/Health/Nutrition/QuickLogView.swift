@@ -29,25 +29,13 @@ struct QuickLogView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    if !searchText.isEmpty {
-                        searchResultsSection
-                    } else {
-                        if !favoriteProducts.isEmpty {
-                            favoritesSection
-                        }
-                        if !recentProducts.isEmpty {
-                            recentSection
-                        }
-                        customEntrySection
-                    }
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 16)
-                .padding(.bottom, 40)
+            List {
+                listContent
             }
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
             .background(Color.nexusBackground)
+            .scrollEdgeEffectStyle(.soft, for: .top)
             .navigationTitle("Add to \(mealType.displayName)")
             .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $searchText, prompt: "Search products")
@@ -60,114 +48,98 @@ struct QuickLogView: View {
     }
 }
 
-// MARK: - Sections
+// MARK: - List Content
 
 private extension QuickLogView {
-    var favoritesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            sectionHeader(title: "Favorites", icon: "star.fill", color: .nexusOrange)
+    @ViewBuilder
+    var listContent: some View {
+        if !searchText.isEmpty {
+            searchSection
+        } else {
+            if !favoriteProducts.isEmpty {
+                favoritesSection
+            }
+            if !recentProducts.isEmpty {
+                recentSection
+            }
+            customEntrySection
+        }
+    }
 
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                ForEach(favoriteProducts.prefix(4), id: \.id) { product in
-                    QuickLogProductCard(product: product) {
+    @ViewBuilder
+    var searchSection: some View {
+        if searchResults.isEmpty {
+            Section {
+                ContentUnavailableView.search(text: searchText)
+                    .listRowBackground(Color.clear)
+
+                Button {
+                    onCustomEntry()
+                } label: {
+                    Label("Add Custom Entry", systemImage: "plus.circle.fill")
+                        .font(.nexusSubheadline)
+                        .fontWeight(.medium)
+                        .foregroundStyle(Color.nexusGreen)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.plain)
+                .listRowBackground(Color.nexusSurface)
+                .accessibilityLabel("Add custom entry")
+            }
+        } else {
+            Section {
+                ForEach(searchResults, id: \.id) { product in
+                    ProductRow(product: product, showFavorite: true) {
                         selectProduct(product)
                     }
+                    .listRowBackground(Color.nexusSurface)
                 }
+            } header: {
+                Label("Results", systemImage: "magnifyingglass")
+                    .font(.nexusCaption)
+                    .foregroundStyle(Color.nexusTextSecondary)
             }
+        }
+    }
+
+    var favoritesSection: some View {
+        Section {
+            ForEach(favoriteProducts.prefix(4), id: \.id) { product in
+                ProductRow(product: product, showFavorite: false) {
+                    selectProduct(product)
+                }
+                .listRowBackground(Color.nexusSurface)
+            }
+        } header: {
+            Label("Favorites", systemImage: "star.fill")
+                .font(.nexusCaption)
+                .foregroundStyle(Color.nexusOrange)
         }
     }
 
     var recentSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            sectionHeader(title: "Recent", icon: "clock.fill", color: .nexusBlue)
-
-            VStack(spacing: 8) {
-                ForEach(recentProducts, id: \.id) { product in
-                    ProductRow(product: product, showFavorite: true) {
-                        selectProduct(product)
-                    }
+        Section {
+            ForEach(recentProducts, id: \.id) { product in
+                ProductRow(product: product, showFavorite: true) {
+                    selectProduct(product)
                 }
+                .listRowBackground(Color.nexusSurface)
             }
-            .padding(12)
-            .background {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.nexusSurface)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 12)
-                            .strokeBorder(Color.nexusBorder, lineWidth: 1)
-                    }
-            }
-        }
-    }
-
-    var searchResultsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            if searchResults.isEmpty {
-                emptySearchState
-            } else {
-                sectionHeader(title: "Results", icon: "magnifyingglass", color: .nexusTextSecondary)
-
-                VStack(spacing: 8) {
-                    ForEach(searchResults, id: \.id) { product in
-                        ProductRow(product: product, showFavorite: true) {
-                            selectProduct(product)
-                        }
-                    }
-                }
-                .padding(12)
-                .background {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.nexusSurface)
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 12)
-                                .strokeBorder(Color.nexusBorder, lineWidth: 1)
-                        }
-                }
-            }
-        }
-    }
-
-    var emptySearchState: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 40))
-                .foregroundStyle(Color.nexusTextTertiary)
-
-            Text("No products found")
-                .font(.nexusHeadline)
-                .foregroundStyle(Color.nexusTextPrimary)
-
-            Text("Try a different search or add a custom entry")
+        } header: {
+            Label("Recent", systemImage: "clock.fill")
                 .font(.nexusCaption)
-                .foregroundStyle(Color.nexusTextSecondary)
-
-            Button {
-                onCustomEntry()
-            } label: {
-                Text("Add Custom Entry")
-                    .font(.nexusSubheadline)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
-                    .background {
-                        Capsule().fill(Color.nexusGreen)
-                    }
-            }
+                .foregroundStyle(Color.nexusBlue)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 40)
     }
 
     var customEntrySection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            sectionHeader(title: "Custom", icon: "pencil", color: .nexusGreen)
-
+        Section {
             Button(action: onCustomEntry) {
-                HStack(spacing: 12) {
+                HStack(spacing: DesignSystem.Spacing.sm) {
                     Image(systemName: "plus.circle.fill")
                         .font(.nexusTitle2)
                         .foregroundStyle(Color.nexusGreen)
+                        .accessibilityHidden(true)
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Custom Entry")
@@ -184,29 +156,18 @@ private extension QuickLogView {
                     Image(systemName: "chevron.right")
                         .font(.nexusCaption)
                         .foregroundStyle(Color.nexusTextTertiary)
+                        .accessibilityHidden(true)
                 }
-                .padding(16)
-                .background {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.nexusSurface)
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 12)
-                                .strokeBorder(Color.nexusGreen.opacity(0.3), lineWidth: 1)
-                        }
-                }
+                .padding(.vertical, DesignSystem.Spacing.xxs)
             }
             .buttonStyle(.plain)
-        }
-    }
-
-    func sectionHeader(title: String, icon: String, color: Color) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon)
+            .listRowBackground(Color.nexusSurface)
+            .accessibilityLabel("Add custom entry")
+            .accessibilityHint("Manually enter nutrition information")
+        } header: {
+            Label("Custom", systemImage: "pencil")
                 .font(.nexusCaption)
-                .foregroundStyle(color)
-            Text(title)
-                .font(.nexusHeadline)
-                .foregroundStyle(Color.nexusTextPrimary)
+                .foregroundStyle(Color.nexusGreen)
         }
     }
 }
@@ -220,56 +181,6 @@ private extension QuickLogView {
     }
 }
 
-// MARK: - Quick Log Product Card
-
-private struct QuickLogProductCard: View {
-    let product: ProductModel
-    let onTap: () -> Void
-
-    var body: some View {
-        Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text(product.name)
-                        .font(.nexusSubheadline)
-                        .fontWeight(.medium)
-                        .foregroundStyle(Color.nexusTextPrimary)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-
-                    Spacer()
-                }
-
-                Spacer()
-
-                HStack {
-                    Text("\(Int(product.calories)) kcal")
-                        .font(.nexusCaption)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(Color.nexusOrange)
-
-                    Spacer()
-
-                    Image(systemName: "plus.circle.fill")
-                        .font(.nexusHeadline)
-                        .foregroundStyle(Color.nexusGreen)
-                }
-            }
-            .padding(12)
-            .frame(height: 90)
-            .background {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.nexusSurface)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 12)
-                            .strokeBorder(Color.nexusBorder, lineWidth: 1)
-                    }
-            }
-        }
-        .buttonStyle(.plain)
-    }
-}
-
 #Preview {
     QuickLogView(
         mealType: .lunch,
@@ -277,5 +188,4 @@ private struct QuickLogProductCard: View {
         onCustomEntry: {}
     )
     .modelContainer(for: ProductModel.self, inMemory: true)
-    .preferredColorScheme(.dark)
 }

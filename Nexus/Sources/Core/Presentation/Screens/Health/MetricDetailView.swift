@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import Charts
 
 struct MetricDetailView: View {
     let metric: HealthMetricType
@@ -10,6 +11,7 @@ struct MetricDetailView: View {
 
     @State private var showAddEntry = false
     @State private var selectedPeriod: MetricPeriod = .week
+    @State private var chartSelection: Date?
 
     private var entries: [HealthEntryModel] {
         allEntries.filter { $0.type == metric }
@@ -50,15 +52,15 @@ struct MetricDetailView: View {
         let grouped = Dictionary(grouping: periodEntries) { entry in
             calendar.startOfDay(for: entry.date)
         }
-        return grouped.map { date, entries in
-            ChartDataPoint(date: date, value: entries.map { $0.value }.reduce(0, +) / Double(entries.count))
-        }.sorted { $0.date < $1.date }.suffix(7).map { $0 }
+        return grouped.map { date, dayEntries in
+            ChartDataPoint(date: date, value: dayEntries.map { $0.value }.reduce(0, +) / Double(dayEntries.count))
+        }.sorted { $0.date < $1.date }
     }
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 20) {
+                VStack(spacing: DesignSystem.Spacing.lg) {
                     periodSelector
                     if entries.isEmpty {
                         emptyState
@@ -68,8 +70,9 @@ struct MetricDetailView: View {
                         entriesList
                     }
                 }
-                .padding(20)
+                .padding(DesignSystem.Spacing.md)
             }
+            .scrollEdgeEffectStyle(.soft, for: .top)
             .background(Color.nexusBackground)
             .navigationTitle(metric.displayName)
             .navigationBarTitleDisplayMode(.inline)
@@ -78,6 +81,7 @@ struct MetricDetailView: View {
                     Button { showAddEntry = true } label: {
                         Image(systemName: "plus")
                     }
+                    .accessibilityLabel("Add entry")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
@@ -94,30 +98,13 @@ struct MetricDetailView: View {
 
 private extension MetricDetailView {
     var periodSelector: some View {
-        HStack(spacing: 8) {
+        Picker("Period", selection: $selectedPeriod) {
             ForEach(MetricPeriod.allCases) { period in
-                Button {
-                    withAnimation(.spring(response: 0.3)) {
-                        selectedPeriod = period
-                    }
-                } label: {
-                    Text(period.title)
-                        .font(.nexusSubheadline)
-                        .fontWeight(selectedPeriod == period ? .semibold : .regular)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background {
-                            if selectedPeriod == period {
-                                Capsule().fill(metricColor)
-                            }
-                        }
-                        .foregroundStyle(selectedPeriod == period ? .white : .secondary)
-                }
-                .buttonStyle(.plain)
+                Text(period.title).tag(period)
             }
         }
-        .padding(4)
-        .background { Capsule().fill(Color.nexusSurface) }
+        .pickerStyle(.segmented)
+        .accessibilityLabel("Time period")
     }
 }
 
@@ -125,34 +112,19 @@ private extension MetricDetailView {
 
 private extension MetricDetailView {
     var emptyState: some View {
-        VStack(spacing: 16) {
-            Image(systemName: metric.icon)
-                .font(.system(size: 48))
-                .foregroundStyle(metricColor.opacity(0.5))
-
-            VStack(spacing: 8) {
-                Text("No \(metric.displayName) Data")
-                    .font(.nexusHeadline)
-
-                Text("Start tracking your \(metric.displayName.lowercased()) to see insights and trends")
-                    .font(.nexusSubheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-
-            Button { showAddEntry = true } label: {
+        ContentUnavailableView {
+            Label("No \(metric.displayName) Data", systemImage: metric.icon)
+        } description: {
+            Text("Start tracking your \(metric.displayName.lowercased()) to see insights and trends")
+        } actions: {
+            Button {
+                showAddEntry = true
+            } label: {
                 Label("Add Entry", systemImage: "plus.circle.fill")
-                    .font(.nexusHeadline)
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 12)
-                    .background(metricColor)
-                    .foregroundStyle(.white)
-                    .clipShape(Capsule())
             }
-            .padding(.top, 8)
+            .buttonStyle(.glassProminent)
+            .tint(metricColor)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 60)
     }
 }
 
@@ -160,7 +132,7 @@ private extension MetricDetailView {
 
 private extension MetricDetailView {
     var statisticsCard: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: DesignSystem.Spacing.md) {
             HStack {
                 Text("Statistics")
                     .font(.nexusHeadline)
@@ -181,15 +153,8 @@ private extension MetricDetailView {
                 StatisticItem(title: "Entries", value: "\(statistics.count)", unit: "", color: .secondary)
             }
         }
-        .padding(16)
-        .background {
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.nexusSurface)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 16)
-                        .strokeBorder(Color.nexusBorder, lineWidth: 1)
-                }
-        }
+        .padding(DesignSystem.Spacing.md)
+        .glassBackground(in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.card, style: .continuous))
     }
 }
 
@@ -197,23 +162,76 @@ private extension MetricDetailView {
 
 private extension MetricDetailView {
     var chartSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
             Text("Trend")
                 .font(.nexusHeadline)
                 .foregroundStyle(.secondary)
 
-            SimpleBarChart(data: chartData, color: metricColor, unit: metric.defaultUnit)
-                .frame(height: 150)
-                .padding(16)
-                .background {
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(Color.nexusSurface)
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 16)
-                                .strokeBorder(Color.nexusBorder, lineWidth: 1)
-                        }
-                }
+            trendChart
+                .padding(DesignSystem.Spacing.md)
+                .glassBackground(in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.card, style: .continuous))
         }
+    }
+
+    var trendChart: some View {
+        Chart {
+            ForEach(chartData) { point in
+                BarMark(
+                    x: .value("Day", point.date, unit: .day),
+                    y: .value(metric.defaultUnit, point.value)
+                )
+                .foregroundStyle(metricColor.gradient)
+                .cornerRadius(DesignSystem.CornerRadius.sm / 2)
+            }
+
+            RuleMark(y: .value("Average", statistics.average))
+                .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
+                .foregroundStyle(metricColor.opacity(0.6))
+                .annotation(position: .trailing, alignment: .leading) {
+                    Text("avg")
+                        .font(.nexusCaption2)
+                        .foregroundStyle(metricColor.opacity(0.8))
+                }
+
+            if let selection = chartSelection,
+               let selected = chartData.first(where: { Calendar.current.isDate($0.date, inSameDayAs: selection) }) {
+                RuleMark(x: .value("Selected", selected.date, unit: .day))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                    .foregroundStyle(.secondary)
+                    .annotation(position: .top, alignment: .center) {
+                        Text("\(formattedValue(selected.value)) \(metric.defaultUnit)")
+                            .font(.nexusCaption)
+                            .padding(.horizontal, DesignSystem.Spacing.xs)
+                            .padding(.vertical, DesignSystem.Spacing.xxs)
+                            .glassBackground(in: Capsule())
+                    }
+            }
+        }
+        .chartXAxis {
+            AxisMarks(values: .stride(by: .day)) { value in
+                if let date = value.as(Date.self) {
+                    AxisValueLabel {
+                        Text(date.formatted(.dateTime.weekday(.abbreviated)))
+                            .font(.nexusCaption2)
+                    }
+                }
+            }
+        }
+        .chartYAxis {
+            AxisMarks { value in
+                AxisGridLine()
+                AxisValueLabel {
+                    if let v = value.as(Double.self) {
+                        Text(formattedValue(v))
+                            .font(.nexusCaption2)
+                    }
+                }
+            }
+        }
+        .chartScrollableAxes(chartData.count > 7 ? .horizontal : [])
+        .chartXSelection(value: $chartSelection)
+        .frame(height: 160)
+        .accessibilityLabel("\(metric.displayName) trend chart, \(chartData.count) data points")
     }
 }
 
@@ -221,7 +239,7 @@ private extension MetricDetailView {
 
 private extension MetricDetailView {
     var entriesList: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
             HStack {
                 Text("History")
                     .font(.nexusHeadline)
@@ -232,17 +250,37 @@ private extension MetricDetailView {
                     .foregroundStyle(.tertiary)
             }
 
-            LazyVStack(spacing: 8) {
-                ForEach(periodEntries) { entry in
-                    entryRow(entry)
+            if periodEntries.isEmpty {
+                ContentUnavailableView(
+                    "No entries for this period",
+                    systemImage: metric.icon
+                )
+            } else {
+                List {
+                    ForEach(periodEntries) { entry in
+                        entryRow(entry)
+                            .listRowInsets(EdgeInsets(top: DesignSystem.Spacing.xxs, leading: 0, bottom: DesignSystem.Spacing.xxs, trailing: 0))
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    modelContext.delete(entry)
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
+                    }
                 }
+                .listStyle(.plain)
+                .scrollDisabled(true)
+                .frame(height: CGFloat(periodEntries.count) * 68)
             }
         }
     }
 
     func entryRow(_ entry: HealthEntryModel) -> some View {
         HStack {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.xxs) {
                 Text(entry.date.formatted(date: .abbreviated, time: .shortened))
                     .font(.nexusSubheadline)
                 if !entry.notes.isEmpty {
@@ -257,18 +295,10 @@ private extension MetricDetailView {
                 .font(.nexusHeadline)
                 .foregroundStyle(metricColor)
         }
-        .padding(12)
-        .background {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.nexusSurface)
-        }
-        .contextMenu {
-            Button(role: .destructive) {
-                modelContext.delete(entry)
-            } label: {
-                Label("Delete", systemImage: "trash")
-            }
-        }
+        .padding(DesignSystem.Spacing.sm)
+        .glassBackground(in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.card, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(entry.date.formatted(date: .abbreviated, time: .shortened)), \(formattedValue(entry.value)) \(entry.unit)")
     }
 }
 
@@ -280,7 +310,9 @@ private extension MetricDetailView {
     }
 
     func formattedValue(_ value: Double) -> String {
-        value.truncatingRemainder(dividingBy: 1) == 0 ? String(format: "%.0f", value) : String(format: "%.1f", value)
+        value.truncatingRemainder(dividingBy: 1) == 0
+            ? String(format: "%.0f", value)
+            : String(format: "%.1f", value)
     }
 }
 
@@ -313,7 +345,7 @@ private struct StatisticItem: View {
     let color: Color
 
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: DesignSystem.Spacing.xxs) {
             Text(title)
                 .font(.nexusCaption)
                 .foregroundStyle(.secondary)
@@ -329,32 +361,8 @@ private struct StatisticItem: View {
             }
         }
         .frame(maxWidth: .infinity)
-    }
-}
-
-struct SimpleBarChart: View {
-    let data: [ChartDataPoint]
-    let color: Color
-    let unit: String
-
-    private var maxValue: Double {
-        data.map { $0.value }.max() ?? 1
-    }
-
-    var body: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            ForEach(data) { point in
-                VStack(spacing: 4) {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(color)
-                        .frame(height: max(4, CGFloat(point.value / maxValue) * 100))
-
-                    Text(point.date.formatted(.dateTime.weekday(.abbreviated)))
-                        .font(.nexusCaption2)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-            }
-        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(title)
+        .accessibilityValue(unit.isEmpty ? value : "\(value) \(unit)")
     }
 }

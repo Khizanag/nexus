@@ -15,23 +15,23 @@ struct CalendarSummaryCard: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            headerView
+        Button {
+            showCalendarView = true
+        } label: {
+            GlassCard {
+                VStack(spacing: 0) {
+                    headerView
 
-            if !todayEvents.isEmpty {
-                Divider().background(Color.nexusBorder)
-                contentView
+                    if !todayEvents.isEmpty {
+                        Divider().background(Color.nexusBorder)
+                        contentView
+                    }
+                }
             }
         }
-        .background {
-            RoundedRectangle(cornerRadius: 20)
-                .fill(Color.nexusSurface)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 20)
-                        .strokeBorder(Color.nexusBorder, lineWidth: 1)
-                }
-        }
-        .onTapGesture { showCalendarView = true }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Calendar")
+        .accessibilityValue(accessibilityValue)
         .sheet(isPresented: $showCalendarView) {
             CalendarView()
         }
@@ -40,15 +40,17 @@ struct CalendarSummaryCard: View {
 
     private var headerView: some View {
         HStack {
-            HStack(spacing: 10) {
+            HStack(spacing: DesignSystem.Spacing.xs) {
                 ZStack {
                     Circle()
                         .fill(Color.nexusTeal.opacity(0.15))
-                        .frame(width: 36, height: 36)
+                        .frame(width: DesignSystem.Size.Icon.badge, height: DesignSystem.Size.Icon.badge)
                     Image(systemName: "calendar")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.nexusSubheadline)
+                        .fontWeight(.semibold)
                         .foregroundStyle(Color.nexusTeal)
                 }
+                .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Calendar")
@@ -59,7 +61,7 @@ struct CalendarSummaryCard: View {
                             .font(.nexusCaption)
                             .foregroundStyle(.secondary)
                     } else if isLoading {
-                        Text("Loading...")
+                        Text("Loading…")
                             .font(.nexusCaption)
                             .foregroundStyle(.secondary)
                     } else if todayEvents.isEmpty {
@@ -77,10 +79,11 @@ struct CalendarSummaryCard: View {
             Spacer()
 
             Image(systemName: "chevron.right")
-                .font(.system(size: 14, weight: .semibold))
+                .imageScale(.small)
+                .fontWeight(.semibold)
                 .foregroundStyle(.tertiary)
+                .accessibilityHidden(true)
         }
-        .padding(16)
     }
 
     private var contentView: some View {
@@ -102,10 +105,17 @@ struct CalendarSummaryCard: View {
                         .font(.nexusCaption)
                         .foregroundStyle(.secondary)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
+                .padding(.horizontal, DesignSystem.Spacing.md)
+                .padding(.vertical, DesignSystem.Spacing.xs)
             }
         }
+    }
+
+    private var accessibilityValue: String {
+        if !calendarService.isAuthorized { return "Tap to enable" }
+        if isLoading { return "Loading" }
+        if todayEvents.isEmpty { return "No events today" }
+        return "^[\(todayEvents.count) event](inflect: true) today"
     }
 
     private func loadTodayEvents() async {
@@ -127,10 +137,11 @@ struct CalendarEventMiniRow: View {
     let event: CalendarEvent
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DesignSystem.Spacing.sm) {
             RoundedRectangle(cornerRadius: 2)
                 .fill(event.calendarColor)
                 .frame(width: 4, height: 32)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(event.title)
@@ -145,7 +156,7 @@ struct CalendarEventMiniRow: View {
 
             Spacer()
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, DesignSystem.Spacing.sm)
+        .padding(.vertical, DesignSystem.Spacing.xs)
     }
 }

@@ -18,29 +18,33 @@ struct QuickHealthEntryView: View {
                 Section {
                     HStack {
                         Image(systemName: metric.icon)
-                            .font(.system(size: 24))
+                            .font(.nexusTitle2)
                             .foregroundStyle(metricColor)
                             .frame(width: 40)
+                            .accessibilityHidden(true)
 
                         TextField("0", text: $value)
-                            .font(.system(size: 40, weight: .bold, design: .rounded))
+                            .font(.nexusDisplayNumber(.title))
                             .keyboardType(.decimalPad)
                             .focused($isValueFocused)
+                            .accessibilityLabel("\(metric.displayName) value")
 
                         Text(metric.defaultUnit)
                             .font(.nexusTitle2)
                             .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
                     }
                     .listRowBackground(Color.clear)
                 }
 
-                Section {
+                Section("Date & Time") {
                     DatePicker("Date & Time", selection: $date)
                 }
 
-                Section {
-                    TextField("Notes (optional)", text: $notes, axis: .vertical)
+                Section("Notes") {
+                    TextField("Optional", text: $notes, axis: .vertical)
                         .lineLimit(2...4)
+                        .accessibilityLabel("Notes")
                 }
             }
             .scrollContentBackground(.hidden)

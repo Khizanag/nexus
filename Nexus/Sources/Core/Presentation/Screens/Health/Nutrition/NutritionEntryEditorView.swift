@@ -21,8 +21,8 @@ struct NutritionEntryEditorView: View {
     @State private var notes = ""
     @State private var saveAsProduct = false
     @State private var productBrand = ""
-
     @State private var showDeleteConfirmation = false
+    @State private var saveTrigger = false
 
     private var isEditing: Bool { entry != nil }
     private var isValid: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -59,6 +59,7 @@ struct NutritionEntryEditorView: View {
             .navigationTitle(isEditing ? "Edit Entry" : "Add Food")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbarContent }
+            .sensoryFeedback(.success, trigger: saveTrigger)
             .onAppear { loadEntryData() }
             .confirmationDialog(
                 "Delete Entry",
@@ -82,6 +83,7 @@ private extension NutritionEntryEditorView {
         Section {
             TextField("Food name", text: $name)
                 .font(.nexusBody)
+                .accessibilityLabel("Food name")
         } header: {
             Text("Name")
                 .font(.nexusCaption)
@@ -92,7 +94,7 @@ private extension NutritionEntryEditorView {
 
     var macrosSection: some View {
         Section {
-            VStack(spacing: 16) {
+            VStack(spacing: DesignSystem.Spacing.md) {
                 MacroInputField(
                     title: "Calories",
                     icon: "flame.fill",
@@ -101,7 +103,7 @@ private extension NutritionEntryEditorView {
                     unit: "kcal"
                 )
 
-                HStack(spacing: 12) {
+                HStack(spacing: DesignSystem.Spacing.sm) {
                     MacroInputField(
                         title: "Carbs",
                         icon: "leaf.fill",
@@ -122,7 +124,7 @@ private extension NutritionEntryEditorView {
                     )
                 }
             }
-            .padding(.vertical, 8)
+            .padding(.vertical, DesignSystem.Spacing.xs)
         } header: {
             Text("Nutrition Info")
                 .font(.nexusCaption)
@@ -133,8 +135,8 @@ private extension NutritionEntryEditorView {
 
     var servingSection: some View {
         Section {
-            HStack(spacing: 16) {
-                VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: DesignSystem.Spacing.md) {
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
                     Text("Serving Size")
                         .font(.nexusCaption)
                         .foregroundStyle(Color.nexusTextSecondary)
@@ -142,15 +144,17 @@ private extension NutritionEntryEditorView {
                     TextField("1", value: $servingSize, format: .number)
                         .font(.nexusHeadline)
                         .keyboardType(.decimalPad)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
+                        .padding(.horizontal, DesignSystem.Spacing.sm)
+                        .padding(.vertical, DesignSystem.Spacing.sm - 2)
                         .background {
-                            RoundedRectangle(cornerRadius: 10)
+                            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md - 2)
                                 .fill(Color.nexusSurfaceSecondary)
                         }
+                        .accessibilityLabel("Serving size")
+                        .accessibilityValue("\(servingSize)")
                 }
 
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
                     Text("Unit")
                         .font(.nexusCaption)
                         .foregroundStyle(Color.nexusTextSecondary)
@@ -170,17 +174,19 @@ private extension NutritionEntryEditorView {
                             Image(systemName: "chevron.up.chevron.down")
                                 .font(.nexusCaption)
                                 .foregroundStyle(Color.nexusTextTertiary)
+                                .accessibilityHidden(true)
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
+                        .padding(.horizontal, DesignSystem.Spacing.sm)
+                        .padding(.vertical, DesignSystem.Spacing.sm - 2)
                         .background {
-                            RoundedRectangle(cornerRadius: 10)
+                            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md - 2)
                                 .fill(Color.nexusSurfaceSecondary)
                         }
                     }
+                    .accessibilityLabel("Serving unit: \(servingUnit)")
                 }
             }
-            .padding(.vertical, 8)
+            .padding(.vertical, DesignSystem.Spacing.xs)
         } header: {
             Text("Serving")
                 .font(.nexusCaption)
@@ -191,8 +197,8 @@ private extension NutritionEntryEditorView {
 
     var mealSection: some View {
         Section {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
+                HStack(spacing: DesignSystem.Spacing.xs) {
                     ForEach(MealType.allCases, id: \.self) { type in
                         mealTypeButton(type)
                     }
@@ -202,7 +208,7 @@ private extension NutritionEntryEditorView {
                     .font(.nexusBody)
                     .foregroundStyle(Color.nexusTextPrimary)
             }
-            .padding(.vertical, 8)
+            .padding(.vertical, DesignSystem.Spacing.xs)
         } header: {
             Text("Meal")
                 .font(.nexusCaption)
@@ -216,6 +222,7 @@ private extension NutritionEntryEditorView {
             TextField("Add notes...", text: $notes, axis: .vertical)
                 .font(.nexusBody)
                 .lineLimit(3...6)
+                .accessibilityLabel("Notes")
         } header: {
             Text("Notes")
                 .font(.nexusCaption)
@@ -227,9 +234,10 @@ private extension NutritionEntryEditorView {
     var saveAsProductSection: some View {
         Section {
             Toggle(isOn: $saveAsProduct) {
-                HStack(spacing: 8) {
+                HStack(spacing: DesignSystem.Spacing.xs) {
                     Image(systemName: "bookmark.fill")
                         .foregroundStyle(Color.nexusGreen)
+                        .accessibilityHidden(true)
                     Text("Save to Product Library")
                         .font(.nexusBody)
                 }
@@ -239,6 +247,7 @@ private extension NutritionEntryEditorView {
             if saveAsProduct {
                 TextField("Brand (optional)", text: $productBrand)
                     .font(.nexusBody)
+                    .accessibilityLabel("Product brand, optional")
             }
         } header: {
             Text("Save for Later")
@@ -275,21 +284,24 @@ private extension NutritionEntryEditorView {
         return Button {
             mealType = type
         } label: {
-            VStack(spacing: 4) {
+            VStack(spacing: DesignSystem.Spacing.xxs) {
                 Image(systemName: type.icon)
                     .font(.nexusHeadline)
+                    .accessibilityHidden(true)
                 Text(type.displayName)
-                    .font(.system(size: 10))
+                    .font(.nexusCaption2)
             }
-            .foregroundStyle(isSelected ? .white : color)
+            .foregroundStyle(isSelected ? Color.nexusOnAccent : color)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
+            .padding(.vertical, DesignSystem.Spacing.sm - 2)
             .background {
-                RoundedRectangle(cornerRadius: 10)
+                RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md - 2)
                     .fill(isSelected ? color : color.opacity(0.15))
             }
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(type.displayName)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     func mealTypeColor(for type: MealType) -> Color {
@@ -389,9 +401,7 @@ private extension NutritionEntryEditorView {
             }
         }
 
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(.success)
-
+        saveTrigger.toggle()
         dismiss()
     }
 
@@ -406,5 +416,4 @@ private extension NutritionEntryEditorView {
 #Preview {
     NutritionEntryEditorView(mealType: .lunch, date: .now)
         .modelContainer(for: [NutritionEntryModel.self, ProductModel.self], inMemory: true)
-        .preferredColorScheme(.dark)
 }

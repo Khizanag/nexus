@@ -19,13 +19,15 @@ struct NutritionSummaryCard: View {
     }
 
     var body: some View {
-        NexusCard {
-            HStack(spacing: 20) {
+        GlassCard {
+            HStack(spacing: DesignSystem.Spacing.lg) {
                 calorieRing
                 Spacer()
                 macroRings
             }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilitySummary)
     }
 }
 
@@ -33,7 +35,7 @@ struct NutritionSummaryCard: View {
 
 private extension NutritionSummaryCard {
     var calorieRing: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: DesignSystem.Spacing.xxs) {
             NutritionProgressRing(
                 progress: calorieProgress,
                 color: .nexusOrange,
@@ -44,15 +46,18 @@ private extension NutritionSummaryCard {
                 value: formatNumber(calories)
             )
             .frame(width: 110, height: 110)
+            .accessibilityLabel("Calories: \(Int(calories)) of \(Int(calorieGoal))")
+            .accessibilityValue("\(Int(calorieProgress * 100)) percent")
 
             Text("\(formatNumber(max(calorieGoal - calories, 0))) left")
                 .font(.nexusCaption)
                 .foregroundStyle(Color.nexusTextSecondary)
+                .accessibilityHidden(true)
         }
     }
 
     var macroRings: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: DesignSystem.Spacing.sm) {
             MiniMacroRing(
                 current: carbs,
                 goal: carbsGoal,
@@ -77,6 +82,13 @@ private extension NutritionSummaryCard {
         }
     }
 
+    var accessibilitySummary: String {
+        "\(Int(calories)) of \(Int(calorieGoal)) calories. " +
+        "Carbs: \(Int(carbs))g of \(Int(carbsGoal))g. " +
+        "Protein: \(Int(protein))g of \(Int(proteinGoal))g. " +
+        "Fats: \(Int(fats))g of \(Int(fatsGoal))g."
+    }
+
     func formatNumber(_ value: Double) -> String {
         if value >= 1000 {
             return String(format: "%.1fk", value / 1000)
@@ -94,14 +106,15 @@ struct MealSectionCard: View {
     let onEntryTap: (NutritionEntryModel) -> Void
 
     @State private var isExpanded = true
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var totalCalories: Double {
         entries.reduce(0) { $0 + $1.calories }
     }
 
     var body: some View {
-        NexusCard {
-            VStack(alignment: .leading, spacing: 12) {
+        GlassCard {
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
                 header
                 if isExpanded {
                     content
@@ -116,14 +129,19 @@ struct MealSectionCard: View {
 private extension MealSectionCard {
     var header: some View {
         Button {
-            withAnimation(.easeInOut(duration: 0.2)) {
+            if reduceMotion {
                 isExpanded.toggle()
+            } else {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.toggle()
+                }
             }
         } label: {
             HStack {
                 Image(systemName: mealType.icon)
                     .font(.nexusHeadline)
                     .foregroundStyle(mealTypeColor)
+                    .accessibilityHidden(true)
 
                 Text(mealType.displayName)
                     .font(.nexusHeadline)
@@ -138,20 +156,28 @@ private extension MealSectionCard {
                 Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                     .font(.nexusCaption)
                     .foregroundStyle(Color.nexusTextTertiary)
+                    .accessibilityHidden(true)
             }
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("\(mealType.displayName), \(Int(totalCalories)) calories")
+        .accessibilityHint(isExpanded ? "Collapse" : "Expand")
     }
 
     var content: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: DesignSystem.Spacing.xs) {
             if entries.isEmpty {
                 emptyState
             } else {
                 ForEach(entries, id: \.id) { entry in
-                    NutritionEntryRow(entry: entry)
-                        .contentShape(Rectangle())
-                        .onTapGesture { onEntryTap(entry) }
+                    Button {
+                        onEntryTap(entry)
+                    } label: {
+                        NutritionEntryRow(entry: entry)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(entryAccessibilityLabel(entry))
+                    .accessibilityHint("Edit entry")
                 }
             }
             addButton
@@ -163,25 +189,28 @@ private extension MealSectionCard {
             .font(.nexusCaption)
             .foregroundStyle(Color.nexusTextTertiary)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
+            .padding(.vertical, DesignSystem.Spacing.xs)
+            .accessibilityLabel("No entries for \(mealType.displayName)")
     }
 
     var addButton: some View {
         Button(action: onAddTap) {
             HStack {
                 Image(systemName: "plus.circle.fill")
+                    .accessibilityHidden(true)
                 Text("Add Food")
             }
             .font(.nexusSubheadline)
             .foregroundStyle(mealTypeColor)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
+            .padding(.vertical, DesignSystem.Spacing.xs)
             .background {
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.sm)
                     .fill(mealTypeColor.opacity(0.1))
             }
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("Add food to \(mealType.displayName)")
     }
 
     var mealTypeColor: Color {
@@ -193,6 +222,11 @@ private extension MealSectionCard {
         default: .nexusTextSecondary
         }
     }
+
+    func entryAccessibilityLabel(_ entry: NutritionEntryModel) -> String {
+        "\(entry.name), \(Int(entry.calories)) calories, " +
+        "carbs \(Int(entry.carbs))g, protein \(Int(entry.protein))g, fats \(Int(entry.fats))g"
+    }
 }
 
 // MARK: - Nutrition Entry Row
@@ -201,7 +235,7 @@ struct NutritionEntryRow: View {
     let entry: NutritionEntryModel
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DesignSystem.Spacing.sm) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.name)
                     .font(.nexusBody)
@@ -215,7 +249,7 @@ struct NutritionEntryRow: View {
 
             Spacer()
 
-            HStack(spacing: 16) {
+            HStack(spacing: DesignSystem.Spacing.md) {
                 macroLabel(value: entry.carbs, label: "C", color: .nexusBlue)
                 macroLabel(value: entry.protein, label: "P", color: .nexusRed)
                 macroLabel(value: entry.fats, label: "F", color: .nexusPurple)
@@ -226,8 +260,9 @@ struct NutritionEntryRow: View {
                     .foregroundStyle(Color.nexusOrange)
                     .frame(width: 50, alignment: .trailing)
             }
+            .accessibilityHidden(true)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, DesignSystem.Spacing.xxs)
     }
 
     private var servingText: String {
@@ -253,9 +288,9 @@ struct ProductRow: View {
 
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: 12) {
+            HStack(spacing: DesignSystem.Spacing.sm) {
                 VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: DesignSystem.Spacing.xs) {
                         Text(product.name)
                             .font(.nexusBody)
                             .foregroundStyle(Color.nexusTextPrimary)
@@ -263,8 +298,9 @@ struct ProductRow: View {
 
                         if showFavorite, product.isFavorite {
                             Image(systemName: "star.fill")
-                                .font(.system(size: 10))
+                                .font(.nexusCaption2)
                                 .foregroundStyle(Color.nexusOrange)
+                                .accessibilityLabel("Favorite")
                         }
                     }
 
@@ -286,14 +322,25 @@ struct ProductRow: View {
                         .font(.nexusCaption)
                         .foregroundStyle(Color.nexusTextTertiary)
                 }
+                .accessibilityHidden(true)
 
                 Image(systemName: "plus.circle.fill")
                     .font(.nexusTitle3)
                     .foregroundStyle(Color.nexusGreen)
+                    .accessibilityHidden(true)
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, DesignSystem.Spacing.xxs)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(productAccessibilityLabel)
+        .accessibilityHint("Log to current meal")
+    }
+
+    private var productAccessibilityLabel: String {
+        var parts = [product.name]
+        if !product.brand.isEmpty { parts.append(product.brand) }
+        parts.append("\(Int(product.calories)) calories per \(product.servingUnit)")
+        return parts.joined(separator: ", ")
     }
 }
 
@@ -305,7 +352,7 @@ struct QuickAddTile: View {
 
     var body: some View {
         Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
                 HStack {
                     Text(product.name)
                         .font(.nexusCaption)
@@ -318,8 +365,9 @@ struct QuickAddTile: View {
 
                     if product.isFavorite {
                         Image(systemName: "star.fill")
-                            .font(.system(size: 8))
+                            .font(.nexusCaption2)
                             .foregroundStyle(Color.nexusOrange)
+                            .accessibilityHidden(true)
                     }
                 }
 
@@ -328,19 +376,17 @@ struct QuickAddTile: View {
                 Text("\(Int(product.calories)) kcal")
                     .font(.nexusCaption)
                     .foregroundStyle(Color.nexusOrange)
+                    .accessibilityHidden(true)
             }
-            .padding(10)
+            .padding(DesignSystem.Spacing.sm)
             .frame(width: 100, height: 80)
-            .background {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.nexusSurface)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 12)
-                            .strokeBorder(Color.nexusBorder, lineWidth: 1)
-                    }
-            }
+            .glassBackground(
+                in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md, style: .continuous)
+            )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ScaleButtonStyle())
+        .accessibilityLabel("\(product.name), \(Int(product.calories)) calories")
+        .accessibilityHint("Quick log to current meal")
     }
 }
 
@@ -354,11 +400,12 @@ struct MacroInputField: View {
     var unit: String = "g"
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 4) {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
+            HStack(spacing: DesignSystem.Spacing.xxs) {
                 Image(systemName: icon)
                     .font(.nexusCaption)
                     .foregroundStyle(color)
+                    .accessibilityHidden(true)
                 Text(title)
                     .font(.nexusCaption)
                     .foregroundStyle(Color.nexusTextSecondary)
@@ -370,18 +417,21 @@ struct MacroInputField: View {
                     .foregroundStyle(Color.nexusTextPrimary)
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.leading)
+                    .accessibilityLabel(title)
+                    .accessibilityValue("\(Int(value)) \(unit)")
 
                 Text(unit)
                     .font(.nexusCaption)
                     .foregroundStyle(Color.nexusTextTertiary)
+                    .accessibilityHidden(true)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.horizontal, DesignSystem.Spacing.sm)
+            .padding(.vertical, DesignSystem.Spacing.sm - 2)
             .background {
-                RoundedRectangle(cornerRadius: 10)
+                RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md - 2)
                     .fill(Color.nexusSurfaceSecondary)
                     .overlay {
-                        RoundedRectangle(cornerRadius: 10)
+                        RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md - 2)
                             .strokeBorder(color.opacity(0.3), lineWidth: 1)
                     }
             }
@@ -404,7 +454,6 @@ struct MacroInputField: View {
     )
     .padding()
     .background(Color.nexusBackground)
-    .preferredColorScheme(.dark)
 }
 
 #Preview("Entry Row") {
@@ -434,5 +483,4 @@ struct MacroInputField: View {
     }
     .padding()
     .background(Color.nexusBackground)
-    .preferredColorScheme(.dark)
 }

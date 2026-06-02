@@ -16,52 +16,35 @@ struct CalendarAgendaView: View {
 
     var body: some View {
         if events.isEmpty {
-            emptyState
+            ContentUnavailableView(
+                "No Upcoming Events",
+                systemImage: "calendar.badge.checkmark",
+                description: Text("Your schedule is clear")
+            )
         } else {
-            ScrollView {
-                LazyVStack(spacing: 0, pinnedViews: .sectionHeaders) {
-                    ForEach(groupedEvents, id: \.0) { date, dayEvents in
-                        Section {
-                            ForEach(dayEvents) { event in
+            List {
+                ForEach(groupedEvents, id: \.0) { date, dayEvents in
+                    Section {
+                        ForEach(dayEvents) { event in
+                            Button {
+                                onEventTapped(event)
+                            } label: {
                                 AgendaEventRow(event: event)
-                                    .onTapGesture {
-                                        onEventTapped(event)
-                                    }
-
-                                if event.id != dayEvents.last?.id {
-                                    Divider()
-                                        .background(Color.nexusBorder)
-                                        .padding(.leading, 72)
-                                }
                             }
-                        } header: {
-                            AgendaSectionHeader(date: date)
+                            .buttonStyle(.plain)
+                            .listRowInsets(EdgeInsets())
+                            .listRowBackground(Color.nexusSurface)
+                            .accessibilityLabel(event.title)
+                            .accessibilityValue(event.formattedTime)
                         }
+                    } header: {
+                        AgendaSectionHeader(date: date)
+                            .listRowInsets(EdgeInsets())
                     }
                 }
-                .padding(.bottom, 20)
             }
-        }
-    }
-
-    private var emptyState: some View {
-        VStack(spacing: 16) {
-            Spacer()
-
-            Image(systemName: "calendar.badge.checkmark")
-                .font(.system(size: 56))
-                .foregroundStyle(Color.nexusTeal.opacity(0.6))
-
-            VStack(spacing: 4) {
-                Text("No Upcoming Events")
-                    .font(.nexusHeadline)
-
-                Text("Your schedule is clear")
-                    .font(.nexusSubheadline)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
+            .listStyle(.plain)
+            .scrollEdgeEffectStyle(.soft, for: .top)
         }
     }
 }
@@ -123,8 +106,8 @@ private struct AgendaSectionHeader: View {
 
             Spacer()
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
+        .padding(.horizontal, DesignSystem.Spacing.md)
+        .padding(.vertical, DesignSystem.Spacing.sm)
         .background(Color.nexusBackground)
     }
 }
@@ -135,20 +118,21 @@ private struct AgendaEventRow: View {
     let event: CalendarEvent
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: DesignSystem.Spacing.md) {
             timeColumn
 
             RoundedRectangle(cornerRadius: 2)
                 .fill(event.calendarColor)
                 .frame(width: 4)
+                .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.xxs) {
                 Text(event.title)
                     .font(.nexusSubheadline)
                     .fontWeight(.medium)
                     .lineLimit(2)
 
-                HStack(spacing: 8) {
+                HStack(spacing: DesignSystem.Spacing.xs) {
                     Text(event.calendarName)
                         .font(.nexusCaption)
                         .foregroundStyle(.secondary)
@@ -156,7 +140,8 @@ private struct AgendaEventRow: View {
                     if let location = event.location, !location.isEmpty {
                         HStack(spacing: 4) {
                             Image(systemName: "location.fill")
-                                .font(.system(size: 10))
+                                .imageScale(.small)
+                                .accessibilityHidden(true)
                             Text(location)
                                 .lineLimit(1)
                         }
@@ -169,11 +154,12 @@ private struct AgendaEventRow: View {
             Spacer()
 
             Image(systemName: "chevron.right")
-                .font(.system(size: 12))
+                .imageScale(.small)
                 .foregroundStyle(.tertiary)
+                .accessibilityHidden(true)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
+        .padding(.horizontal, DesignSystem.Spacing.md)
+        .padding(.vertical, DesignSystem.Spacing.sm)
         .background(Color.nexusSurface)
     }
 
@@ -212,5 +198,4 @@ private struct AgendaEventRow: View {
         events: [],
         onEventTapped: { _ in }
     )
-    .preferredColorScheme(.dark)
 }

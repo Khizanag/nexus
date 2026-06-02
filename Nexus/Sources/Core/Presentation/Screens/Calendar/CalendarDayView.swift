@@ -6,8 +6,11 @@ struct CalendarDayView: View {
     let onEventTapped: (CalendarEvent) -> Void
     var onCreateEvent: ((Date) -> Void)?
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     @GestureState private var dragOffset: CGFloat = 0
     @State private var longPressLocation: CGPoint = .zero
+    @State private var hapticTrigger = false
 
     private let hourHeight: CGFloat = 60
     private let calendar = Calendar.current
@@ -41,10 +44,14 @@ struct CalendarDayView: View {
 
                         VStack(spacing: 0) {
                             ForEach(timedEvents) { event in
-                                DayEventBlock(event: event, hourHeight: hourHeight)
-                                    .padding(.leading, 60)
-                                    .padding(.trailing, 16)
-                                    .onTapGesture { onEventTapped(event) }
+                                Button {
+                                    onEventTapped(event)
+                                } label: {
+                                    DayEventBlock(event: event, hourHeight: hourHeight)
+                                        .padding(.leading, 60)
+                                        .padding(.trailing, DesignSystem.Spacing.md)
+                                }
+                                .buttonStyle(.plain)
                             }
                         }
                     }
@@ -61,7 +68,7 @@ struct CalendarDayView: View {
                             second: 0,
                             of: selectedDate
                         ) {
-                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                            hapticTrigger.toggle()
                             onCreateEvent?(eventDate)
                         }
                     } onPressingChanged: { _ in }
@@ -72,6 +79,7 @@ struct CalendarDayView: View {
                             }
                     )
                 }
+                .scrollEdgeEffectStyle(.soft, for: .top)
                 .onAppear {
                     let hour = calendar.component(.hour, from: Date())
                     proxy.scrollTo("hour-\(max(0, hour - 1))", anchor: .top)
@@ -79,6 +87,7 @@ struct CalendarDayView: View {
             }
         }
         .gesture(daySwipeGesture)
+        .sensoryFeedback(.impact(weight: .medium), trigger: hapticTrigger)
     }
 }
 
@@ -89,16 +98,21 @@ private extension CalendarDayView {
         HStack {
             Button { previousDay() } label: {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 16, weight: .semibold))
+                    .fontWeight(.semibold)
                     .foregroundStyle(Color.nexusTeal)
-                    .frame(width: 44, height: 44)
+                    .frame(width: DesignSystem.Size.Button.tap, height: DesignSystem.Size.Button.tap)
             }
+            .accessibilityLabel("Previous day")
 
             Spacer()
 
             Button {
-                withAnimation(.spring(response: 0.3)) {
+                if reduceMotion {
                     selectedDate = Date()
+                } else {
+                    withAnimation(.spring(response: 0.3)) {
+                        selectedDate = Date()
+                    }
                 }
             } label: {
                 VStack(spacing: 2) {
@@ -116,33 +130,40 @@ private extension CalendarDayView {
 
             Button { nextDay() } label: {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 16, weight: .semibold))
+                    .fontWeight(.semibold)
                     .foregroundStyle(Color.nexusTeal)
-                    .frame(width: 44, height: 44)
+                    .frame(width: DesignSystem.Size.Button.tap, height: DesignSystem.Size.Button.tap)
             }
+            .accessibilityLabel("Next day")
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 8)
+        .padding(.horizontal, DesignSystem.Spacing.xs)
+        .padding(.vertical, DesignSystem.Spacing.xs)
     }
 
     var allDayEventsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
             Text("All-day")
                 .font(.nexusCaption)
                 .foregroundStyle(.secondary)
-                .padding(.horizontal, 20)
+                .padding(.horizontal, DesignSystem.Spacing.md)
 
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+                HStack(spacing: DesignSystem.Spacing.xs) {
                     ForEach(allDayEvents) { event in
-                        AllDayEventChip(event: event)
-                            .onTapGesture { onEventTapped(event) }
+                        Button {
+                            onEventTapped(event)
+                        } label: {
+                            AllDayEventChip(event: event)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(event.title)
+                        .accessibilityValue("All day")
                     }
                 }
-                .padding(.horizontal, 20)
+                .padding(.horizontal, DesignSystem.Spacing.md)
             }
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, DesignSystem.Spacing.xs)
         .background(Color.nexusSurface)
     }
 
@@ -154,9 +175,13 @@ private extension CalendarDayView {
             .onEnded { value in
                 let threshold: CGFloat = 50
                 if value.translation.width > threshold {
-                    withAnimation(.spring(response: 0.3)) { previousDay() }
+                    if reduceMotion { previousDay() } else {
+                        withAnimation(.spring(response: 0.3)) { previousDay() }
+                    }
                 } else if value.translation.width < -threshold {
-                    withAnimation(.spring(response: 0.3)) { nextDay() }
+                    if reduceMotion { nextDay() } else {
+                        withAnimation(.spring(response: 0.3)) { nextDay() }
+                    }
                 }
             }
     }

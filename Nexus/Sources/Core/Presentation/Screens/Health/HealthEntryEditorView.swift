@@ -15,8 +15,8 @@ struct HealthEntryEditorView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    Picker("Metric", selection: $selectedMetric) {
+                Section("Metric") {
+                    Picker("Type", selection: $selectedMetric) {
                         ForEach(HealthMetricType.allCases, id: \.self) { metric in
                             Label(metric.displayName, systemImage: metric.icon)
                                 .tag(metric)
@@ -24,27 +24,30 @@ struct HealthEntryEditorView: View {
                     }
                 }
 
-                Section {
+                Section("Value") {
                     HStack {
                         TextField("0", text: $value)
-                            .font(.system(size: 40, weight: .bold, design: .rounded))
+                            .font(.nexusDisplayNumber(.title))
                             .keyboardType(.decimalPad)
                             .focused($isValueFocused)
+                            .accessibilityLabel("Value")
 
                         Text(selectedMetric.defaultUnit)
                             .font(.nexusTitle2)
                             .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
                     }
                     .listRowBackground(Color.clear)
                 }
 
-                Section {
+                Section("Date & Time") {
                     DatePicker("Date & Time", selection: $date)
                 }
 
-                Section {
-                    TextField("Notes (optional)", text: $notes, axis: .vertical)
+                Section("Notes") {
+                    TextField("Optional", text: $notes, axis: .vertical)
                         .lineLimit(2...4)
+                        .accessibilityLabel("Notes")
                 }
             }
             .scrollContentBackground(.hidden)
@@ -53,28 +56,20 @@ struct HealthEntryEditorView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
+                    Button("Cancel") { dismiss() }
                 }
-
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Save") {
-                        saveEntry()
-                    }
-                    .fontWeight(.semibold)
-                    .disabled(value.isEmpty)
+                    Button("Save") { saveEntry() }
+                        .fontWeight(.semibold)
+                        .disabled(value.isEmpty)
                 }
             }
-            .onAppear {
-                isValueFocused = true
-            }
+            .onAppear { isValueFocused = true }
         }
     }
 
     private func saveEntry() {
         guard let numericValue = Double(value) else { return }
-
         let entry = HealthEntryModel(
             type: selectedMetric,
             value: numericValue,
@@ -82,7 +77,6 @@ struct HealthEntryEditorView: View {
             date: date,
             notes: notes
         )
-
         modelContext.insert(entry)
         dismiss()
     }
@@ -90,5 +84,4 @@ struct HealthEntryEditorView: View {
 
 #Preview {
     HealthEntryEditorView()
-        .preferredColorScheme(.dark)
 }

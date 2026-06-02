@@ -7,6 +7,8 @@ struct CalendarMonthView: View {
     let onDateSelected: (Date) -> Void
     let onEventTapped: (CalendarEvent) -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     @GestureState private var dragOffset: CGFloat = 0
 
     private let calendar = Calendar.current
@@ -21,7 +23,7 @@ struct CalendarMonthView: View {
             if !selectedDayEvents.isEmpty {
                 Divider()
                     .background(Color.nexusBorder)
-                    .padding(.top, 12)
+                    .padding(.top, DesignSystem.Spacing.sm)
 
                 selectedDayEventsSection
             }
@@ -37,17 +39,23 @@ private extension CalendarMonthView {
         HStack {
             Button { previousMonth() } label: {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 16, weight: .semibold))
+                    .fontWeight(.semibold)
                     .foregroundStyle(Color.nexusTeal)
-                    .frame(width: 44, height: 44)
+                    .frame(width: DesignSystem.Size.Button.tap, height: DesignSystem.Size.Button.tap)
             }
+            .accessibilityLabel("Previous month")
 
             Spacer()
 
             Button {
-                withAnimation(.spring(response: 0.3)) {
+                if reduceMotion {
                     currentMonth = Date()
                     selectedDate = Date()
+                } else {
+                    withAnimation(.spring(response: 0.3)) {
+                        currentMonth = Date()
+                        selectedDate = Date()
+                    }
                 }
             } label: {
                 Text(currentMonth.formatted(.dateTime.month(.wide).year()))
@@ -59,12 +67,13 @@ private extension CalendarMonthView {
 
             Button { nextMonth() } label: {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 16, weight: .semibold))
+                    .fontWeight(.semibold)
                     .foregroundStyle(Color.nexusTeal)
-                    .frame(width: 44, height: 44)
+                    .frame(width: DesignSystem.Size.Button.tap, height: DesignSystem.Size.Button.tap)
             }
+            .accessibilityLabel("Next month")
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, DesignSystem.Spacing.xs)
     }
 
     var weekdayHeaders: some View {
@@ -77,32 +86,38 @@ private extension CalendarMonthView {
                     .frame(height: 32)
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, DesignSystem.Spacing.sm)
     }
 
     var monthGrid: some View {
         LazyVGrid(columns: columns, spacing: 4) {
             ForEach(daysInMonth, id: \.self) { date in
-                CalendarDayCell(
-                    date: date,
-                    isSelected: calendar.isDate(date, inSameDayAs: selectedDate),
-                    isToday: calendar.isDateInToday(date),
-                    isCurrentMonth: calendar.isDate(date, equalTo: currentMonth, toGranularity: .month),
-                    events: eventsFor(date)
-                )
-                .onTapGesture {
-                    withAnimation(.spring(response: 0.2)) {
+                Button {
+                    if reduceMotion {
                         selectedDate = date
+                    } else {
+                        withAnimation(.spring(response: 0.2)) {
+                            selectedDate = date
+                        }
                     }
                     onDateSelected(date)
+                } label: {
+                    CalendarDayCell(
+                        date: date,
+                        isSelected: calendar.isDate(date, inSameDayAs: selectedDate),
+                        isToday: calendar.isDateInToday(date),
+                        isCurrentMonth: calendar.isDate(date, equalTo: currentMonth, toGranularity: .month),
+                        events: eventsFor(date)
+                    )
                 }
+                .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, DesignSystem.Spacing.sm)
     }
 
     var selectedDayEventsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
             HStack {
                 Text(selectedDate.formatted(.dateTime.weekday(.wide).month().day()))
                     .font(.nexusHeadline)
@@ -113,17 +128,23 @@ private extension CalendarMonthView {
                     .font(.nexusCaption)
                     .foregroundStyle(.secondary)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 12)
+            .padding(.horizontal, DesignSystem.Spacing.md)
+            .padding(.top, DesignSystem.Spacing.sm)
 
             ScrollView {
-                LazyVStack(spacing: 8) {
+                LazyVStack(spacing: DesignSystem.Spacing.xs) {
                     ForEach(selectedDayEvents) { event in
-                        CalendarEventRow(event: event)
-                            .onTapGesture { onEventTapped(event) }
+                        Button {
+                            onEventTapped(event)
+                        } label: {
+                            CalendarEventRow(event: event)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(event.title)
+                        .accessibilityValue(event.formattedTime)
                     }
                 }
-                .padding(.horizontal, 20)
+                .padding(.horizontal, DesignSystem.Spacing.md)
             }
         }
     }
@@ -136,9 +157,13 @@ private extension CalendarMonthView {
             .onEnded { value in
                 let threshold: CGFloat = 50
                 if value.translation.width > threshold {
-                    withAnimation(.spring(response: 0.3)) { previousMonth() }
+                    if reduceMotion { previousMonth() } else {
+                        withAnimation(.spring(response: 0.3)) { previousMonth() }
+                    }
                 } else if value.translation.width < -threshold {
-                    withAnimation(.spring(response: 0.3)) { nextMonth() }
+                    if reduceMotion { nextMonth() } else {
+                        withAnimation(.spring(response: 0.3)) { nextMonth() }
+                    }
                 }
             }
     }

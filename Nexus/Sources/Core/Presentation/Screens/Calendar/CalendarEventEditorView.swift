@@ -85,10 +85,11 @@ struct CalendarEventEditorView: View {
                 Section {
                     Picker("Calendar", selection: $selectedCalendarId) {
                         ForEach(editableCalendars) { calendar in
-                            HStack(spacing: 8) {
+                            HStack(spacing: DesignSystem.Spacing.xs) {
                                 Circle()
                                     .fill(calendar.color)
                                     .frame(width: 10, height: 10)
+                                    .accessibilityHidden(true)
                                 Text(calendar.title)
                             }
                             .tag(calendar.id as String?)
@@ -214,5 +215,4 @@ struct CalendarEventEditorView: View {
 
 #Preview {
     CalendarEventEditorView(event: nil) { _ in }
-        .preferredColorScheme(.dark)
 }

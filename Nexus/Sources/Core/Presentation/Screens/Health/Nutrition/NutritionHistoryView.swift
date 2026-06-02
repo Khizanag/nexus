@@ -9,6 +9,7 @@ struct NutritionHistoryView: View {
     @AppStorage("dailyCalorieGoal") private var calorieGoal = 2000
 
     @State private var selectedTimeRange: TimeRange = .week
+    @State private var selectedDate: Date?
 
     private var chartData: [DailyNutritionData] {
         let calendar = Calendar.current
@@ -51,19 +52,25 @@ struct NutritionHistoryView: View {
 
     private var totalEntries: Int { entries.count }
 
+    private var selectedData: DailyNutritionData? {
+        guard let selectedDate else { return nil }
+        return chartData.first { Calendar.current.isDate($0.date, inSameDayAs: selectedDate) }
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: DesignSystem.Spacing.lg) {
                     timeRangePicker
                     calorieChart
                     statsSection
                     historySection
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 40)
+                .padding(.horizontal, DesignSystem.Spacing.lg)
+                .padding(.bottom, DesignSystem.Spacing.xxl)
             }
             .background(Color.nexusBackground)
+            .scrollEdgeEffectStyle(.soft, for: .top)
             .navigationTitle("History")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -103,73 +110,109 @@ private extension NutritionHistoryView {
             }
         }
         .pickerStyle(.segmented)
+        .onChange(of: selectedTimeRange) {
+            selectedDate = nil
+        }
     }
 
     var calorieChart: some View {
-        NexusCard {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Calories")
-                            .font(.nexusHeadline)
-                            .foregroundStyle(Color.nexusTextPrimary)
-
-                        Text("Daily intake over \(selectedTimeRange.rawValue.lowercased())")
-                            .font(.nexusCaption)
-                            .foregroundStyle(Color.nexusTextSecondary)
-                    }
-
-                    Spacer()
-
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text("\(Int(averageCalories))")
-                            .font(.nexusTitle2)
-                            .foregroundStyle(Color.nexusOrange)
-
-                        Text("avg kcal/day")
-                            .font(.nexusCaption)
-                            .foregroundStyle(Color.nexusTextTertiary)
-                    }
-                }
-
-                Chart {
-                    RuleMark(y: .value("Goal", Double(calorieGoal)))
-                        .foregroundStyle(Color.nexusGreen.opacity(0.5))
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 5]))
-
-                    ForEach(chartData) { data in
-                        BarMark(
-                            x: .value("Date", data.date, unit: .day),
-                            y: .value("Calories", data.calories)
-                        )
-                        .foregroundStyle(barColor(for: data.calories))
-                        .cornerRadius(4)
-                    }
-                }
-                .chartYAxis {
-                    AxisMarks(position: .leading)
-                }
-                .chartXAxis {
-                    AxisMarks(values: .stride(by: selectedTimeRange == .week ? .day : .weekOfYear)) { value in
-                        if let date = value.as(Date.self) {
-                            AxisValueLabel {
-                                Text(date, format: selectedTimeRange == .week ? .dateTime.weekday(.abbreviated) : .dateTime.day())
-                            }
-                        }
-                    }
-                }
-                .frame(height: 200)
+        GlassCard {
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.md) {
+                chartHeader
+                chart
             }
         }
     }
 
+    var chartHeader: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.xxs) {
+                if let data = selectedData {
+                    Text(data.date, format: .dateTime.weekday(.wide).month().day())
+                        .font(.nexusHeadline)
+                        .foregroundStyle(Color.nexusTextPrimary)
+                        .transition(.opacity)
+                } else {
+                    Text("Calories")
+                        .font(.nexusHeadline)
+                        .foregroundStyle(Color.nexusTextPrimary)
+                }
+
+                Text(selectedData != nil ? "Selected day" : "Daily intake over \(selectedTimeRange.rawValue.lowercased())")
+                    .font(.nexusCaption)
+                    .foregroundStyle(Color.nexusTextSecondary)
+            }
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 2) {
+                let displayCalories = selectedData?.calories ?? averageCalories
+                Text("\(Int(displayCalories))")
+                    .font(.nexusTitle2)
+                    .foregroundStyle(Color.nexusOrange)
+                    .contentTransition(.numericText())
+
+                Text(selectedData != nil ? "kcal" : "avg kcal/day")
+                    .font(.nexusCaption)
+                    .foregroundStyle(Color.nexusTextTertiary)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(selectedData != nil
+                ? "Selected: \(Int(selectedData!.calories)) calories"
+                : "Average \(Int(averageCalories)) calories per day")
+        }
+    }
+
+    var chart: some View {
+        Chart {
+            RuleMark(y: .value("Goal", Double(calorieGoal)))
+                .foregroundStyle(Color.nexusGreen.opacity(0.5))
+                .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 5]))
+                .annotation(position: .trailing, alignment: .leading) {
+                    Text("Goal")
+                        .font(.nexusCaption2)
+                        .foregroundStyle(Color.nexusGreen)
+                }
+
+            ForEach(chartData) { data in
+                BarMark(
+                    x: .value("Date", data.date, unit: .day),
+                    y: .value("Calories", data.calories)
+                )
+                .foregroundStyle(barColor(for: data.calories))
+                .cornerRadius(4)
+            }
+
+            if let selectedDate {
+                RuleMark(x: .value("Selected", selectedDate, unit: .day))
+                    .foregroundStyle(Color.nexusTextTertiary.opacity(0.4))
+                    .lineStyle(StrokeStyle(lineWidth: 1))
+            }
+        }
+        .chartYAxis {
+            AxisMarks(position: .leading)
+        }
+        .chartXAxis {
+            AxisMarks(values: .stride(by: selectedTimeRange == .week ? .day : .weekOfYear)) { value in
+                if let date = value.as(Date.self) {
+                    AxisValueLabel {
+                        Text(date, format: selectedTimeRange == .week ? .dateTime.weekday(.abbreviated) : .dateTime.day())
+                    }
+                }
+            }
+        }
+        .chartXSelection(value: $selectedDate)
+        .frame(height: 200)
+        .accessibilityLabel("Calorie history bar chart for last \(selectedTimeRange.rawValue.lowercased())")
+    }
+
     var statsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
             Text("Statistics")
                 .font(.nexusHeadline)
                 .foregroundStyle(Color.nexusTextPrimary)
 
-            HStack(spacing: 12) {
+            HStack(spacing: DesignSystem.Spacing.sm) {
                 StatCard(
                     title: "Total Entries",
                     value: "\(totalEntries)",
@@ -188,12 +231,12 @@ private extension NutritionHistoryView {
     }
 
     var historySection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
             Text("Recent Days")
                 .font(.nexusHeadline)
                 .foregroundStyle(Color.nexusTextPrimary)
 
-            VStack(spacing: 8) {
+            VStack(spacing: DesignSystem.Spacing.xs) {
                 ForEach(chartData.prefix(7).reversed(), id: \.id) { data in
                     HistoryDayRow(data: data, goal: calorieGoal)
                 }
@@ -218,12 +261,13 @@ private struct StatCard: View {
     let color: Color
 
     var body: some View {
-        NexusCard {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 6) {
+        GlassCard {
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
+                HStack(spacing: DesignSystem.Spacing.xs) {
                     Image(systemName: icon)
                         .font(.nexusCaption)
                         .foregroundStyle(color)
+                        .accessibilityHidden(true)
 
                     Text(title)
                         .font(.nexusCaption)
@@ -236,6 +280,8 @@ private struct StatCard: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title): \(value)")
     }
 }
 
@@ -251,14 +297,14 @@ private struct HistoryDayRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DesignSystem.Spacing.sm) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(data.date, format: .dateTime.weekday(.abbreviated).month().day())
                     .font(.nexusSubheadline)
                     .foregroundStyle(Color.nexusTextPrimary)
 
                 if data.calories > 0 {
-                    HStack(spacing: 6) {
+                    HStack(spacing: DesignSystem.Spacing.xs) {
                         Text("C: \(Int(data.carbs))g")
                             .foregroundStyle(Color.nexusBlue)
                         Text("P: \(Int(data.protein))g")
@@ -266,14 +312,15 @@ private struct HistoryDayRow: View {
                         Text("F: \(Int(data.fats))g")
                             .foregroundStyle(Color.nexusPurple)
                     }
-                    .font(.system(size: 10))
+                    .font(.nexusCaption2)
+                    .accessibilityHidden(true)
                 }
             }
 
             Spacer()
 
             if data.calories > 0 {
-                VStack(alignment: .trailing, spacing: 4) {
+                VStack(alignment: .trailing, spacing: DesignSystem.Spacing.xxs) {
                     Text("\(Int(data.calories)) kcal")
                         .font(.nexusSubheadline)
                         .fontWeight(.semibold)
@@ -281,6 +328,7 @@ private struct HistoryDayRow: View {
 
                     ProgressBar(progress: progress, color: progressColor, height: 4)
                         .frame(width: 60)
+                        .accessibilityHidden(true)
                 }
             } else {
                 Text("No data")
@@ -288,11 +336,12 @@ private struct HistoryDayRow: View {
                     .foregroundStyle(Color.nexusTextTertiary)
             }
         }
-        .padding(12)
-        .background {
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color.nexusSurface)
-        }
+        .padding(DesignSystem.Spacing.sm)
+        .glassBackground(
+            in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md - 2, style: .continuous)
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(rowAccessibilityLabel)
     }
 
     private var progressColor: Color {
@@ -300,10 +349,17 @@ private struct HistoryDayRow: View {
         if progress >= 0.9 { return .nexusOrange }
         return .nexusGreen
     }
+
+    private var rowAccessibilityLabel: String {
+        let dateStr = data.date.formatted(.dateTime.weekday(.wide).month().day())
+        if data.calories > 0 {
+            return "\(dateStr), \(Int(data.calories)) calories, \(Int(progress * 100)) percent of goal"
+        }
+        return "\(dateStr), no data"
+    }
 }
 
 #Preview {
     NutritionHistoryView()
         .modelContainer(for: NutritionEntryModel.self, inMemory: true)
-        .preferredColorScheme(.dark)
 }
