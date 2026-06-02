@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import AuthenticationServices
+import UserNotifications
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
@@ -31,6 +32,7 @@ struct SettingsView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
+                        .accessibilityLabel("Dismiss Settings")
                 }
             }
             .alert("Clear All Data", isPresented: $showClearDataAlert) {
@@ -80,6 +82,7 @@ private extension SettingsView {
                             .font(.nexusTitle)
                             .foregroundStyle(.white)
                     }
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(user.displayName).font(.nexusHeadline)
@@ -95,6 +98,8 @@ private extension SettingsView {
                 Spacer()
             }
             .padding(.vertical, 8)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Signed in as \(user.displayName)")
 
             Button(role: .destructive) { showSignOutAlert = true } label: {
                 HStack {
@@ -108,6 +113,7 @@ private extension SettingsView {
                 }
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Sign out of \(user.displayName)")
         }
     }
 
@@ -119,17 +125,21 @@ private extension SettingsView {
                     ProgressView().padding(.vertical, 20)
                     Spacer()
                 }
+                .accessibilityLabel("Signing in")
             } else {
-                SignInWithAppleButton(.signIn) { request in
-                    request.requestedScopes = [.fullName, .email]
-                } onCompletion: { _ in }
-                .signInWithAppleButtonStyle(.white)
-                .frame(height: 50)
-                .cornerRadius(10)
-                .allowsHitTesting(false)
-                .overlay {
-                    Button { signInWithApple() } label: { Color.clear }
+                // The button shows Apple's native styling, but taps route to the auth
+                // service's own ASAuthorizationController so there is a single sign-in flow.
+                Button { signInWithApple() } label: {
+                    SignInWithAppleButton(.signIn) { _ in } onCompletion: { _ in }
+                        .signInWithAppleButtonStyle(.white)
+                        .frame(height: 50)
+                        .cornerRadius(10)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Sign in with Apple")
+                .accessibilityAddTraits(.isButton)
             }
 
             if let error = signInError {
@@ -137,6 +147,7 @@ private extension SettingsView {
                     .font(.nexusCaption)
                     .foregroundStyle(Color.nexusRed)
                     .multilineTextAlignment(.center)
+                    .accessibilityLabel("Sign in error: \(error)")
             }
         }
         .padding(.vertical, 8)
@@ -154,9 +165,11 @@ private extension SettingsView {
                     throw AuthenticationError.failed
                 }
                 _ = try await authService.signInWithApple(presentationAnchor: window)
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                if hapticFeedback {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                }
             } catch AuthenticationError.canceled {
-                // User cancelled
+                // User cancelled — silent
             } catch {
                 signInError = error.localizedDescription
             }
@@ -167,7 +180,9 @@ private extension SettingsView {
     func signOut() {
         do {
             try authService.signOut()
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            if hapticFeedback {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            }
         } catch {
             signInError = error.localizedDescription
         }
@@ -180,7 +195,15 @@ private extension SettingsView {
     var preferencesSection: some View {
         Section("Preferences") {
             Toggle("Haptic Feedback", isOn: $hapticFeedback)
+                .accessibilityLabel("Haptic Feedback")
+                .accessibilityValue(hapticFeedback ? "On" : "Off")
+
             Toggle("Notifications", isOn: $notifications)
+                .accessibilityLabel("Notifications")
+                .accessibilityValue(notifications ? "On" : "Off")
+                .onChange(of: notifications) { _, newValue in
+                    handleNotificationsToggle(newValue)
+                }
 
             Picker("Currency", selection: $currency) {
                 Text("USD ($)").tag("USD")
@@ -189,11 +212,33 @@ private extension SettingsView {
                 Text("JPY (¥)").tag("JPY")
                 Text("GEL (₾)").tag("GEL")
             }
+            .accessibilityLabel("Currency")
 
             NavigationLink {
                 AppearanceSettingsView()
             } label: {
                 Label("Appearance", systemImage: "paintbrush")
+            }
+            .accessibilityLabel("Appearance settings")
+        }
+    }
+
+    func handleNotificationsToggle(_ enabled: Bool) {
+        guard enabled else { return }
+        Task {
+            let center = UNUserNotificationCenter.current()
+            let settings = await center.notificationSettings()
+            switch settings.authorizationStatus {
+            case .notDetermined:
+                let granted = (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) ?? false
+                if !granted {
+                    await MainActor.run { notifications = false }
+                }
+            case .denied:
+                // System denied — reflect reality
+                await MainActor.run { notifications = false }
+            default:
+                break
             }
         }
     }
@@ -207,12 +252,17 @@ private extension SettingsView {
             NavigationLink { ExportDataView() } label: {
                 Label("Export Data", systemImage: "square.and.arrow.up")
             }
+            .accessibilityLabel("Export Data")
+
             NavigationLink { ImportDataView() } label: {
                 Label("Import Data", systemImage: "square.and.arrow.down")
             }
+            .accessibilityLabel("Import Data")
+
             Button(role: .destructive) { showClearDataAlert = true } label: {
                 Label("Clear All Data", systemImage: "trash")
             }
+            .accessibilityLabel("Clear all data")
         }
     }
 
@@ -223,6 +273,9 @@ private extension SettingsView {
             try modelContext.delete(model: TransactionModel.self)
             try modelContext.delete(model: HealthEntryModel.self)
             try modelContext.delete(model: TagModel.self)
+            if hapticFeedback {
+                UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+            }
         } catch {
             print("Failed to clear data: \(error)")
         }
@@ -237,14 +290,20 @@ private extension SettingsView {
             NavigationLink { PrivacyPolicyView() } label: {
                 Label("Privacy Policy", systemImage: "hand.raised")
             }
+            .accessibilityLabel("Privacy Policy")
+
             NavigationLink { TermsOfServiceView() } label: {
                 Label("Terms of Service", systemImage: "doc.text")
             }
+            .accessibilityLabel("Terms of Service")
+
             HStack {
                 Label("Version", systemImage: "info.circle")
                 Spacer()
                 Text("1.0.0").foregroundStyle(.secondary)
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Version 1.0.0")
         } header: {
             Text("About")
         } footer: {
@@ -257,5 +316,4 @@ private extension SettingsView {
 
 #Preview {
     SettingsView()
-        .preferredColorScheme(.dark)
 }

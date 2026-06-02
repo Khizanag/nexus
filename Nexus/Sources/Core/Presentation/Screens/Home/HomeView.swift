@@ -73,6 +73,7 @@ private extension HomeView {
                 Image(systemName: "gearshape")
                     .foregroundStyle(.secondary)
             }
+            .accessibilityLabel("Settings")
         }
     }
 }
@@ -107,6 +108,7 @@ private extension HomeView {
             .padding(.horizontal, 20)
             .padding(.bottom, 80)
         }
+        .scrollEdgeEffectStyle(.soft, for: .top)
     }
 }
 
@@ -148,11 +150,13 @@ private extension HomeView {
             Button { showWidgetEditor = true } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "square.grid.2x2")
+                        .accessibilityHidden(true)
                     Text("Edit")
                 }
                 .font(.nexusCaption)
                 .foregroundStyle(Color.nexusPurple)
             }
+            .accessibilityLabel("Edit Widgets")
         }
     }
 
@@ -238,6 +242,7 @@ private extension HomeView {
             Button("View All") { showInsights = true }
                 .font(.nexusSubheadline)
                 .foregroundStyle(Color.nexusPurple)
+                .accessibilityLabel("View all insights")
         }
     }
 
@@ -284,7 +289,7 @@ private extension HomeView {
             recentActivityHeader
 
             if recentNotes.isEmpty, upcomingTasks.isEmpty {
-                emptyStateView
+                emptyActivityView
             } else {
                 recentActivityList
             }
@@ -304,45 +309,46 @@ private extension HomeView {
     var recentActivityList: some View {
         VStack(spacing: 8) {
             ForEach(upcomingTasks.prefix(3)) { task in
-                ActivityRow(
-                    icon: "checkmark.circle",
-                    title: task.title,
-                    subtitle: task.dueDate?.formatted(date: .abbreviated, time: .omitted) ?? "No due date",
-                    color: .tasksColor
-                )
-                .onTapGesture { selectedTask = task }
+                Button {
+                    selectedTask = task
+                } label: {
+                    ActivityRow(
+                        icon: "checkmark.circle",
+                        title: task.title,
+                        subtitle: task.dueDate?.formatted(date: .abbreviated, time: .omitted) ?? "No due date",
+                        color: .tasksColor
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(task.title)
+                .accessibilityValue(task.dueDate?.formatted(date: .abbreviated, time: .omitted) ?? "No due date")
             }
 
             ForEach(recentNotes.prefix(3)) { note in
-                ActivityRow(
-                    icon: "doc.text",
-                    title: note.title.isEmpty ? "Untitled Note" : note.title,
-                    subtitle: note.updatedAt.formatted(date: .abbreviated, time: .shortened),
-                    color: .notesColor
-                )
-                .onTapGesture { selectedNote = note }
+                Button {
+                    selectedNote = note
+                } label: {
+                    ActivityRow(
+                        icon: "doc.text",
+                        title: note.title.isEmpty ? "Untitled Note" : note.title,
+                        subtitle: note.updatedAt.formatted(date: .abbreviated, time: .shortened),
+                        color: .notesColor
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(note.title.isEmpty ? "Untitled Note" : note.title)
+                .accessibilityValue(note.updatedAt.formatted(date: .abbreviated, time: .shortened))
             }
         }
     }
 
-    var emptyStateView: some View {
-        NexusCard {
-            VStack(spacing: 12) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 40))
-                    .foregroundStyle(Color.nexusPurple)
-
-                Text("Welcome to Nexus")
-                    .font(.nexusHeadline)
-
-                Text("Start by creating your first note or task")
-                    .font(.nexusSubheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-        }
+    var emptyActivityView: some View {
+        ContentUnavailableView(
+            "Welcome to Nexus",
+            systemImage: "sparkles",
+            description: Text("Start by creating your first note or task")
+        )
+        .foregroundStyle(Color.nexusPurple)
     }
 }
 
@@ -464,14 +470,16 @@ private struct QuickActionCard: View {
         Button(action: action) {
             cardContent
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ScaleButtonStyle())
+        .accessibilityLabel(title)
     }
 
     private var cardContent: some View {
         VStack(spacing: 8) {
             Image(systemName: icon)
-                .font(.system(size: 24))
+                .font(.nexusTitle2)
                 .foregroundStyle(color)
+                .accessibilityHidden(true)
 
             Text(title)
                 .font(.nexusCaption)
@@ -480,16 +488,7 @@ private struct QuickActionCard: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 16)
-        .background { cardBackground }
-    }
-
-    private var cardBackground: some View {
-        RoundedRectangle(cornerRadius: 12)
-            .fill(Color.nexusSurface)
-            .overlay {
-                RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(Color.nexusBorder, lineWidth: 1)
-            }
+        .glassBackground(in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.card))
     }
 }
 
@@ -512,6 +511,8 @@ private struct InsightItem: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title): \(value) \(subtitle)")
     }
 }
 
@@ -532,20 +533,22 @@ private struct ActivityRow: View {
         }
         .padding(12)
         .background {
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.card)
                 .fill(Color.nexusSurface)
         }
+        .accessibilityElement(children: .combine)
     }
 
     private var iconView: some View {
         Image(systemName: icon)
-            .font(.system(size: 16))
+            .font(.nexusSubheadline)
             .foregroundStyle(color)
             .frame(width: 32, height: 32)
             .background {
                 Circle()
                     .fill(color.opacity(0.15))
             }
+            .accessibilityHidden(true)
     }
 
     private var textContent: some View {
@@ -562,8 +565,9 @@ private struct ActivityRow: View {
 
     private var chevronIcon: some View {
         Image(systemName: "chevron.right")
-            .font(.caption)
+            .font(.nexusCaption2)
             .foregroundStyle(.tertiary)
+            .accessibilityHidden(true)
     }
 }
 
@@ -577,7 +581,8 @@ private struct HomeWidgetCard: View {
         Button(action: action) {
             cardContent
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ScaleButtonStyle())
+        .accessibilityLabel(widget.title)
     }
 
     private var cardContent: some View {
@@ -589,18 +594,19 @@ private struct HomeWidgetCard: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 10)
-        .background { cardBackground }
+        .glassBackground(in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.card))
     }
 
     private var iconView: some View {
         Image(systemName: widget.icon)
-            .font(.system(size: 18))
+            .font(.nexusTitle3)
             .foregroundStyle(widget.color)
             .frame(width: 32, height: 32)
             .background {
                 Circle()
                     .fill(widget.color.opacity(0.15))
             }
+            .accessibilityHidden(true)
     }
 
     private var titleText: some View {
@@ -613,17 +619,10 @@ private struct HomeWidgetCard: View {
 
     private var chevronIcon: some View {
         Image(systemName: "chevron.right")
-            .font(.system(size: 11, weight: .semibold))
+            .font(.nexusCaption2)
+            .fontWeight(.semibold)
             .foregroundStyle(.tertiary)
-    }
-
-    private var cardBackground: some View {
-        RoundedRectangle(cornerRadius: 12)
-            .fill(Color.nexusSurface)
-            .overlay {
-                RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(Color.nexusBorder, lineWidth: 1)
-            }
+            .accessibilityHidden(true)
     }
 }
 
@@ -694,6 +693,7 @@ private extension WidgetEditorSheet {
             Image(systemName: widget.icon)
                 .foregroundStyle(widget.color)
                 .frame(width: 28)
+                .accessibilityHidden(true)
 
             Text(widget.title)
 
@@ -705,6 +705,7 @@ private extension WidgetEditorSheet {
                 Image(systemName: "minus.circle.fill")
                     .foregroundStyle(.red)
             }
+            .accessibilityLabel("Remove \(widget.title)")
         }
     }
 
@@ -713,6 +714,7 @@ private extension WidgetEditorSheet {
             Image(systemName: widget.icon)
                 .foregroundStyle(widget.color)
                 .frame(width: 28)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(widget.title)
@@ -729,6 +731,7 @@ private extension WidgetEditorSheet {
                 Image(systemName: "plus.circle.fill")
                     .foregroundStyle(.green)
             }
+            .accessibilityLabel("Add \(widget.title)")
         }
     }
 }
@@ -737,5 +740,4 @@ private extension WidgetEditorSheet {
 
 #Preview {
     HomeView()
-        .preferredColorScheme(.dark)
 }

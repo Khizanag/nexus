@@ -1,3 +1,4 @@
+import Charts
 import SwiftUI
 import SwiftData
 
@@ -16,6 +17,8 @@ struct InsightsView: View {
     @Query(sort: \HealthEntryModel.date, order: .reverse)
     private var healthEntries: [HealthEntryModel]
 
+    // MARK: - Body
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -27,22 +30,23 @@ struct InsightsView: View {
                 }
                 .padding(20)
             }
+            .scrollEdgeEffectStyle(.soft, for: .top)
             .background(Color.nexusBackground)
             .navigationTitle("Insights")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
+                    Button("Done") { dismiss() }
                 }
             }
         }
     }
+}
 
-    // MARK: - Overview
+// MARK: - Overview
 
-    private var overviewSection: some View {
+private extension InsightsView {
+    var overviewSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Overview")
                 .font(.nexusHeadline)
@@ -72,10 +76,12 @@ struct InsightsView: View {
             }
         }
     }
+}
 
-    // MARK: - Productivity
+// MARK: - Productivity
 
-    private var productivitySection: some View {
+private extension InsightsView {
+    var productivitySection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Productivity")
                 .font(.nexusHeadline)
@@ -83,52 +89,76 @@ struct InsightsView: View {
 
             NexusCard {
                 VStack(spacing: 16) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Task Completion Rate")
-                                .font(.nexusSubheadline)
-                                .foregroundStyle(.secondary)
-
-                            Text("\(completionRate)%")
-                                .font(.nexusLargeTitle)
-                                .foregroundStyle(Color.nexusGreen)
-                        }
-
-                        Spacer()
-
-                        CircularProgressView(progress: Double(completionRate) / 100)
-                            .frame(width: 60, height: 60)
-                    }
-
+                    completionRateRow
                     Divider()
-
-                    HStack {
-                        VStack(alignment: .leading) {
-                            Text("This Week")
-                                .font(.nexusCaption)
-                                .foregroundStyle(.secondary)
-                            Text("\(tasksCompletedThisWeek) tasks completed")
-                                .font(.nexusSubheadline)
-                        }
-
-                        Spacer()
-
-                        VStack(alignment: .trailing) {
-                            Text("Notes Created")
-                                .font(.nexusCaption)
-                                .foregroundStyle(.secondary)
-                            Text("\(notesThisWeek)")
-                                .font(.nexusSubheadline)
-                        }
-                    }
+                    weeklyStatsRow
                 }
             }
         }
     }
 
-    // MARK: - Finance
+    var completionRateRow: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Task Completion Rate")
+                    .font(.nexusSubheadline)
+                    .foregroundStyle(.secondary)
 
-    private var financeSection: some View {
+                Text("\(completionRate)%")
+                    .font(.nexusLargeTitle)
+                    .foregroundStyle(Color.nexusGreen)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Task completion rate: \(completionRate) percent")
+
+            Spacer()
+
+            Gauge(value: Double(completionRate), in: 0...100) {
+                Image(systemName: "checkmark")
+                    .foregroundStyle(Color.nexusGreen)
+            } currentValueLabel: {
+                Text("\(completionRate)")
+                    .font(.nexusCaption2)
+                    .foregroundStyle(Color.nexusGreen)
+            }
+            .gaugeStyle(.accessoryCircular)
+            .tint(Color.nexusGreen)
+            .frame(width: 60, height: 60)
+            .accessibilityHidden(true)
+        }
+    }
+
+    var weeklyStatsRow: some View {
+        HStack {
+            VStack(alignment: .leading) {
+                Text("This Week")
+                    .font(.nexusCaption)
+                    .foregroundStyle(.secondary)
+                Text("\(tasksCompletedThisWeek) tasks completed")
+                    .font(.nexusSubheadline)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("This week: \(tasksCompletedThisWeek) tasks completed")
+
+            Spacer()
+
+            VStack(alignment: .trailing) {
+                Text("Notes Created")
+                    .font(.nexusCaption)
+                    .foregroundStyle(.secondary)
+                Text("\(notesThisWeek)")
+                    .font(.nexusSubheadline)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Notes created this week: \(notesThisWeek)")
+        }
+    }
+}
+
+// MARK: - Finance
+
+private extension InsightsView {
+    var financeSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Finance")
                 .font(.nexusHeadline)
@@ -136,88 +166,104 @@ struct InsightsView: View {
 
             NexusCard {
                 VStack(spacing: 16) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("This Month")
-                                .font(.nexusSubheadline)
-                                .foregroundStyle(.secondary)
-
-                            Text(formatCurrency(monthlySpending))
-                                .font(.nexusTitle)
-                                .foregroundStyle(monthlySpending > monthlyIncome ? Color.nexusRed : Color.nexusGreen)
-                        }
-
-                        Spacer()
-
-                        VStack(alignment: .trailing, spacing: 4) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "arrow.down.circle.fill")
-                                    .foregroundStyle(Color.nexusGreen)
-                                Text(formatCurrency(monthlyIncome))
-                                    .foregroundStyle(Color.nexusGreen)
-                            }
-                            .font(.nexusSubheadline)
-
-                            HStack(spacing: 4) {
-                                Image(systemName: "arrow.up.circle.fill")
-                                    .foregroundStyle(Color.nexusRed)
-                                Text(formatCurrency(monthlyExpenses))
-                                    .foregroundStyle(Color.nexusRed)
-                            }
-                            .font(.nexusSubheadline)
-                        }
-                    }
+                    financeHeaderRow
 
                     if !topCategories.isEmpty {
                         Divider()
-
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Top Categories")
-                                .font(.nexusCaption)
-                                .foregroundStyle(.secondary)
-
-                            ForEach(topCategories.prefix(3), id: \.category) { item in
-                                HStack {
-                                    Text(item.category.rawValue.capitalized)
-                                        .font(.nexusSubheadline)
-                                    Spacer()
-                                    Text(formatCurrency(item.amount))
-                                        .font(.nexusSubheadline)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
+                        financeCategoriesRows
                     }
                 }
             }
         }
     }
 
-    // MARK: - Health
+    var financeHeaderRow: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("This Month")
+                    .font(.nexusSubheadline)
+                    .foregroundStyle(.secondary)
 
-    private var healthSection: some View {
+                Text(formatCurrency(monthlySpending))
+                    .font(.nexusTitle)
+                    .foregroundStyle(monthlySpending > monthlyIncome ? Color.nexusRed : Color.nexusGreen)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("This month net: \(formatCurrency(monthlySpending))")
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 4) {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.down.circle.fill")
+                        .foregroundStyle(Color.nexusGreen)
+                        .accessibilityHidden(true)
+                    Text(formatCurrency(monthlyIncome))
+                        .foregroundStyle(Color.nexusGreen)
+                }
+                .font(.nexusSubheadline)
+                .accessibilityLabel("Income: \(formatCurrency(monthlyIncome))")
+
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .foregroundStyle(Color.nexusRed)
+                        .accessibilityHidden(true)
+                    Text(formatCurrency(monthlyExpenses))
+                        .foregroundStyle(Color.nexusRed)
+                }
+                .font(.nexusSubheadline)
+                .accessibilityLabel("Expenses: \(formatCurrency(monthlyExpenses))")
+            }
+        }
+    }
+
+    var financeCategoriesRows: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Top Categories")
+                .font(.nexusCaption)
+                .foregroundStyle(.secondary)
+
+            ForEach(topCategories.prefix(3), id: \.category) { item in
+                let fraction = monthlyExpenses > 0 ? item.amount / monthlyExpenses : 0
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(item.category.rawValue.capitalized)
+                            .font(.nexusSubheadline)
+                        Spacer()
+                        Text(formatCurrency(item.amount))
+                            .font(.nexusSubheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    ProgressView(value: fraction)
+                        .tint(Color.financeColor)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("\(item.category.rawValue.capitalized): \(formatCurrency(item.amount))")
+            }
+        }
+    }
+}
+
+// MARK: - Health
+
+private extension InsightsView {
+    var healthSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Health")
                 .font(.nexusHeadline)
                 .foregroundStyle(.secondary)
 
             if healthEntries.isEmpty {
-                NexusCard {
-                    VStack(spacing: 8) {
-                        Image(systemName: "heart.text.square")
-                            .font(.system(size: 32))
-                            .foregroundStyle(.secondary)
-                        Text("No health data yet")
-                            .font(.nexusSubheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 20)
-                }
+                ContentUnavailableView(
+                    "No Health Data",
+                    systemImage: "heart.text.square",
+                    description: Text("Start tracking your health metrics")
+                )
+                .foregroundStyle(.secondary)
             } else {
                 LazyVGrid(columns: [
                     GridItem(.flexible()),
-                    GridItem(.flexible())
+                    GridItem(.flexible()),
                 ], spacing: 12) {
                     ForEach(latestHealthMetrics, id: \.type) { metric in
                         HealthMetricCard(
@@ -231,16 +277,18 @@ struct InsightsView: View {
             }
         }
     }
+}
 
-    // MARK: - Computed Properties
+// MARK: - Computed Properties
 
-    private var completionRate: Int {
+private extension InsightsView {
+    var completionRate: Int {
         guard !tasks.isEmpty else { return 0 }
         let completed = tasks.filter { $0.isCompleted }.count
         return Int((Double(completed) / Double(tasks.count)) * 100)
     }
 
-    private var tasksCompletedThisWeek: Int {
+    var tasksCompletedThisWeek: Int {
         let calendar = Calendar.current
         let weekAgo = calendar.date(byAdding: .day, value: -7, to: Date())!
         return tasks.filter { task in
@@ -249,36 +297,36 @@ struct InsightsView: View {
         }.count
     }
 
-    private var notesThisWeek: Int {
+    var notesThisWeek: Int {
         let calendar = Calendar.current
         let weekAgo = calendar.date(byAdding: .day, value: -7, to: Date())!
         return notes.filter { $0.createdAt >= weekAgo }.count
     }
 
-    private var monthlyTransactions: [TransactionModel] {
+    var monthlyTransactions: [TransactionModel] {
         let calendar = Calendar.current
         return transactions.filter { transaction in
             calendar.isDate(transaction.date, equalTo: Date(), toGranularity: .month)
         }
     }
 
-    private var monthlyIncome: Double {
+    var monthlyIncome: Double {
         monthlyTransactions
             .filter { $0.type == .income }
             .reduce(0) { $0 + $1.amount }
     }
 
-    private var monthlyExpenses: Double {
+    var monthlyExpenses: Double {
         monthlyTransactions
             .filter { $0.type == .expense }
             .reduce(0) { $0 + $1.amount }
     }
 
-    private var monthlySpending: Double {
+    var monthlySpending: Double {
         monthlyIncome - monthlyExpenses
     }
 
-    private var topCategories: [(category: TransactionCategory, amount: Double)] {
+    var topCategories: [(category: TransactionCategory, amount: Double)] {
         let expenses = monthlyTransactions.filter { $0.type == .expense }
         var categoryTotals: [TransactionCategory: Double] = [:]
 
@@ -291,7 +339,7 @@ struct InsightsView: View {
             .sorted { $0.amount > $1.amount }
     }
 
-    private var latestHealthMetrics: [HealthEntryModel] {
+    var latestHealthMetrics: [HealthEntryModel] {
         var latestByType: [HealthMetricType: HealthEntryModel] = [:]
         for entry in healthEntries {
             if latestByType[entry.type] == nil {
@@ -301,21 +349,21 @@ struct InsightsView: View {
         return Array(latestByType.values).sorted { $0.type.displayName < $1.type.displayName }
     }
 
-    private func formatCurrency(_ amount: Double) -> String {
+    func formatCurrency(_ amount: Double) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
         formatter.currencyCode = "USD"
         return formatter.string(from: NSNumber(value: amount)) ?? "$0.00"
     }
 
-    private func formatHealthValue(_ value: Double, type: HealthMetricType) -> String {
+    func formatHealthValue(_ value: Double, type: HealthMetricType) -> String {
         if value.truncatingRemainder(dividingBy: 1) == 0 {
             return "\(Int(value)) \(type.defaultUnit)"
         }
         return String(format: "%.1f %@", value, type.defaultUnit)
     }
 
-    private func healthColor(for type: HealthMetricType) -> Color {
+    func healthColor(for type: HealthMetricType) -> Color {
         switch type.color {
         case "purple": .nexusPurple
         case "blue": .nexusBlue
@@ -342,8 +390,9 @@ private struct StatCard: View {
     var body: some View {
         VStack(spacing: 8) {
             Image(systemName: icon)
-                .font(.system(size: 24))
+                .font(.nexusTitle2)
                 .foregroundStyle(color)
+                .accessibilityHidden(true)
 
             Text(value)
                 .font(.nexusTitle2)
@@ -354,34 +403,9 @@ private struct StatCard: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 16)
-        .background {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.nexusSurface)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 12)
-                        .strokeBorder(Color.nexusBorder, lineWidth: 1)
-                }
-        }
-    }
-}
-
-private struct CircularProgressView: View {
-    let progress: Double
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .stroke(Color.nexusBorder, lineWidth: 6)
-
-            Circle()
-                .trim(from: 0, to: progress)
-                .stroke(Color.nexusGreen, style: StrokeStyle(lineWidth: 6, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-
-            Image(systemName: "checkmark")
-                .font(.system(size: 20, weight: .bold))
-                .foregroundStyle(Color.nexusGreen)
-        }
+        .glassBackground(in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.card))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title): \(value)")
     }
 }
 
@@ -394,8 +418,9 @@ private struct HealthMetricCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Image(systemName: icon)
-                .font(.system(size: 20))
+                .font(.nexusTitle3)
                 .foregroundStyle(color)
+                .accessibilityHidden(true)
 
             Text(value)
                 .font(.nexusHeadline)
@@ -406,18 +431,14 @@ private struct HealthMetricCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.nexusSurface)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 12)
-                        .strokeBorder(Color.nexusBorder, lineWidth: 1)
-                }
-        }
+        .glassBackground(in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.card))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title): \(value)")
     }
 }
 
+// MARK: - Preview
+
 #Preview {
     InsightsView()
-        .preferredColorScheme(.dark)
 }

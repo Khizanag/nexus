@@ -13,10 +13,10 @@ struct NotesView: View {
 
     var body: some View {
         NavigationStack {
-            scrollContent
+            noteList
                 .background(Color.nexusBackground)
                 .navigationTitle("Notes")
-                .searchable(text: $searchText, prompt: "Search notes...")
+                .searchable(text: $searchText, prompt: "Search notes…")
                 .toolbar { toolbarContent }
                 .sheet(isPresented: $showNewNote) { NoteEditorView(note: nil) }
                 .sheet(item: $selectedNote) { note in NoteEditorView(note: note) }
@@ -33,30 +33,47 @@ private extension NotesView {
             Button { showNewNote = true } label: {
                 Image(systemName: "plus")
             }
+            .accessibilityLabel("New note")
         }
     }
 }
 
-// MARK: - Main Content
+// MARK: - Note List
 
 private extension NotesView {
-    var scrollContent: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 16) {
-                if !pinnedNotes.isEmpty {
-                    noteSection(title: "Pinned", notes: pinnedNotes)
+    @ViewBuilder
+    var noteList: some View {
+        if filteredNotes.isEmpty {
+            emptyState
+        } else {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: DesignSystem.Spacing.md) {
+                    if !pinnedNotes.isEmpty {
+                        noteSection(title: "Pinned", notes: pinnedNotes)
+                    }
+                    if !unpinnedNotes.isEmpty {
+                        noteSection(
+                            title: pinnedNotes.isEmpty ? nil : "All Notes",
+                            notes: unpinnedNotes
+                        )
+                    }
                 }
-
-                if !unpinnedNotes.isEmpty {
-                    noteSection(title: pinnedNotes.isEmpty ? nil : "All Notes", notes: unpinnedNotes)
-                }
-
-                if filteredNotes.isEmpty {
-                    emptyState
-                }
+                .padding(.horizontal, DesignSystem.Spacing.md)
+                .padding(.bottom, 120)
             }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 120)
+        }
+    }
+
+    @ViewBuilder
+    var emptyState: some View {
+        if searchText.isEmpty {
+            ContentUnavailableView(
+                "No Notes Yet",
+                systemImage: "doc.text",
+                description: Text("Tap + to create your first note")
+            )
+        } else {
+            ContentUnavailableView.search(text: searchText)
         }
     }
 }
@@ -66,7 +83,7 @@ private extension NotesView {
 private extension NotesView {
     @ViewBuilder
     func noteSection(title: String?, notes: [NoteModel]) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
             if let title {
                 sectionHeader(title)
             }
@@ -81,32 +98,22 @@ private extension NotesView {
     }
 
     func notesGrid(_ notes: [NoteModel]) -> some View {
-        LazyVGrid(columns: [
-            GridItem(.flexible(), spacing: 12),
-            GridItem(.flexible(), spacing: 12)
-        ], spacing: 12) {
+        LazyVGrid(
+            columns: [
+                GridItem(.flexible(), spacing: DesignSystem.Spacing.sm),
+                GridItem(.flexible(), spacing: DesignSystem.Spacing.sm),
+            ],
+            spacing: DesignSystem.Spacing.sm
+        ) {
             ForEach(notes) { note in
-                NoteCard(note: note)
-                    .onTapGesture { selectedNote = note }
+                Button { selectedNote = note } label: {
+                    NoteCard(note: note)
+                }
+                .buttonStyle(ScaleButtonStyle())
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(noteAccessibilityLabel(for: note))
             }
         }
-    }
-
-    var emptyState: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "doc.text")
-                .font(.system(size: 48))
-                .foregroundStyle(.secondary)
-
-            Text(searchText.isEmpty ? "No Notes Yet" : "No Results")
-                .font(.nexusTitle3)
-
-            Text(searchText.isEmpty ? "Tap + to create your first note" : "Try a different search")
-                .font(.nexusSubheadline)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 60)
     }
 }
 
@@ -128,6 +135,20 @@ private extension NotesView {
     var unpinnedNotes: [NoteModel] {
         filteredNotes.filter { !$0.isPinned }
     }
+
+    func noteAccessibilityLabel(for note: NoteModel) -> String {
+        var parts: [String] = []
+        if note.isPinned { parts.append("Pinned") }
+        if note.isFavorite { parts.append("Favorite") }
+        parts.append(note.title.isEmpty ? "Untitled" : note.title)
+        if !note.content.isEmpty {
+            let preview = String(note.content.prefix(60))
+            parts.append(preview)
+        }
+        let date = note.updatedAt.formatted(date: .abbreviated, time: .omitted)
+        parts.append("edited \(date)")
+        return parts.joined(separator: ", ")
+    }
 }
 
 // MARK: - Note Card
@@ -143,7 +164,7 @@ private struct NoteCard: View {
         .frame(height: 160)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background { cardBackground }
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.card))
     }
 }
 
@@ -160,14 +181,14 @@ private extension NoteCard {
     }
 
     var cardContent: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
             cardHeader
             cardTitle
             cardPreview
             Spacer(minLength: 0)
             cardDate
         }
-        .padding(12)
+        .padding(DesignSystem.Spacing.sm)
     }
 
     var cardHeader: some View {
@@ -177,9 +198,7 @@ private extension NoteCard {
                     .font(.caption)
                     .foregroundStyle(Color.nexusOrange)
             }
-
             Spacer()
-
             if note.isFavorite {
                 Image(systemName: "heart.fill")
                     .font(.caption)
@@ -208,10 +227,10 @@ private extension NoteCard {
     }
 
     var cardBackground: some View {
-        RoundedRectangle(cornerRadius: 16)
+        RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.card)
             .fill(noteColor)
             .overlay {
-                RoundedRectangle(cornerRadius: 16)
+                RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.card)
                     .strokeBorder(borderColor, lineWidth: 1)
             }
     }
@@ -252,5 +271,4 @@ private extension NoteCard {
 
 #Preview {
     NotesView()
-        .preferredColorScheme(.dark)
 }

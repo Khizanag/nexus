@@ -4,6 +4,7 @@ import SwiftData
 struct NoteEditorView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let note: NoteModel?
 
@@ -32,10 +33,12 @@ struct NoteEditorView: View {
         _selectedColor = State(initialValue: note?.color)
     }
 
+    // MARK: - Body
+
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.md) {
                     TextField("Title", text: $title)
                         .font(.nexusTitle2)
                         .focused($focusedField, equals: .title)
@@ -51,45 +54,19 @@ struct NoteEditorView: View {
                             handleContentChange(oldValue: oldValue, newValue: newValue)
                         }
                 }
-                .padding(20)
-                .padding(.bottom, 80)
+                .padding(DesignSystem.Spacing.md)
+                .padding(.bottom, DesignSystem.Spacing.xxl)
             }
             .background(noteBackgroundColor)
-            .safeAreaInset(edge: .bottom) {
-                formattingToolbar
-            }
             .navigationTitle(note == nil ? "New Note" : "Edit Note")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                }
-
-                ToolbarItem(placement: .topBarTrailing) {
-                    HStack(spacing: 16) {
-                        Button {
-                            isPinned.toggle()
-                        } label: {
-                            Image(systemName: isPinned ? "pin.fill" : "pin")
-                                .foregroundStyle(isPinned ? Color.nexusOrange : Color.secondary)
-                        }
-
-                        Button {
-                            isFavorite.toggle()
-                        } label: {
-                            Image(systemName: isFavorite ? "heart.fill" : "heart")
-                                .foregroundStyle(isFavorite ? Color.nexusRed : Color.secondary)
-                        }
-
-                        Button("Save") {
-                            saveNote()
-                        }
-                        .fontWeight(.semibold)
-                        .disabled(title.isEmpty && content.isEmpty)
-                    }
-                }
+                navigationBarLeading
+                navigationBarTrailing
+                keyboardToolbar
+            }
+            .sheet(isPresented: $showColorPicker) {
+                colorPickerSheet
             }
             .onAppear {
                 if note == nil {
@@ -98,143 +75,171 @@ struct NoteEditorView: View {
             }
         }
     }
+}
 
-    private var noteBackgroundColor: Color {
-        guard let colorName = selectedColor else { return .nexusBackground }
-        switch colorName {
-        case "purple": return .nexusPurple.opacity(0.08)
-        case "blue": return .nexusBlue.opacity(0.08)
-        case "green": return .nexusGreen.opacity(0.08)
-        case "orange": return .nexusOrange.opacity(0.08)
-        case "red": return .nexusRed.opacity(0.08)
-        case "pink": return .nexusPink.opacity(0.08)
-        default: return .nexusBackground
+// MARK: - Toolbar
+
+private extension NoteEditorView {
+    @ToolbarContentBuilder
+    var navigationBarLeading: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            Button("Cancel") { dismiss() }
         }
     }
 
-    private var formattingToolbar: some View {
-        VStack(spacing: 0) {
-            Divider()
-
-            if showColorPicker {
-                colorPickerRow
-                Divider()
-            }
-
-            HStack(spacing: 0) {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 4) {
-                        FormatButton(icon: "list.bullet", tooltip: "Bullet List") {
-                            insertBulletList()
-                        }
-
-                        FormatButton(icon: "list.number", tooltip: "Numbered List") {
-                            insertNumberedList()
-                        }
-
-                        FormatButton(icon: "checklist", tooltip: "Checklist") {
-                            insertChecklist()
-                        }
-
-                        Divider()
-                            .frame(height: 20)
-                            .padding(.horizontal, 8)
-
-                        FormatButton(icon: "arrow.right.to.line.compact", tooltip: "Indent") {
-                            insertIndent()
-                        }
-
-                        FormatButton(icon: "text.quote", tooltip: "Quote") {
-                            insertQuote()
-                        }
-
-                        FormatButton(icon: "minus", tooltip: "Separator") {
-                            insertSeparator()
-                        }
-                    }
-                    .padding(.horizontal, 12)
+    @ToolbarContentBuilder
+    var navigationBarTrailing: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            HStack(spacing: DesignSystem.Spacing.md) {
+                Button {
+                    isPinned.toggle()
+                } label: {
+                    Image(systemName: isPinned ? "pin.fill" : "pin")
+                        .foregroundStyle(isPinned ? Color.nexusOrange : Color.secondary)
                 }
-
-                Divider()
-                    .frame(height: 24)
+                .accessibilityLabel(isPinned ? "Unpin note" : "Pin note")
 
                 Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        showColorPicker.toggle()
-                    }
+                    isFavorite.toggle()
                 } label: {
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(selectedColor != nil ? colorValue(for: selectedColor!) : Color.nexusSurface)
-                            .frame(width: 20, height: 20)
-                            .overlay {
-                                Circle()
-                                    .strokeBorder(Color.nexusBorder, lineWidth: 1)
-                            }
-
-                        Image(systemName: showColorPicker ? "chevron.down" : "chevron.up")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
+                    Image(systemName: isFavorite ? "heart.fill" : "heart")
+                        .foregroundStyle(isFavorite ? Color.nexusRed : Color.secondary)
                 }
-                .buttonStyle(.plain)
+                .accessibilityLabel(isFavorite ? "Remove from favorites" : "Add to favorites")
+
+                Button("Save") { saveNote() }
+                    .fontWeight(.semibold)
+                    .disabled(title.isEmpty && content.isEmpty)
             }
-            .frame(height: 44)
-            .background(Color.nexusSurface)
         }
     }
 
-    private var colorPickerRow: some View {
-        HStack(spacing: 16) {
-            ForEach(colors, id: \.self) { color in
-                Circle()
-                    .fill(colorValue(for: color))
-                    .frame(width: 28, height: 28)
-                    .overlay {
-                        if selectedColor == color {
-                            Circle()
-                                .strokeBorder(.white, lineWidth: 2)
-                        }
-                    }
-                    .onTapGesture {
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            selectedColor = selectedColor == color ? nil : color
-                        }
-                    }
+    @ToolbarContentBuilder
+    var keyboardToolbar: some ToolbarContent {
+        ToolbarItemGroup(placement: .keyboard) {
+            GlassEffectContainer(spacing: DesignSystem.Spacing.xxs) {
+                HStack(spacing: DesignSystem.Spacing.xxs) {
+                    FormatButton(icon: "list.bullet", label: "Bullet list") { insertBulletList() }
+                    FormatButton(icon: "list.number", label: "Numbered list") { insertNumberedList() }
+                    FormatButton(icon: "checklist", label: "Checklist") { insertChecklist() }
+                    FormatButton(icon: "arrow.right.to.line.compact", label: "Indent") { insertIndent() }
+                    FormatButton(icon: "text.quote", label: "Quote") { insertQuote() }
+                    FormatButton(icon: "minus", label: "Separator") { insertSeparator() }
+                }
             }
 
+            Spacer()
+
+            Button {
+                let animation: Animation? = reduceMotion ? nil : .easeInOut(duration: 0.2)
+                withAnimation(animation) { showColorPicker = true }
+            } label: {
+                HStack(spacing: DesignSystem.Spacing.xxs) {
+                    Circle()
+                        .fill(selectedColor.map(colorValue(for:)) ?? Color.nexusSurface)
+                        .frame(
+                            width: DesignSystem.Size.Avatar.sm,
+                            height: DesignSystem.Size.Avatar.sm
+                        )
+                        .overlay { Circle().strokeBorder(Color.nexusBorder, lineWidth: 1) }
+                    Image(systemName: "chevron.up")
+                        .font(.nexusCaption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .buttonStyle(.glass)
+            .accessibilityLabel(selectedColor.map { "Note color: \($0)" } ?? "Note color: none")
+        }
+    }
+}
+
+// MARK: - Color Picker Sheet
+
+private extension NoteEditorView {
+    var colorPickerSheet: some View {
+        VStack(spacing: DesignSystem.Spacing.lg) {
+            Text("Note Color")
+                .font(.nexusHeadline)
+                .padding(.top, DesignSystem.Spacing.md)
+
+            HStack(spacing: DesignSystem.Spacing.md) {
+                ForEach(colors, id: \.self) { color in
+                    colorSwatch(color)
+                }
+                clearColorSwatch
+            }
+            .padding(.horizontal, DesignSystem.Spacing.md)
+        }
+        .padding(.bottom, DesignSystem.Spacing.xl)
+        .presentationDetents([.height(160)])
+        .presentationDragIndicator(.visible)
+        .background(Color.nexusSurface)
+    }
+
+    func colorSwatch(_ color: String) -> some View {
+        Button {
+            let animation: Animation? = reduceMotion ? nil : .easeInOut(duration: 0.15)
+            withAnimation(animation) {
+                selectedColor = selectedColor == color ? nil : color
+            }
+        } label: {
+            Circle()
+                .fill(colorValue(for: color))
+                .frame(
+                    width: DesignSystem.Size.Avatar.sm,
+                    height: DesignSystem.Size.Avatar.sm
+                )
+                .overlay {
+                    if selectedColor == color {
+                        Circle()
+                            .strokeBorder(Color.nexusOnAccent, lineWidth: 2)
+                    }
+                }
+        }
+        .buttonStyle(ScaleButtonStyle())
+        .accessibilityLabel(color.capitalized)
+        .accessibilityAddTraits(selectedColor == color ? .isSelected : [])
+    }
+
+    var clearColorSwatch: some View {
+        Button {
+            let animation: Animation? = reduceMotion ? nil : .easeInOut(duration: 0.15)
+            withAnimation(animation) { selectedColor = nil }
+        } label: {
             Circle()
                 .fill(Color.nexusSurface)
-                .frame(width: 28, height: 28)
+                .frame(
+                    width: DesignSystem.Size.Avatar.sm,
+                    height: DesignSystem.Size.Avatar.sm
+                )
                 .overlay {
                     Image(systemName: "xmark")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.nexusCaption2)
                         .foregroundStyle(.secondary)
                 }
                 .overlay {
-                    if selectedColor == nil {
-                        Circle()
-                            .strokeBorder(.white, lineWidth: 2)
-                    } else {
-                        Circle()
-                            .strokeBorder(Color.nexusBorder, lineWidth: 1)
-                    }
-                }
-                .onTapGesture {
-                    withAnimation(.easeInOut(duration: 0.15)) {
-                        selectedColor = nil
-                    }
+                    Circle()
+                        .strokeBorder(
+                            selectedColor == nil ? Color.nexusOnAccent : Color.nexusBorder,
+                            lineWidth: selectedColor == nil ? 2 : 1
+                        )
                 }
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity)
-        .background(Color.nexusSurface.opacity(0.8))
+        .buttonStyle(ScaleButtonStyle())
+        .accessibilityLabel("No color")
+        .accessibilityAddTraits(selectedColor == nil ? .isSelected : [])
+    }
+}
+
+// MARK: - Background Color
+
+private extension NoteEditorView {
+    var noteBackgroundColor: Color {
+        guard let colorName = selectedColor else { return .nexusBackground }
+        return colorValue(for: colorName).opacity(0.08)
     }
 
-    private func colorValue(for name: String) -> Color {
+    func colorValue(for name: String) -> Color {
         switch name {
         case "purple": .nexusPurple
         case "blue": .nexusBlue
@@ -270,7 +275,6 @@ private extension NoteEditorView {
             }
         }
         let nextNumber = maxNumber + 1
-
         if content.isEmpty || content.hasSuffix("\n") {
             content += "\(nextNumber). "
         } else {
@@ -334,8 +338,9 @@ private extension NoteEditorView {
 
         if let dotIndex = trimmedLine.firstIndex(of: "."),
            dotIndex != trimmedLine.startIndex,
-           let num = Int(trimmedLine[..<dotIndex]),
-           trimmedLine.dropFirst(trimmedLine.distance(from: trimmedLine.startIndex, to: dotIndex) + 1).trimmingCharacters(in: .whitespaces).isEmpty {
+           Int(trimmedLine[..<dotIndex]) != nil,
+           trimmedLine.dropFirst(trimmedLine.distance(from: trimmedLine.startIndex, to: dotIndex) + 1)
+               .trimmingCharacters(in: .whitespaces).isEmpty {
             content = oldValue.dropLast(lastLine.count).description + "\n"
             return
         }
@@ -380,7 +385,6 @@ private extension NoteEditorView {
             )
             modelContext.insert(newNote)
         }
-
         dismiss()
     }
 }
@@ -389,25 +393,25 @@ private extension NoteEditorView {
 
 private struct FormatButton: View {
     let icon: String
-    let tooltip: String
+    let label: String
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 16))
-                .foregroundStyle(.primary)
-                .frame(width: 36, height: 36)
-                .background {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.nexusBackground.opacity(0.5))
-                }
+                .font(.nexusBody)
+                .frame(
+                    width: DesignSystem.Size.Button.compact,
+                    height: DesignSystem.Size.Button.compact
+                )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.glass)
+        .accessibilityLabel(label)
     }
 }
 
+// MARK: - Preview
+
 #Preview {
     NoteEditorView(note: nil)
-        .preferredColorScheme(.dark)
 }

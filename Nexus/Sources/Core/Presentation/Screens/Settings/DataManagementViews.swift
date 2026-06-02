@@ -12,75 +12,110 @@ struct ExportDataView: View {
 
     @State private var isExporting = false
     @State private var exportedURL: URL?
-    @State private var showShareSheet = false
     @State private var exportError: String?
+    @State private var showErrorAlert = false
+
+    private var hasData: Bool {
+        notes.count + tasks.count + transactions.count + healthEntries.count > 0
+    }
 
     var body: some View {
         List {
             dataSummarySection
-            exportButtonSection
-            if let error = exportError {
-                Section { Text(error).foregroundStyle(.red) }
+            if hasData {
+                exportButtonSection
             }
         }
         .navigationTitle("Export Data")
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showShareSheet) {
-            if let url = exportedURL { ShareSheet(items: [url]) }
+        .overlay {
+            if !hasData {
+                ContentUnavailableView(
+                    "Nothing to Export",
+                    systemImage: "tray",
+                    description: Text("Add some notes, tasks, transactions, or health entries first.")
+                )
+            }
+        }
+        .alert("Export Failed", isPresented: $showErrorAlert, presenting: exportError) { _ in
+            Button("OK", role: .cancel) { }
+        } message: { error in
+            Text(error)
         }
     }
 }
 
+// MARK: - Export Data View — Sections
+
 private extension ExportDataView {
     var dataSummarySection: some View {
         Section("Data Summary") {
-            dataRow("Notes", count: notes.count)
-            dataRow("Tasks", count: tasks.count)
-            dataRow("Transactions", count: transactions.count)
-            dataRow("Health Entries", count: healthEntries.count)
+            dataRow("Notes", count: notes.count, systemImage: "note.text")
+            dataRow("Tasks", count: tasks.count, systemImage: "checkmark.circle")
+            dataRow("Transactions", count: transactions.count, systemImage: "creditcard")
+            dataRow("Health Entries", count: healthEntries.count, systemImage: "heart")
         }
     }
 
-    func dataRow(_ label: String, count: Int) -> some View {
+    func dataRow(_ label: String, count: Int, systemImage: String) -> some View {
         HStack {
-            Text(label)
+            Label(label, systemImage: systemImage)
             Spacer()
-            Text("\(count)").foregroundStyle(.secondary)
+            Text("\(count)")
+                .foregroundStyle(.secondary)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(label): \(count)")
     }
 
     var exportButtonSection: some View {
         Section {
-            Button { exportData() } label: {
-                HStack {
-                    Spacer()
-                    if isExporting { ProgressView() }
-                    else { Label("Export as JSON", systemImage: "square.and.arrow.up") }
-                    Spacer()
+            Group {
+                if isExporting {
+                    HStack {
+                        Spacer()
+                        ProgressView("Exporting…")
+                        Spacer()
+                    }
+                    .accessibilityLabel("Exporting data")
+                } else if let url = exportedURL {
+                    ShareLink(item: url) {
+                        Label("Share Export File", systemImage: "square.and.arrow.up")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .accessibilityLabel("Share exported file")
+                } else {
+                    Button { buildExport() } label: {
+                        Label("Export as JSON", systemImage: "square.and.arrow.up")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .accessibilityLabel("Export data as JSON")
                 }
             }
-            .disabled(isExporting)
+        } footer: {
+            Text("Exports all your data to a JSON file you can save or share.")
         }
     }
 
-    func exportData() {
+    func buildExport() {
         isExporting = true
         exportError = nil
+        exportedURL = nil
 
-        Task {
+        let snapshot = ExportableData(
+            notes: notes.map { ExportableNote(from: $0) },
+            tasks: tasks.map { ExportableTask(from: $0) },
+            transactions: transactions.map { ExportableTransaction(from: $0) },
+            healthEntries: healthEntries.map { ExportableHealthEntry(from: $0) },
+            exportDate: Date()
+        )
+
+        Task.detached(priority: .userInitiated) {
             do {
-                let exportData = ExportableData(
-                    notes: notes.map { ExportableNote(from: $0) },
-                    tasks: tasks.map { ExportableTask(from: $0) },
-                    transactions: transactions.map { ExportableTransaction(from: $0) },
-                    healthEntries: healthEntries.map { ExportableHealthEntry(from: $0) },
-                    exportDate: Date()
-                )
-
                 let encoder = JSONEncoder()
                 encoder.dateEncodingStrategy = .iso8601
                 encoder.outputFormatting = .prettyPrinted
-                let jsonData = try encoder.encode(exportData)
+                let jsonData = try encoder.encode(snapshot)
 
                 let fileName = "nexus_export_\(Date().formatted(.dateTime.year().month().day())).json"
                 let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
@@ -88,12 +123,12 @@ private extension ExportDataView {
 
                 await MainActor.run {
                     exportedURL = tempURL
-                    showShareSheet = true
                     isExporting = false
                 }
             } catch {
                 await MainActor.run {
                     exportError = "Export failed: \(error.localizedDescription)"
+                    showErrorAlert = true
                     isExporting = false
                 }
             }
@@ -107,8 +142,11 @@ struct ImportDataView: View {
     @Environment(\.modelContext) private var modelContext
 
     @State private var showFilePicker = false
-    @State private var importResult: ImportResult?
     @State private var isImporting = false
+    @State private var showSuccessAlert = false
+    @State private var showErrorAlert = false
+    @State private var successMessage = ""
+    @State private var importError = ""
 
     var body: some View {
         List {
@@ -122,125 +160,143 @@ struct ImportDataView: View {
                 Button { showFilePicker = true } label: {
                     HStack {
                         Spacer()
-                        if isImporting { ProgressView() }
-                        else { Label("Choose File", systemImage: "doc.badge.plus") }
+                        if isImporting {
+                            ProgressView("Importing…")
+                        } else {
+                            Label("Choose File", systemImage: "doc.badge.plus")
+                        }
                         Spacer()
                     }
                 }
                 .disabled(isImporting)
+                .accessibilityLabel(isImporting ? "Importing data" : "Choose a file to import")
             }
-
-            if let result = importResult { resultSection(result) }
         }
         .navigationTitle("Import Data")
         .navigationBarTitleDisplayMode(.inline)
-        .fileImporter(isPresented: $showFilePicker, allowedContentTypes: [.json], allowsMultipleSelection: false) { result in
+        .fileImporter(
+            isPresented: $showFilePicker,
+            allowedContentTypes: [.json],
+            allowsMultipleSelection: false
+        ) { result in
             switch result {
             case .success(let urls):
                 if let url = urls.first { importData(from: url) }
             case .failure(let error):
-                importResult = ImportResult(success: false, error: error.localizedDescription)
+                importError = error.localizedDescription
+                showErrorAlert = true
             }
+        }
+        .alert("Import Successful", isPresented: $showSuccessAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(successMessage)
+        }
+        .alert("Import Failed", isPresented: $showErrorAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(importError)
         }
     }
 }
 
-private extension ImportDataView {
-    func resultSection(_ result: ImportResult) -> some View {
-        Section {
-            if result.success {
-                VStack(alignment: .leading, spacing: 8) {
-                    Label("Import Successful", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                    Text("Imported: \(result.notesCount) notes, \(result.tasksCount) tasks, \(result.transactionsCount) transactions, \(result.healthEntriesCount) health entries")
-                        .font(.nexusCaption)
-                        .foregroundStyle(.secondary)
-                }
-            } else {
-                Label(result.error ?? "Import failed", systemImage: "xmark.circle.fill")
-                    .foregroundStyle(.red)
-            }
-        }
-    }
+// MARK: - Import Data View — Logic
 
+private extension ImportDataView {
     func importData(from url: URL) {
         isImporting = true
-        importResult = nil
 
-        Task {
+        Task.detached(priority: .userInitiated) {
             do {
                 guard url.startAccessingSecurityScopedResource() else {
-                    throw NSError(domain: "Nexus", code: 1, userInfo: [NSLocalizedDescriptionKey: "Cannot access file"])
+                    throw ImportError.accessDenied
                 }
                 defer { url.stopAccessingSecurityScopedResource() }
 
                 let data = try Data(contentsOf: url)
+
+                guard !data.isEmpty else { throw ImportError.emptyFile }
+
                 let decoder = JSONDecoder()
                 decoder.dateDecodingStrategy = .iso8601
-                let importedData = try decoder.decode(ExportableData.self, from: data)
+                let imported = try decoder.decode(ExportableData.self, from: data)
+
+                // Validate at the boundary
+                guard
+                    imported.notes.allSatisfy({ !$0.title.isEmpty }),
+                    imported.tasks.allSatisfy({ !$0.title.isEmpty })
+                else {
+                    throw ImportError.invalidData
+                }
 
                 var counts = (notes: 0, tasks: 0, transactions: 0, health: 0)
 
-                for note in importedData.notes {
-                    let newNote = NoteModel(title: note.title, content: note.content)
-                    newNote.createdAt = note.createdAt
-                    newNote.updatedAt = note.updatedAt
-                    newNote.isPinned = note.isPinned
-                    modelContext.insert(newNote)
-                    counts.notes += 1
+                await MainActor.run {
+                    for note in imported.notes {
+                        let newNote = NoteModel(title: note.title, content: note.content)
+                        newNote.createdAt = note.createdAt
+                        newNote.updatedAt = note.updatedAt
+                        newNote.isPinned = note.isPinned
+                        modelContext.insert(newNote)
+                        counts.notes += 1
+                    }
+
+                    for task in imported.tasks {
+                        let newTask = TaskModel(title: task.title)
+                        newTask.notes = task.notes
+                        newTask.dueDate = task.dueDate
+                        newTask.priority = TaskPriority(rawValue: task.priority) ?? .medium
+                        newTask.isCompleted = task.isCompleted
+                        newTask.completedAt = task.completedAt
+                        modelContext.insert(newTask)
+                        counts.tasks += 1
+                    }
+
+                    for transaction in imported.transactions {
+                        let newTransaction = TransactionModel(
+                            amount: transaction.amount,
+                            title: transaction.title,
+                            notes: transaction.notes,
+                            category: TransactionCategory(rawValue: transaction.category) ?? .other,
+                            type: TransactionType(rawValue: transaction.type) ?? .expense,
+                            date: transaction.date
+                        )
+                        modelContext.insert(newTransaction)
+                        counts.transactions += 1
+                    }
+
+                    for entry in imported.healthEntries {
+                        let newEntry = HealthEntryModel(
+                            type: HealthMetricType(rawValue: entry.type) ?? .steps,
+                            value: entry.value,
+                            unit: entry.unit
+                        )
+                        newEntry.date = entry.date
+                        newEntry.notes = entry.notes
+                        modelContext.insert(newEntry)
+                        counts.health += 1
+                    }
+
+                    try? modelContext.save()
                 }
 
-                for task in importedData.tasks {
-                    let newTask = TaskModel(title: task.title)
-                    newTask.notes = task.notes
-                    newTask.dueDate = task.dueDate
-                    newTask.priority = TaskPriority(rawValue: task.priority) ?? .medium
-                    newTask.isCompleted = task.isCompleted
-                    newTask.completedAt = task.completedAt
-                    modelContext.insert(newTask)
-                    counts.tasks += 1
-                }
-
-                for transaction in importedData.transactions {
-                    let newTransaction = TransactionModel(
-                        amount: transaction.amount,
-                        title: transaction.title,
-                        notes: transaction.notes,
-                        category: TransactionCategory(rawValue: transaction.category) ?? .other,
-                        type: TransactionType(rawValue: transaction.type) ?? .expense,
-                        date: transaction.date
-                    )
-                    modelContext.insert(newTransaction)
-                    counts.transactions += 1
-                }
-
-                for entry in importedData.healthEntries {
-                    let newEntry = HealthEntryModel(
-                        type: HealthMetricType(rawValue: entry.type) ?? .steps,
-                        value: entry.value,
-                        unit: entry.unit
-                    )
-                    newEntry.date = entry.date
-                    newEntry.notes = entry.notes
-                    modelContext.insert(newEntry)
-                    counts.health += 1
-                }
-
-                try modelContext.save()
+                let message = "Imported \(counts.notes) notes, \(counts.tasks) tasks, \(counts.transactions) transactions, and \(counts.health) health entries."
 
                 await MainActor.run {
-                    importResult = ImportResult(
-                        success: true,
-                        notesCount: counts.notes,
-                        tasksCount: counts.tasks,
-                        transactionsCount: counts.transactions,
-                        healthEntriesCount: counts.health
-                    )
+                    successMessage = message
+                    showSuccessAlert = true
                     isImporting = false
                 }
             } catch {
+                let message: String
+                if let importErr = error as? ImportError {
+                    message = importErr.localizedDescription
+                } else {
+                    message = "Import failed: \(error.localizedDescription)"
+                }
                 await MainActor.run {
-                    importResult = ImportResult(success: false, error: error.localizedDescription)
+                    importError = message
+                    showErrorAlert = true
                     isImporting = false
                 }
             }
@@ -248,16 +304,20 @@ private extension ImportDataView {
     }
 }
 
-// MARK: - Share Sheet
+// MARK: - Import Error
 
-struct ShareSheet: UIViewControllerRepresentable {
-    let items: [Any]
+private enum ImportError: LocalizedError {
+    case accessDenied
+    case emptyFile
+    case invalidData
 
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    var errorDescription: String? {
+        switch self {
+        case .accessDenied: "Cannot access the selected file."
+        case .emptyFile: "The selected file is empty."
+        case .invalidData: "The file contains invalid or incomplete data."
+        }
     }
-
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 // MARK: - Export/Import Models
@@ -338,13 +398,4 @@ struct ExportableHealthEntry: Codable {
         self.date = model.date
         self.notes = model.notes
     }
-}
-
-struct ImportResult {
-    let success: Bool
-    var error: String?
-    var notesCount: Int = 0
-    var tasksCount: Int = 0
-    var transactionsCount: Int = 0
-    var healthEntriesCount: Int = 0
 }
