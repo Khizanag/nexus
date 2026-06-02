@@ -1,7 +1,7 @@
 import AVFoundation
 import SwiftUI
 
-// MARK: - Speech Manager (Singleton to retain synthesizer)
+// MARK: - Speech Manager (singleton to retain the synthesizer)
 
 @MainActor
 final class SpeechManager {
@@ -15,7 +15,6 @@ final class SpeechManager {
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
         utterance.rate = 0.52
-        utterance.pitchMultiplier = 1.0
         synthesizer.speak(utterance)
     }
 
@@ -24,75 +23,39 @@ final class SpeechManager {
     }
 }
 
-// MARK: - AI Avatar View
+// MARK: - AI Avatar
 
 struct AIAvatarView: View {
-    @State private var isAnimating = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var animating = false
     @State private var rotation: Double = 0
 
     var body: some View {
         ZStack {
-            // Outer glow rings
             ForEach(0..<3, id: \.self) { index in
                 Circle()
-                    .stroke(
-                        LinearGradient(
-                            colors: [
-                                .nexusPurple.opacity(0.4 - Double(index) * 0.1),
-                                .nexusBlue.opacity(0.3 - Double(index) * 0.1)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 1.5
-                    )
-                    .frame(width: 90 + CGFloat(index * 25), height: 90 + CGFloat(index * 25))
+                    .stroke(Color.nexusPurple.opacity(0.35 - Double(index) * 0.1), lineWidth: 1.5)
+                    .frame(width: 92 + CGFloat(index * 26), height: 92 + CGFloat(index * 26))
                     .rotationEffect(.degrees(rotation + Double(index * 30)))
-                    .opacity(isAnimating ? 0.8 : 0.4)
+                    .opacity(animating ? 0.9 : 0.5)
             }
 
-            // Glass orb
             Circle()
-                .fill(
-                    RadialGradient(
-                        colors: [
-                            .nexusPurple.opacity(0.9),
-                            .nexusBlue.opacity(0.8),
-                            .nexusPurple.opacity(0.7)
-                        ],
-                        center: .topLeading,
-                        startRadius: 0,
-                        endRadius: 60
-                    )
-                )
-                .frame(width: 80, height: 80)
+                .fill(Color.nexusGradient)
+                .frame(width: 82, height: 82)
                 .overlay {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [.white.opacity(0.3), .clear],
-                                startPoint: .topLeading,
-                                endPoint: .center
-                            )
-                        )
-                        .frame(width: 80, height: 80)
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 32, weight: .medium))
+                        .foregroundStyle(Color.nexusOnAccent)
+                        .scaleEffect(animating ? 1.08 : 1)
                 }
-                .shadow(color: .nexusPurple.opacity(0.5), radius: 20, x: 0, y: 10)
-
-            // Icon
-            Image(systemName: "sparkles")
-                .font(.system(size: 32, weight: .medium))
-                .foregroundStyle(.white)
-                .shadow(color: .white.opacity(0.5), radius: 10)
-                .scaleEffect(isAnimating ? 1.1 : 1.0)
+                .shadow(color: .nexusPurple.opacity(0.4), radius: 18, y: 8)
         }
+        .accessibilityHidden(true)
         .onAppear {
-            withAnimation(.easeInOut(duration: 2).repeatForever(autoreverses: true)) {
-                isAnimating = true
-            }
-            withAnimation(.linear(duration: 20).repeatForever(autoreverses: false)) {
-                rotation = 360
-            }
+            guard !reduceMotion else { return }
+            withAnimation(.easeInOut(duration: 2).repeatForever(autoreverses: true)) { animating = true }
+            withAnimation(.linear(duration: 22).repeatForever(autoreverses: false)) { rotation = 360 }
         }
     }
 }
@@ -106,389 +69,163 @@ struct QuickStatItem: View {
     let color: Color
 
     var body: some View {
-        VStack(spacing: 8) {
-            ZStack {
-                Circle()
-                    .fill(color.opacity(0.15))
-                    .frame(width: 36, height: 36)
+        VStack(spacing: DesignSystem.Spacing.xs) {
+            Image(systemName: icon)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(color)
+                .frame(width: DesignSystem.Size.Icon.badge, height: DesignSystem.Size.Icon.badge)
+                .background(color.opacity(0.15), in: .circle)
 
-                Image(systemName: icon)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(color)
-            }
-
-            Text(value)
-                .font(.system(size: 17, weight: .bold, design: .rounded))
-
-            Text(label)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.secondary)
+            Text(value).font(.nexusTitle3)
+            Text(label).font(.nexusCaption2).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(value) \(label)")
     }
 }
 
 // MARK: - Message Bubble
 
 struct MessageBubble: View {
-    let message: ChatMessage
-
-    @State private var showCopied = false
-    @State private var appeared = false
+    let isUser: Bool
+    let text: String
+    var timestamp: Date?
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            if message.role == .user { Spacer(minLength: 60) }
+        HStack(alignment: .bottom, spacing: DesignSystem.Spacing.xs) {
+            if isUser { Spacer(minLength: 48) }
+            if !isUser { avatar }
 
-            if message.role == .assistant {
-                assistantAvatar
-                    .offset(y: -4)
-            }
-
-            VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 4) {
-                messageContent
-                    .contextMenu {
-                        Button {
-                            copyMessage()
-                        } label: {
-                            Label("Copy", systemImage: "doc.on.doc")
-                        }
-
-                        if message.role == .assistant {
-                            Button {
-                                SpeechManager.shared.speak(message.content)
-                            } label: {
-                                Label("Speak", systemImage: "speaker.wave.2")
-                            }
-                        }
-                    }
-
-                HStack(spacing: 4) {
-                    if showCopied {
-                        Label("Copied", systemImage: "checkmark")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(Color.nexusGreen)
-                            .transition(.scale.combined(with: .opacity))
-                    }
-
-                    Text(message.timestamp.formatted(date: .omitted, time: .shortened))
-                        .font(.system(size: 10, weight: .medium))
+            VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
+                bubble
+                if let timestamp {
+                    Text(timestamp.formatted(date: .omitted, time: .shortened))
+                        .font(.nexusCaption2)
                         .foregroundStyle(.tertiary)
+                        .padding(.horizontal, 4)
                 }
-                .padding(.horizontal, 4)
             }
 
-            if message.role == .assistant { Spacer(minLength: 60) }
+            if !isUser { Spacer(minLength: 48) }
         }
-        .padding(.horizontal, 16)
-        .opacity(appeared ? 1 : 0)
-        .offset(y: appeared ? 0 : 20)
-        .onAppear {
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                appeared = true
-            }
-        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(isUser ? "You said" : "Nexus said")
+        .accessibilityValue(text)
     }
 
-    @ViewBuilder
-    private var messageContent: some View {
-        if message.role == .user {
-            userBubble
-        } else {
-            assistantBubble
-        }
+    private var bubble: some View {
+        Text(.init(text))
+            .font(.nexusCallout)
+            .foregroundStyle(isUser ? Color.nexusOnAccent : .primary)
+            .textSelection(.enabled)
+            .padding(.horizontal, DesignSystem.Spacing.md)
+            .padding(.vertical, DesignSystem.Spacing.sm)
+            .modifier(BubbleBackground(isUser: isUser))
     }
 
-    private var userBubble: some View {
-        Text(.init(message.content))
-            .font(.system(size: 15, weight: .regular))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background {
-                BubbleShape(isUser: true)
-                    .fill(
-                        LinearGradient(
-                            colors: [.nexusPurple, .nexusPurple.opacity(0.85)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .shadow(color: .nexusPurple.opacity(0.3), radius: 8, x: 0, y: 4)
-            }
-    }
-
-    private var assistantBubble: some View {
-        Text(.init(message.content))
-            .font(.system(size: 15, weight: .regular))
-            .foregroundStyle(.primary)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background {
-                BubbleShape(isUser: false)
-                    .fill(.ultraThinMaterial)
-                    .overlay {
-                        BubbleShape(isUser: false)
-                            .stroke(
-                                LinearGradient(
-                                    colors: [.white.opacity(0.2), .white.opacity(0.05)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                lineWidth: 1
-                            )
-                    }
-                    .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
-            }
-    }
-
-    private var assistantAvatar: some View {
-        ZStack {
-            Circle()
-                .fill(
-                    LinearGradient(
-                        colors: [.nexusPurple, .nexusBlue],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .frame(width: 28, height: 28)
-                .shadow(color: .nexusPurple.opacity(0.4), radius: 6, x: 0, y: 3)
-
-            Image(systemName: "sparkles")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.white)
-        }
-    }
-
-    private func copyMessage() {
-        UIPasteboard.general.string = message.content
-        withAnimation(.spring(response: 0.3)) {
-            showCopied = true
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            withAnimation(.spring(response: 0.3)) {
-                showCopied = false
-            }
-        }
+    private var avatar: some View {
+        Image(systemName: "sparkles")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(Color.nexusOnAccent)
+            .frame(width: DesignSystem.Size.Avatar.sm, height: DesignSystem.Size.Avatar.sm)
+            .background(Color.nexusGradient, in: .circle)
+            .accessibilityHidden(true)
     }
 }
 
-// MARK: - Bubble Shape
-
-struct BubbleShape: Shape {
+private struct BubbleBackground: ViewModifier {
     let isUser: Bool
 
-    func path(in rect: CGRect) -> Path {
-        let radius: CGFloat = 18
-        let tailSize: CGFloat = 6
-
-        var path = Path()
-
+    func body(content: Content) -> some View {
         if isUser {
-            // User bubble - tail on right
-            path.move(to: CGPoint(x: rect.minX + radius, y: rect.minY))
-            path.addLine(to: CGPoint(x: rect.maxX - radius, y: rect.minY))
-            path.addQuadCurve(
-                to: CGPoint(x: rect.maxX, y: rect.minY + radius),
-                control: CGPoint(x: rect.maxX, y: rect.minY)
-            )
-            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - radius - tailSize))
-            path.addQuadCurve(
-                to: CGPoint(x: rect.maxX - radius + tailSize, y: rect.maxY),
-                control: CGPoint(x: rect.maxX, y: rect.maxY)
-            )
-            path.addLine(to: CGPoint(x: rect.minX + radius, y: rect.maxY))
-            path.addQuadCurve(
-                to: CGPoint(x: rect.minX, y: rect.maxY - radius),
-                control: CGPoint(x: rect.minX, y: rect.maxY)
-            )
-            path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + radius))
-            path.addQuadCurve(
-                to: CGPoint(x: rect.minX + radius, y: rect.minY),
-                control: CGPoint(x: rect.minX, y: rect.minY)
+            content.background(
+                Color.nexusGradient,
+                in: .rect(cornerRadius: 20, style: .continuous)
             )
         } else {
-            // Assistant bubble - tail on left
-            path.move(to: CGPoint(x: rect.minX + radius, y: rect.minY))
-            path.addLine(to: CGPoint(x: rect.maxX - radius, y: rect.minY))
-            path.addQuadCurve(
-                to: CGPoint(x: rect.maxX, y: rect.minY + radius),
-                control: CGPoint(x: rect.maxX, y: rect.minY)
-            )
-            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - radius))
-            path.addQuadCurve(
-                to: CGPoint(x: rect.maxX - radius, y: rect.maxY),
-                control: CGPoint(x: rect.maxX, y: rect.maxY)
-            )
-            path.addLine(to: CGPoint(x: rect.minX + radius - tailSize, y: rect.maxY))
-            path.addQuadCurve(
-                to: CGPoint(x: rect.minX, y: rect.maxY - radius - tailSize),
-                control: CGPoint(x: rect.minX, y: rect.maxY)
-            )
-            path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + radius))
-            path.addQuadCurve(
-                to: CGPoint(x: rect.minX + radius, y: rect.minY),
-                control: CGPoint(x: rect.minX, y: rect.minY)
-            )
+            content.glassBackground(in: .rect(cornerRadius: 20, style: .continuous))
         }
-
-        path.closeSubpath()
-        return path
-    }
-}
-
-// MARK: - Suggestion Button
-
-struct SuggestionButton: View {
-    let text: String
-    let action: () -> Void
-
-    @State private var isPressed = false
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 10) {
-                Image(systemName: "sparkle")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [.nexusPurple, .nexusBlue],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-
-                Text(text)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.primary)
-            }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 12)
-            .background {
-                Capsule()
-                    .fill(.ultraThinMaterial)
-                    .overlay {
-                        Capsule()
-                            .strokeBorder(
-                                LinearGradient(
-                                    colors: [.white.opacity(0.3), .white.opacity(0.1)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                lineWidth: 1
-                            )
-                    }
-                    .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
-            }
-        }
-        .buttonStyle(ScaleButtonStyle())
-    }
-}
-
-// MARK: - Scale Button Style
-
-struct ScaleButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.95 : 1)
-            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: configuration.isPressed)
     }
 }
 
 // MARK: - Typing Indicator
 
 struct TypingIndicator: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var animating = false
 
     var body: some View {
-        HStack(spacing: 8) {
-            // Avatar
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [.nexusPurple, .nexusBlue],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 28, height: 28)
-                    .shadow(color: .nexusPurple.opacity(0.4), radius: 6, x: 0, y: 3)
+        HStack(alignment: .bottom, spacing: DesignSystem.Spacing.xs) {
+            Image(systemName: "sparkles")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.nexusOnAccent)
+                .frame(width: DesignSystem.Size.Avatar.sm, height: DesignSystem.Size.Avatar.sm)
+                .background(Color.nexusGradient, in: .circle)
 
-                Image(systemName: "sparkles")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white)
-            }
-
-            // Dots
             HStack(spacing: 5) {
                 ForEach(0..<3, id: \.self) { index in
                     Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [.nexusPurple, .nexusBlue],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 8, height: 8)
-                        .scaleEffect(animating ? 1.2 : 0.8)
-                        .opacity(animating ? 1 : 0.5)
+                        .fill(Color.secondary)
+                        .frame(width: 7, height: 7)
+                        .scaleEffect(animating ? 1.2 : 0.7)
+                        .opacity(animating ? 1 : 0.4)
                         .animation(
-                            .easeInOut(duration: 0.5)
-                            .repeatForever()
-                            .delay(Double(index) * 0.15),
+                            reduceMotion ? nil :
+                                .easeInOut(duration: 0.5).repeatForever().delay(Double(index) * 0.15),
                             value: animating
                         )
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            .background {
-                BubbleShape(isUser: false)
-                    .fill(.ultraThinMaterial)
-                    .overlay {
-                        BubbleShape(isUser: false)
-                            .stroke(
-                                LinearGradient(
-                                    colors: [.white.opacity(0.2), .white.opacity(0.05)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                lineWidth: 1
-                            )
-                    }
-            }
+            .padding(.horizontal, DesignSystem.Spacing.md)
+            .padding(.vertical, DesignSystem.Spacing.sm)
+            .glassBackground(in: .rect(cornerRadius: 20, style: .continuous))
+
+            Spacer(minLength: 48)
         }
-        .padding(.horizontal, 16)
-        .onAppear {
-            animating = true
+        .onAppear { animating = true }
+        .accessibilityLabel("Nexus is typing")
+    }
+}
+
+// MARK: - Suggestion Chip
+
+struct AssistantSuggestionChip: View {
+    let text: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(text, systemImage: "sparkle")
+                .font(.nexusSubheadline)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
         }
+        .buttonStyle(.glass)
     }
 }
 
 // MARK: - Animated Gradient Background
 
 struct AnimatedGradientBackground: View {
-    @State private var animateGradient = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var animate = false
 
     var body: some View {
         LinearGradient(
             colors: [
                 Color.nexusBackground,
-                Color.nexusPurple.opacity(0.05),
-                Color.nexusBlue.opacity(0.03),
-                Color.nexusBackground
+                Color.nexusPurple.opacity(0.06),
+                Color.nexusBlue.opacity(0.04),
+                Color.nexusBackground,
             ],
-            startPoint: animateGradient ? .topLeading : .bottomTrailing,
-            endPoint: animateGradient ? .bottomTrailing : .topLeading
+            startPoint: animate ? .topLeading : .bottomTrailing,
+            endPoint: animate ? .bottomTrailing : .topLeading
         )
         .ignoresSafeArea()
         .onAppear {
-            withAnimation(.easeInOut(duration: 8).repeatForever(autoreverses: true)) {
-                animateGradient.toggle()
-            }
+            guard !reduceMotion else { return }
+            withAnimation(.easeInOut(duration: 8).repeatForever(autoreverses: true)) { animate.toggle() }
         }
     }
 }

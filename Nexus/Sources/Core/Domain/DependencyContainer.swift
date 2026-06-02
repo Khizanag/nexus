@@ -25,11 +25,6 @@ final class DependencyContainer: Sendable {
 
 private extension DependencyContainer {
     func registerServices() {
-        container.register(AIService.self) { _ in
-            DefaultAIService()
-        }
-        .inObjectScope(.container)
-
         container.register(KeychainService.self) { _ in
             DefaultKeychainService()
         }
