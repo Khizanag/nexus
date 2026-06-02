@@ -22,7 +22,6 @@ struct RootView: View {
             Tab(AppTab.health.title, systemImage: AppTab.health.icon, value: AppTab.health) { HealthView() }
             Tab(AppTab.finance.title, systemImage: AppTab.finance.icon, value: AppTab.finance) { FinanceView() }
         }
-        .tabBarMinimizeBehavior(.onScrollDown)
         .sheet(item: $activeSheet) { sheet in sheetContent(for: sheet) }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { drainPendingActions() }
