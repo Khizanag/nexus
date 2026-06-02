@@ -6,120 +6,101 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Query(sort: \TaskModel.createdAt, order: .reverse) private var allTasks: [TaskModel]
 
-    @State private var selectedTab: Tab = .home
-    @State private var previousTab: Tab = .home
-    @State private var showAssistant = false
-    @State private var pendingWaterLog = false
-    @State private var showCalendar = false
-    @State private var showSettings = false
-    @State private var taskToShow: TaskModel?
+    @State private var selectedTab: AppTab = .home
+    @State private var activeSheet: RootSheet?
 
-    private var assistantLauncher = AssistantLauncher.shared
-    private var taskLauncher = TaskLauncher.shared
+    private let assistantLauncher = AssistantLauncher.shared
+    private let taskLauncher = TaskLauncher.shared
 
     // MARK: - Body
 
     var body: some View {
-        tabView
-            .modifier(ChangeHandlersModifier(
-                selectedTab: $selectedTab,
-                previousTab: $previousTab,
-                showAssistant: $showAssistant,
-                assistantLauncher: assistantLauncher,
-                taskLauncher: taskLauncher,
-                scenePhase: scenePhase,
-                handlePendingWidgetAction: handlePendingWidgetAction,
-                handlePendingTaskAction: handlePendingTaskAction,
-                handlePendingNavigation: handlePendingNavigation
-            ))
-            .modifier(SheetModifier(
-                showAssistant: $showAssistant,
-                pendingWaterLog: $pendingWaterLog,
-                showCalendar: $showCalendar,
-                showSettings: $showSettings,
-                taskToShow: $taskToShow
-            ))
-    }
-}
-
-// MARK: - Tab View
-
-private extension RootView {
-    var tabView: some View {
         TabView(selection: $selectedTab) {
-            ForEach(Tab.allCases) { tab in
-                tabContent(for: tab)
-                    .tabItem { Label(tab.title, systemImage: tab.icon) }
-                    .tag(tab)
+            Tab(AppTab.home.title, systemImage: AppTab.home.icon, value: AppTab.home) { HomeView() }
+            Tab(AppTab.tasks.title, systemImage: AppTab.tasks.icon, value: AppTab.tasks) { TasksView() }
+            Tab(AppTab.assistant.title, systemImage: AppTab.assistant.icon, value: AppTab.assistant) { AssistantView() }
+            Tab(AppTab.health.title, systemImage: AppTab.health.icon, value: AppTab.health) { HealthView() }
+            Tab(AppTab.finance.title, systemImage: AppTab.finance.icon, value: AppTab.finance) { FinanceView() }
+        }
+        .tabBarMinimizeBehavior(.onScrollDown)
+        .sheet(item: $activeSheet) { sheet in sheetContent(for: sheet) }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { drainPendingActions() }
+        }
+        .onChange(of: assistantLauncher.shouldOpenAssistant) { _, shouldOpen in
+            if shouldOpen {
+                selectedTab = .assistant
+                assistantLauncher.shouldOpenAssistant = false
             }
         }
+        .onChange(of: assistantLauncher.pendingNavigation) { _, navigation in
+            handle(navigation)
+        }
+        .onChange(of: taskLauncher.pendingTaskId) { _, taskId in
+            if taskId != nil { drainPendingTask() }
+        }
+        .onAppear { drainPendingActions() }
     }
+}
 
+// MARK: - Sheets
+
+private extension RootView {
     @ViewBuilder
-    func tabContent(for tab: Tab) -> some View {
-        if tab.isContent {
-            tab.view
-        } else {
-            Color.clear
+    func sheetContent(for sheet: RootSheet) -> some View {
+        switch sheet {
+        case .waterLog: QuickWaterLogView()
+        case .calendar: CalendarView()
+        case .settings: SettingsView()
+        case .task(let task): TaskEditorView(task: task)
         }
     }
 }
 
-// MARK: - Navigation Handlers
+// MARK: - Navigation
 
 private extension RootView {
-    func handlePendingNavigation() {
-        guard let navigation = assistantLauncher.consumeNavigation() else { return }
+    func handle(_ navigation: AssistantNavigation?) {
+        guard let navigation else { return }
+        defer { assistantLauncher.pendingNavigation = nil }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            navigateTo(navigation)
-        }
-    }
-
-    func navigateTo(_ navigation: AssistantNavigation) {
         switch navigation {
-        case .tab(let tab):
-            selectedTab = tab
-        case .calendar, .calendarEvent:
-            showCalendar = true
-        case .note:
-            selectedTab = .home
-        case .task:
-            selectedTab = .tasks
-        case .subscription, .budget, .stock, .house:
-            selectedTab = .finance
-        case .settings:
-            showSettings = true
+        case .tab(let tab): selectedTab = tab
+        case .calendar, .calendarEvent: activeSheet = .calendar
+        case .note: selectedTab = .home
+        case .task: selectedTab = .tasks
+        case .subscription, .budget, .stock, .house: selectedTab = .finance
+        case .settings: activeSheet = .settings
         }
     }
+}
 
-    func handlePendingWidgetAction() {
-        guard let action = WidgetDataStore.consumePendingAction() else { return }
+// MARK: - Pending Actions (widgets, intents, notifications)
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+private extension RootView {
+    func drainPendingActions() {
+        if let action = WidgetDataStore.consumePendingAction() {
             switch action {
-            case .openAssistant:
-                showAssistant = true
-            case .logWater:
-                pendingWaterLog = true
+            case .openAssistant: selectedTab = .assistant
+            case .logWater: activeSheet = .waterLog
             }
         }
+        drainPendingTask()
     }
 
-    func handlePendingTaskAction() {
+    func drainPendingTask() {
         guard let (taskId, shouldMarkComplete) = taskLauncher.consumePendingTask() else { return }
         guard let task = allTasks.first(where: { $0.id == taskId }) else { return }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            if shouldMarkComplete {
-                markTaskComplete(task)
-            } else {
-                openTask(task)
-            }
+        if shouldMarkComplete {
+            markComplete(task)
+        } else {
+            selectedTab = .tasks
+            activeSheet = .task(task)
         }
     }
 
-    func markTaskComplete(_ task: TaskModel) {
+    func markComplete(_ task: TaskModel) {
         withAnimation(.spring(response: 0.5)) {
             task.isCompleted = true
             task.completedAt = .now
@@ -128,77 +109,23 @@ private extension RootView {
         DefaultTaskNotificationService.shared.cancelReminder(for: task)
         selectedTab = .tasks
     }
-
-    func openTask(_ task: TaskModel) {
-        selectedTab = .tasks
-        taskToShow = task
-    }
 }
 
-// MARK: - Change Handlers Modifier
+// MARK: - Root Sheet
 
-private struct ChangeHandlersModifier: ViewModifier {
-    @Binding var selectedTab: Tab
-    @Binding var previousTab: Tab
-    @Binding var showAssistant: Bool
-    let assistantLauncher: AssistantLauncher
-    let taskLauncher: TaskLauncher
-    let scenePhase: ScenePhase
-    let handlePendingWidgetAction: () -> Void
-    let handlePendingTaskAction: () -> Void
-    let handlePendingNavigation: () -> Void
+enum RootSheet: Identifiable {
+    case waterLog
+    case calendar
+    case settings
+    case task(TaskModel)
 
-    func body(content: Content) -> some View {
-        content
-            .onChange(of: selectedTab) { oldValue, newValue in
-                if newValue == .assistant {
-                    showAssistant = true
-                    selectedTab = previousTab
-                } else {
-                    previousTab = newValue
-                }
-            }
-            .onChange(of: assistantLauncher.shouldOpenAssistant) { _, shouldOpen in
-                if shouldOpen {
-                    showAssistant = true
-                    assistantLauncher.shouldOpenAssistant = false
-                }
-            }
-            .onChange(of: scenePhase) { _, newPhase in
-                if newPhase == .active {
-                    handlePendingWidgetAction()
-                    handlePendingTaskAction()
-                }
-            }
-            .onChange(of: showAssistant) { _, isShowing in
-                if !isShowing {
-                    handlePendingNavigation()
-                }
-            }
-            .onChange(of: taskLauncher.pendingTaskId) { _, newTaskId in
-                if newTaskId != nil {
-                    handlePendingTaskAction()
-                }
-            }
-    }
-}
-
-// MARK: - Sheet Modifier
-
-private struct SheetModifier: ViewModifier {
-    @Binding var showAssistant: Bool
-    @Binding var pendingWaterLog: Bool
-    @Binding var showCalendar: Bool
-    @Binding var showSettings: Bool
-    @Binding var taskToShow: TaskModel?
-
-    func body(content: Content) -> some View {
-        content
-            .sheet(isPresented: $showAssistant) { AssistantView() }
-            .sheet(isPresented: $pendingWaterLog) { QuickWaterLogView() }
-            .sheet(isPresented: $showCalendar) { CalendarView() }
-            .sheet(isPresented: $showSettings) { SettingsView() }
-            .sheet(item: $taskToShow) { task in TaskEditorView(task: task) }
+    var id: String {
+        switch self {
+        case .waterLog: "waterLog"
+        case .calendar: "calendar"
+        case .settings: "settings"
+        case .task(let task): "task-\(task.id)"
+        }
     }
 }
 
@@ -214,7 +141,7 @@ private struct QuickWaterLogView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 32) {
+            VStack(spacing: DesignSystem.Spacing.xl) {
                 Spacer()
                 waterAmountCard
                 presetButtons
@@ -222,15 +149,16 @@ private struct QuickWaterLogView: View {
                 Spacer()
                 logButton
             }
+            .padding(.vertical, DesignSystem.Spacing.lg)
             .background(Color.nexusBackground)
             .navigationTitle("Log Water")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbarContent }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
         }
     }
 }
-
-// MARK: - Quick Water Log Toolbar
 
 private extension QuickWaterLogView {
     @ToolbarContentBuilder
@@ -239,102 +167,76 @@ private extension QuickWaterLogView {
             Button("Cancel") { dismiss() }
         }
     }
-}
 
-// MARK: - Quick Water Log Subviews
-
-private extension QuickWaterLogView {
     var waterAmountCard: some View {
-        ConcentricCard(color: .nexusTeal) {
-            VStack(spacing: 16) {
+        GlassCard(cornerRadius: DesignSystem.CornerRadius.lg, tint: .nexusTeal) {
+            VStack(spacing: DesignSystem.Spacing.md) {
                 Image(systemName: "drop.fill")
                     .font(.system(size: 48))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.nexusTeal)
 
                 Text("\(Int(amount)) ml")
-                    .font(.system(size: 56, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
+                    .font(.nexusDisplayNumber())
+                    .contentTransition(.numericText())
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 20)
+            .padding(.vertical, DesignSystem.Spacing.lg)
         }
-        .padding(.horizontal, 40)
+        .padding(.horizontal, DesignSystem.Spacing.xl)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Water amount")
+        .accessibilityValue("\(Int(amount)) milliliters")
     }
 
     var presetButtons: some View {
-        HStack(spacing: 12) {
-            ForEach(presetAmounts, id: \.self) { ml in
-                presetButton(ml)
-            }
-        }
-        .padding(.horizontal, 20)
-    }
-
-    func presetButton(_ ml: Int) -> some View {
-        Button {
-            withAnimation(.spring(response: 0.3)) {
-                amount = Double(ml)
-            }
-        } label: {
-            Text("\(ml)")
-                .font(.nexusHeadline)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background { presetButtonBackground(isSelected: amount == Double(ml)) }
-                .foregroundStyle(amount == Double(ml) ? .white : .primary)
-        }
-    }
-
-    @ViewBuilder
-    func presetButtonBackground(isSelected: Bool) -> some View {
-        if isSelected {
-            ConcentricRectangleBackground(
-                cornerRadius: 12,
-                layers: 4,
-                baseColor: .nexusTeal,
-                spacing: 3
-            )
-        } else {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.nexusSurface)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 12)
-                        .strokeBorder(Color.nexusBorder, lineWidth: 1)
+        HStack(spacing: DesignSystem.Spacing.sm) {
+            ForEach(presetAmounts, id: \.self) { milliliters in
+                Button {
+                    withAnimation(.spring(response: 0.3)) { amount = Double(milliliters) }
+                } label: {
+                    Text("\(milliliters)")
+                        .font(.nexusHeadline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, DesignSystem.Spacing.sm)
                 }
+                .buttonStyle(.glass)
+                .tint(amount == Double(milliliters) ? .nexusTeal : nil)
+                .accessibilityLabel("\(milliliters) milliliters")
+            }
         }
+        .padding(.horizontal, DesignSystem.Spacing.lg)
     }
 
     var amountSlider: some View {
-        VStack(spacing: 8) {
-            Slider(value: $amount, in: 50...1000, step: 50)
-                .tint(Color.nexusTeal)
-
-            HStack {
-                Text("50 ml")
-                    .font(.nexusCaption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text("1000 ml")
-                    .font(.nexusCaption)
-                    .foregroundStyle(.secondary)
+        VStack(spacing: DesignSystem.Spacing.xs) {
+            Slider(value: $amount, in: 50...1000, step: 50) {
+                Text("Amount")
+            } minimumValueLabel: {
+                Text("50").font(.nexusCaption).foregroundStyle(.secondary)
+            } maximumValueLabel: {
+                Text("1000").font(.nexusCaption).foregroundStyle(.secondary)
             }
+            .tint(.nexusTeal)
         }
-        .padding(.horizontal, 32)
+        .padding(.horizontal, DesignSystem.Spacing.xl)
     }
 
     var logButton: some View {
-        ConcentricButton("Log Water", icon: "drop.fill", color: .nexusTeal) {
+        Button {
             logWater()
             dismiss()
+        } label: {
+            Label("Log Water", systemImage: "drop.fill")
+                .font(.nexusHeadline)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, DesignSystem.Spacing.xs)
         }
-        .padding(.horizontal, 20)
-        .padding(.bottom, 20)
+        .buttonStyle(.glassProminent)
+        .tint(.nexusTeal)
+        .padding(.horizontal, DesignSystem.Spacing.lg)
+        .padding(.bottom, DesignSystem.Spacing.lg)
     }
-}
 
-// MARK: - Quick Water Log Actions
-
-private extension QuickWaterLogView {
     func logWater() {
         let entry = HealthEntryModel(
             type: .waterIntake,
@@ -351,5 +253,4 @@ private extension QuickWaterLogView {
 
 #Preview {
     RootView()
-        .preferredColorScheme(.dark)
 }

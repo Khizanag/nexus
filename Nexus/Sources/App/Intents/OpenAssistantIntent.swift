@@ -52,7 +52,7 @@ final class AssistantLauncher {
 // MARK: - Navigation Destinations
 
 enum AssistantNavigation: Equatable {
-    case tab(Tab)
+    case tab(AppTab)
     case calendar
     case calendarEvent(id: String)
     case note(id: UUID)

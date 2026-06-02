@@ -1,6 +1,6 @@
 import SwiftUI
 
-enum Tab: String, CaseIterable, Identifiable {
+enum AppTab: String, CaseIterable, Identifiable, Hashable {
     case home
     case tasks
     case assistant
@@ -26,21 +26,6 @@ enum Tab: String, CaseIterable, Identifiable {
         case .assistant: "sparkles"
         case .health: "heart.fill"
         case .finance: "chart.pie.fill"
-        }
-    }
-
-    var isContent: Bool {
-        self != .assistant
-    }
-
-    @MainActor @ViewBuilder
-    var view: some View {
-        switch self {
-        case .home: HomeView()
-        case .tasks: TasksView()
-        case .assistant: EmptyView()
-        case .health: HealthView()
-        case .finance: FinanceView()
         }
     }
 }
