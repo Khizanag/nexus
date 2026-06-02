@@ -21,6 +21,7 @@ struct NexusCard<Content: View>: View {
     }
 }
 
+/// Thin alias kept for existing call sites; renders the canonical Liquid Glass `GlassCard`.
 struct NexusGlassCard<Content: View>: View {
     let content: Content
 
@@ -29,23 +30,7 @@ struct NexusGlassCard<Content: View>: View {
     }
 
     var body: some View {
-        content
-            .padding(16)
-            .background {
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(.ultraThinMaterial)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 16)
-                            .strokeBorder(
-                                LinearGradient(
-                                    colors: [.white.opacity(0.15), .clear],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                ),
-                                lineWidth: 1
-                            )
-                    }
-            }
+        GlassCard { content }
     }
 }
 
