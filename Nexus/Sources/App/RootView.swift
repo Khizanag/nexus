@@ -21,7 +21,6 @@ struct RootView: View {
 
     var body: some View {
         tabView
-            .tint(.nexusPurple)
             .modifier(ChangeHandlersModifier(
                 selectedTab: $selectedTab,
                 previousTab: $previousTab,

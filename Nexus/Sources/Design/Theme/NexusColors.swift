@@ -2,6 +2,7 @@ import SwiftUI
 
 extension Color {
     // MARK: - Brand Colors
+    // Brand hues are identical in light and dark — they read as saturated accents in both.
     static let nexusPurple = Color(hex: "8B5CF6")
     static let nexusBlue = Color(hex: "3B82F6")
     static let nexusTeal = Color(hex: "14B8A6")
@@ -10,15 +11,15 @@ extension Color {
     static let nexusRed = Color(hex: "EF4444")
     static let nexusPink = Color(hex: "EC4899")
 
-    // MARK: - Semantic Colors
-    static let nexusBackground = Color(hex: "0A0A0F")
-    static let nexusSurface = Color(hex: "141419")
-    static let nexusSurfaceSecondary = Color(hex: "1C1C24")
-    static let nexusBorder = Color(hex: "2A2A35")
+    // MARK: - Semantic Colors (adaptive — light + dark)
+    // nexusBackground, nexusSurface, nexusSurfaceSecondary, nexusBorder,
+    // nexusTextPrimary, nexusTextSecondary and nexusTextTertiary are provided
+    // automatically as generated asset symbols from Assets.xcassets, each with a
+    // light and a dark appearance.
 
-    static let nexusTextPrimary = Color.white
-    static let nexusTextSecondary = Color(hex: "9CA3AF")
-    static let nexusTextTertiary = Color(hex: "6B7280")
+    /// Foreground for content drawn on top of a saturated accent fill (gradients, filled buttons).
+    /// Stays near-white in both appearances because accent fills are dark enough in both.
+    static let nexusOnAccent = Color.white
 
     // MARK: - Module Colors
     static let notesColor = nexusPurple

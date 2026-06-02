@@ -10,6 +10,9 @@ struct NexusApp: App {
     private let modelContainer: ModelContainer
     @State private var authService: DefaultAuthenticationService
 
+    @AppStorage("appearance") private var appearance: AppAppearance = .system
+    @AppStorage("accentColor") private var accentColor: String = AccentPalette.purple.rawValue
+
     init() {
         container = DependencyContainer.shared
         container.registerAll()
@@ -86,7 +89,8 @@ struct NexusApp: App {
             RootView()
                 .environment(container)
                 .environment(authService)
-                .preferredColorScheme(.dark)
+                .tint(AccentPalette.color(for: accentColor))
+                .preferredColorScheme(appearance.colorScheme)
         }
         .modelContainer(modelContainer)
     }

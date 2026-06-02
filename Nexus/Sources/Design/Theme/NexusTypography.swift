@@ -1,24 +1,33 @@
 import SwiftUI
 
+// Tokens are built on semantic text styles so every label honors Dynamic Type.
+// The signature rounded display look is preserved via `design: .rounded`.
+
 extension Font {
     // MARK: - Display
-    static let nexusLargeTitle = Font.system(size: 34, weight: .bold, design: .rounded)
-    static let nexusTitle = Font.system(size: 28, weight: .bold, design: .rounded)
-    static let nexusTitle2 = Font.system(size: 22, weight: .semibold, design: .rounded)
-    static let nexusTitle3 = Font.system(size: 20, weight: .semibold, design: .rounded)
+    static let nexusLargeTitle = Font.system(.largeTitle, design: .rounded, weight: .bold)
+    static let nexusTitle = Font.system(.title, design: .rounded, weight: .bold)
+    static let nexusTitle2 = Font.system(.title2, design: .rounded, weight: .semibold)
+    static let nexusTitle3 = Font.system(.title3, design: .rounded, weight: .semibold)
 
     // MARK: - Body
-    static let nexusHeadline = Font.system(size: 17, weight: .semibold)
-    static let nexusBody = Font.system(size: 17, weight: .regular)
-    static let nexusCallout = Font.system(size: 16, weight: .regular)
-    static let nexusSubheadline = Font.system(size: 15, weight: .regular)
-    static let nexusFootnote = Font.system(size: 13, weight: .regular)
-    static let nexusCaption = Font.system(size: 12, weight: .regular)
-    static let nexusCaption2 = Font.system(size: 11, weight: .regular)
+    static let nexusHeadline = Font.system(.headline)
+    static let nexusBody = Font.system(.body)
+    static let nexusCallout = Font.system(.callout)
+    static let nexusSubheadline = Font.system(.subheadline)
+    static let nexusFootnote = Font.system(.footnote)
+    static let nexusCaption = Font.system(.caption)
+    static let nexusCaption2 = Font.system(.caption2)
 
     // MARK: - Monospace
-    static let nexusMono = Font.system(size: 15, weight: .regular, design: .monospaced)
-    static let nexusMonoSmall = Font.system(size: 13, weight: .regular, design: .monospaced)
+    static let nexusMono = Font.system(.subheadline, design: .monospaced)
+    static let nexusMonoSmall = Font.system(.footnote, design: .monospaced)
+
+    /// A scaling rounded numeral font for hero amounts (calories, balances, water).
+    /// Use instead of a fixed `.system(size:)` so large readouts still respond to Dynamic Type.
+    static func nexusDisplayNumber(_ style: Font.TextStyle = .largeTitle) -> Font {
+        .system(style, design: .rounded, weight: .bold)
+    }
 }
 
 // MARK: - Text Style Modifiers

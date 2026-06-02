@@ -1,49 +1,85 @@
 import SwiftUI
 
 struct AppearanceSettingsView: View {
-    @AppStorage("accentColor") private var accentColor = "purple"
+    @AppStorage("appearance") private var appearance: AppAppearance = .system
+    @AppStorage("accentColor") private var accentColor: String = AccentPalette.purple.rawValue
 
-    private let colorOptions: [(name: String, color: Color)] = [
-        ("purple", .nexusPurple),
-        ("blue", .nexusBlue),
-        ("green", .nexusGreen),
-        ("orange", .nexusOrange),
-        ("pink", .nexusPink),
-        ("teal", .nexusTeal),
-    ]
+    // MARK: - Body
 
     var body: some View {
         List {
-            Section("Accent Color") {
-                ForEach(colorOptions, id: \.name) { option in
-                    colorRow(option)
-                }
-            }
+            themeSection
+            accentSection
         }
         .navigationTitle("Appearance")
         .navigationBarTitleDisplayMode(.inline)
     }
 }
 
+// MARK: - Theme
+
 private extension AppearanceSettingsView {
-    func colorRow(_ option: (name: String, color: Color)) -> some View {
-        HStack {
-            Circle()
-                .fill(option.color)
-                .frame(width: 24, height: 24)
+    var themeSection: some View {
+        Section {
+            Picker("Theme", selection: $appearance) {
+                ForEach(AppAppearance.allCases) { option in
+                    Label(option.label, systemImage: option.symbol)
+                        .tag(option)
+                }
+            }
+            .pickerStyle(.inline)
+            .labelsHidden()
+        } header: {
+            Text("Theme")
+        } footer: {
+            Text("System follows your device's Light or Dark setting.")
+        }
+    }
+}
 
-            Text(option.name.capitalized)
+// MARK: - Accent
 
-            Spacer()
-
-            if accentColor == option.name {
-                Image(systemName: "checkmark")
-                    .foregroundStyle(Color.nexusPurple)
+private extension AppearanceSettingsView {
+    var accentSection: some View {
+        Section("Accent Color") {
+            ForEach(AccentPalette.allCases) { option in
+                accentRow(option)
             }
         }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            accentColor = option.name
+    }
+
+    func accentRow(_ option: AccentPalette) -> some View {
+        Button {
+            accentColor = option.rawValue
+        } label: {
+            HStack(spacing: 12) {
+                Circle()
+                    .fill(option.color)
+                    .frame(width: 24, height: 24)
+                    .overlay {
+                        Circle().strokeBorder(.white.opacity(0.25), lineWidth: 1)
+                    }
+
+                Text(option.label)
+                    .foregroundStyle(.primary)
+
+                Spacer()
+
+                if accentColor == option.rawValue {
+                    Image(systemName: "checkmark")
+                        .foregroundStyle(.tint)
+                        .fontWeight(.semibold)
+                }
+            }
         }
+        .accessibilityLabel(option.label)
+        .accessibilityValue(accentColor == option.rawValue ? "Selected" : "")
+        .accessibilityAddTraits(accentColor == option.rawValue ? [.isSelected, .isButton] : .isButton)
+    }
+}
+
+#Preview {
+    NavigationStack {
+        AppearanceSettingsView()
     }
 }
