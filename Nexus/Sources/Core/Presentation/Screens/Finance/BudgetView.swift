@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import Charts
 
 struct BudgetView: View {
     @Environment(\.modelContext) private var modelContext
@@ -20,23 +21,29 @@ struct BudgetView: View {
 
     var body: some View {
         NavigationStack {
-            scrollContent
-                .background(Color.nexusBackground)
-                .navigationTitle("Budgets")
-                .toolbar { toolbarContent }
-                .sheet(isPresented: $showAddBudget) { BudgetEditorView(budget: nil) }
-                .sheet(item: $selectedBudget) { budget in BudgetEditorView(budget: budget) }
-                .sheet(item: $showBudgetDetail) { budget in
-                    BudgetDetailView(budget: budget, transactions: transactionsForBudget(budget))
+            Group {
+                if budgets.isEmpty {
+                    emptyContent
+                } else {
+                    listContent
                 }
-                .alert("Delete Budget", isPresented: deleteAlertBinding) {
-                    Button("Cancel", role: .cancel) { budgetToDelete = nil }
-                    Button("Delete", role: .destructive) { deleteBudget() }
-                } message: {
-                    Text("Are you sure you want to delete \"\(budgetToDelete?.name ?? "this budget")\"? This action cannot be undone.")
-                }
-                .task { await fetchExchangeRates() }
-                .onChange(of: preferredCurrency) { Task { await fetchExchangeRates() } }
+            }
+            .background(Color.nexusBackground)
+            .navigationTitle("Budgets")
+            .toolbar { toolbarContent }
+            .sheet(isPresented: $showAddBudget) { BudgetEditorView(budget: nil) }
+            .sheet(item: $selectedBudget) { BudgetEditorView(budget: $0) }
+            .sheet(item: $showBudgetDetail) { budget in
+                BudgetDetailView(budget: budget, transactions: transactionsForBudget(budget))
+            }
+            .alert("Delete Budget", isPresented: deleteAlertBinding) {
+                Button("Cancel", role: .cancel) { budgetToDelete = nil }
+                Button("Delete", role: .destructive) { deleteBudget() }
+            } message: {
+                Text("Are you sure you want to delete \"\(budgetToDelete?.name ?? "this budget")\"? This action cannot be undone.")
+            }
+            .task { await fetchExchangeRates() }
+            .onChange(of: preferredCurrency) { Task { await fetchExchangeRates() } }
         }
     }
 }
@@ -47,342 +54,330 @@ private extension BudgetView {
     @ToolbarContentBuilder
     var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
-            Button { showAddBudget = true } label: {
-                Image(systemName: "plus")
+            GlassIconButton(systemImage: "plus", accessibilityLabel: "Add Budget") {
+                showAddBudget = true
             }
         }
     }
 }
 
-// MARK: - Main Content
+// MARK: - Empty Content
 
 private extension BudgetView {
-    var scrollContent: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                if budgets.isEmpty {
-                    emptyState
-                } else {
-                    overviewCard
-                    activeBudgets
-                    if !completedBudgets.isEmpty {
-                        completedBudgetsSection
-                    }
-                    insightsSection
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 40)
-        }
-    }
-}
-
-// MARK: - Empty State
-
-private extension BudgetView {
-    var emptyState: some View {
-        VStack(spacing: 24) {
-            Spacer().frame(height: 60)
-
-            emptyStateCard
-            createBudgetButton
-            suggestedBudgetsSection
-
-            Spacer()
+    var emptyContent: some View {
+        ContentUnavailableView {
+            Label("No Budgets Yet", systemImage: "chart.pie.fill")
+        } description: {
+            Text("Create budgets to track your spending and stay on top of your finances.")
+        } actions: {
+            suggestedActions
         }
     }
 
-    var emptyStateCard: some View {
-        ConcentricCard(color: .nexusPurple) {
-            VStack(spacing: 16) {
-                Image(systemName: "chart.pie.fill")
-                    .font(.system(size: 56))
-                    .foregroundStyle(.white)
-
-                Text("No Budgets Yet")
-                    .font(.nexusTitle2)
-                    .foregroundStyle(.white)
-
-                Text("Create budgets to track your spending\nand stay on top of your finances")
-                    .font(.nexusSubheadline)
-                    .foregroundStyle(.white.opacity(0.8))
-                    .multilineTextAlignment(.center)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 20)
-        }
-    }
-
-    var createBudgetButton: some View {
-        ConcentricButton("Create Your First Budget", icon: "plus.circle.fill", color: .nexusPurple) {
+    @ViewBuilder
+    var suggestedActions: some View {
+        Button("Create Budget") {
             showAddBudget = true
         }
-    }
+        .buttonStyle(.glassProminent)
 
-    var suggestedBudgetsSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Suggested Budgets")
-                .font(.nexusHeadline)
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
+            Text("Suggested")
+                .font(.nexusCaption)
                 .foregroundStyle(.secondary)
+                .padding(.top, DesignSystem.Spacing.md)
 
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                suggestedBudgetCard(category: .food, amount: 500)
-                suggestedBudgetCard(category: .transport, amount: 200)
-                suggestedBudgetCard(category: .entertainment, amount: 150)
-                suggestedBudgetCard(category: .shopping, amount: 300)
+            GlassEffectContainer(spacing: DesignSystem.Spacing.xs) {
+                HStack(spacing: DesignSystem.Spacing.xs) {
+                    ForEach(suggestedBudgetItems, id: \.0) { category, amount in
+                        Button {
+                            createBudget(category: category, amount: amount)
+                        } label: {
+                            VStack(spacing: DesignSystem.Spacing.xxs) {
+                                Image(systemName: category.icon)
+                                    .font(.nexusSubheadline)
+                                    .foregroundStyle(TransactionCategoryColorMapper.color(for: category.color))
+                                Text(category.rawValue.capitalized)
+                                    .font(.nexusCaption2)
+                                Text(amount.formatted(.currency(code: preferredCurrency).precision(.fractionLength(0))))
+                                    .font(.nexusCaption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, DesignSystem.Spacing.sm)
+                        }
+                        .buttonStyle(.glass)
+                        .accessibilityLabel("\(category.rawValue.capitalized), \(amount.formatted(.currency(code: preferredCurrency))) per month")
+                    }
+                }
             }
         }
-        .padding(.top, 20)
     }
 
-    func suggestedBudgetCard(category: TransactionCategory, amount: Double) -> some View {
-        Button {
-            createBudget(category: category, amount: amount)
-        } label: {
-            VStack(spacing: 12) {
-                Image(systemName: category.icon)
-                    .font(.system(size: 24))
-                    .foregroundStyle(categoryColor(category))
-
-                Text(category.rawValue.capitalized)
-                    .font(.nexusSubheadline)
-
-                Text("$\(Int(amount))/mo")
-                    .font(.nexusCaption)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 20)
-            .background { suggestedBudgetCardBackground }
-        }
-        .buttonStyle(.plain)
-    }
-
-    var suggestedBudgetCardBackground: some View {
-        RoundedRectangle(cornerRadius: 16)
-            .fill(Color.nexusSurface)
-            .overlay {
-                RoundedRectangle(cornerRadius: 16)
-                    .strokeBorder(Color.nexusBorder, lineWidth: 1)
-            }
+    var suggestedBudgetItems: [(TransactionCategory, Double)] {
+        [(.food, 500), (.transport, 200), (.entertainment, 150), (.shopping, 300)]
     }
 }
 
-// MARK: - Overview Card
+// MARK: - List Content
 
 private extension BudgetView {
-    var overviewCard: some View {
-        let totalBudget = activeBudgetsList.reduce(0) { $0 + convertToBase($1.effectiveBudget, from: $1.currency) }
-        let totalSpent = activeBudgetsList.reduce(0) { $0 + convertedSpentAmount(for: $1) }
-        let remaining = totalBudget - totalSpent
-        let progress = totalBudget > 0 ? totalSpent / totalBudget : 0
-
-        return VStack(spacing: 20) {
-            HStack(alignment: .top) {
-                overviewTotalBudget(totalBudget)
-                Spacer()
-                BudgetProgressRing(progress: progress, size: 80, lineWidth: 8)
+    var listContent: some View {
+        List {
+            overviewSection
+            if !activeBudgetsList.isEmpty {
+                activeSection
             }
-
-            overviewStatsRow(spent: totalSpent, remaining: remaining)
+            if !completedBudgets.isEmpty {
+                inactiveSection
+            }
+            insightsSection
         }
-        .padding(20)
-        .background {
-            ConcentricRectangleBackground(
-                cornerRadius: 24,
-                layers: 5,
-                baseColor: .nexusPurple,
-                spacing: 5
-            )
-        }
+        .listStyle(.insetGrouped)
+        .scrollEdgeEffectStyle(.soft, for: .top)
     }
 
-    func overviewTotalBudget(_ amount: Double) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Total Budget")
-                .font(.nexusSubheadline)
-                .foregroundStyle(.secondary)
+    // MARK: Overview
 
-            Text(formatCurrency(amount))
-                .font(.system(size: 32, weight: .bold, design: .rounded))
-        }
-    }
+    var overviewSection: some View {
+        Section {
+            let totalBudget = activeBudgetsList.reduce(0) { $0 + convertToBase($1.effectiveBudget, from: $1.currency) }
+            let totalSpent = activeBudgetsList.reduce(0) { $0 + convertedSpentAmount(for: $1) }
+            let remaining = totalBudget - totalSpent
+            let progress = totalBudget > 0 ? totalSpent / totalBudget : 0
 
-    func overviewStatsRow(spent: Double, remaining: Double) -> some View {
-        HStack(spacing: 20) {
-            overviewStat(
-                title: "Spent",
-                value: formatCurrency(spent),
-                color: .nexusRed
-            )
+            GlassCard(tint: .nexusPurple) {
+                VStack(spacing: DesignSystem.Spacing.md) {
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: DesignSystem.Spacing.xxs) {
+                            Text("Total Budget")
+                                .font(.nexusCaption)
+                                .foregroundStyle(.secondary)
+                            Text(totalBudget.formatted(.currency(code: preferredCurrency).precision(.fractionLength(0))))
+                                .font(.nexusDisplayNumber(.title))
+                        }
+                        Spacer()
+                        Gauge(value: min(progress, 1)) {
+                            EmptyView()
+                        } currentValueLabel: {
+                            Text("\(Int(progress * 100))%")
+                                .font(.nexusCaption)
+                        }
+                        .gaugeStyle(.accessoryCircular)
+                        .tint(progressTint(progress))
+                        .frame(width: 60, height: 60)
+                        .accessibilityLabel("Budget usage \(Int(progress * 100)) percent")
+                    }
 
-            Divider().frame(height: 40)
-
-            overviewStat(
-                title: "Remaining",
-                value: formatCurrency(remaining),
-                color: remaining >= 0 ? .nexusGreen : .nexusRed
-            )
-
-            Divider().frame(height: 40)
-
-            overviewStat(
-                title: "Budgets",
-                value: "\(activeBudgetsList.count)",
-                color: .nexusPurple
-            )
+                    HStack(spacing: DesignSystem.Spacing.lg) {
+                        overviewStat(
+                            title: "Spent",
+                            value: totalSpent.formatted(.currency(code: preferredCurrency).precision(.fractionLength(0))),
+                            color: .nexusRed
+                        )
+                        Divider().frame(height: 36)
+                        overviewStat(
+                            title: "Remaining",
+                            value: remaining.formatted(.currency(code: preferredCurrency).precision(.fractionLength(0))),
+                            color: remaining >= 0 ? .nexusGreen : .nexusRed
+                        )
+                        Divider().frame(height: 36)
+                        overviewStat(
+                            title: "Active",
+                            value: "\(activeBudgetsList.count)",
+                            color: .nexusPurple
+                        )
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .listRowBackground(Color.clear)
+            .listRowInsets(.init(top: 0, leading: 0, bottom: 0, trailing: 0))
         }
     }
 
     func overviewStat(title: String, value: String, color: Color) -> some View {
-        VStack(spacing: 4) {
+        VStack(spacing: DesignSystem.Spacing.xxs) {
             Text(title)
                 .font(.nexusCaption)
-                .foregroundStyle(.white.opacity(0.7))
-
+                .foregroundStyle(.secondary)
             Text(value)
-                .font(.nexusHeadline)
-                .foregroundStyle(.white)
+                .font(.nexusSubheadline)
+                .fontWeight(.semibold)
+                .foregroundStyle(color)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title): \(value)")
+    }
+
+    // MARK: Active Section
+
+    var activeSection: some View {
+        Section("Active") {
+            ForEach(activeBudgetsList) { budget in
+                BudgetListRow(
+                    budget: budget,
+                    spent: spentAmount(for: budget),
+                    status: budgetStatus(for: budget),
+                    currency: budget.currency
+                )
+                .contentShape(.rect)
+                .onTapGesture { showBudgetDetail = budget }
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    Button(role: .destructive) {
+                        budgetToDelete = budget
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                    Button {
+                        selectedBudget = budget
+                    } label: {
+                        Label("Edit", systemImage: "pencil")
+                    }
+                    .tint(.nexusBlue)
+                }
+                .swipeActions(edge: .leading) {
+                    Button {
+                        budget.isActive = false
+                    } label: {
+                        Label("Deactivate", systemImage: "pause.circle")
+                    }
+                    .tint(.nexusOrange)
+                }
+                .listRowBackground(Color.nexusSurface)
+                .accessibilityElement(children: .combine)
+                .accessibilityHint("Double tap to view details")
+            }
         }
     }
-}
 
-// MARK: - Active Budgets
+    // MARK: Inactive Section
 
-private extension BudgetView {
-    var activeBudgets: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Active Budgets")
-                .font(.nexusHeadline)
+    var inactiveSection: some View {
+        Section("Inactive") {
+            ForEach(completedBudgets) { budget in
+                HStack(spacing: DesignSystem.Spacing.sm) {
+                    Image(systemName: budget.category.icon)
+                        .foregroundStyle(TransactionCategoryColorMapper.color(for: budget.category.color))
+                        .frame(width: DesignSystem.Size.Icon.md, alignment: .center)
+                        .accessibilityHidden(true)
+
+                    Text(budget.name)
+                        .font(.nexusSubheadline)
+
+                    Spacer()
+
+                    Text(budget.period.displayName)
+                        .font(.nexusCaption)
+                        .foregroundStyle(.secondary)
+                }
+                .swipeActions(edge: .leading) {
+                    Button {
+                        budget.isActive = true
+                    } label: {
+                        Label("Activate", systemImage: "play.circle")
+                    }
+                    .tint(.nexusGreen)
+                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    Button(role: .destructive) {
+                        budgetToDelete = budget
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
+                .listRowBackground(Color.nexusSurface)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("\(budget.name), \(budget.period.displayName), inactive")
+                .accessibilityHint("Swipe right to activate")
+            }
+        }
+    }
+
+    // MARK: Insights Section
+
+    var insightsSection: some View {
+        Section("Insights") {
+            if !activeBudgetsList.isEmpty {
+                utilizationChart
+                    .listRowBackground(Color.nexusSurface)
+                    .listRowInsets(.init(top: DesignSystem.Spacing.sm, leading: DesignSystem.Spacing.md, bottom: DesignSystem.Spacing.sm, trailing: DesignSystem.Spacing.md))
+            }
+
+            LabeledContent("Best Category", value: bestPerformingCategory?.rawValue.capitalized ?? "N/A")
+                .font(.nexusSubheadline)
+                .listRowBackground(Color.nexusSurface)
+
+            LabeledContent("Needs Attention", value: worstPerformingCategory?.rawValue.capitalized ?? "All Good")
+                .font(.nexusSubheadline)
+                .listRowBackground(Color.nexusSurface)
+
+            LabeledContent("Avg Utilization", value: averageUtilization.formatted(.percent.precision(.fractionLength(0))))
+                .font(.nexusSubheadline)
+                .listRowBackground(Color.nexusSurface)
+        }
+    }
+
+    var utilizationChart: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
+            Text("Budget Utilization")
+                .font(.nexusCaption)
                 .foregroundStyle(.secondary)
 
-            LazyVStack(spacing: 12) {
+            Chart {
                 ForEach(activeBudgetsList) { budget in
-                    BudgetCard(
-                        budget: budget,
-                        spent: spentAmount(for: budget),
-                        status: budgetStatus(for: budget),
-                        onTap: { showBudgetDetail = budget },
-                        onEdit: { selectedBudget = budget },
-                        onDelete: { budgetToDelete = budget }
+                    let spent = spentAmount(for: budget)
+                    let utilization = budget.effectiveBudget > 0 ? spent / budget.effectiveBudget : 0
+
+                    BarMark(
+                        x: .value("Budget", budget.name),
+                        y: .value("Utilization", min(utilization, 1.2))
                     )
+                    .foregroundStyle(chartBarColor(for: budgetStatus(for: budget)))
+                    .cornerRadius(DesignSystem.CornerRadius.sm)
+                    .accessibilityLabel("\(budget.name): \(utilization.formatted(.percent.precision(.fractionLength(0))))")
+                }
+
+                RuleMark(y: .value("Alert Threshold", activeBudgetsList.first?.alertThreshold ?? 0.8))
+                    .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+                    .foregroundStyle(Color.nexusOrange)
+                    .annotation(position: .trailing, alignment: .leading) {
+                        Text("Alert")
+                            .font(.nexusCaption2)
+                            .foregroundStyle(Color.nexusOrange)
+                    }
+            }
+            .chartYScale(domain: 0...1.2)
+            .chartYAxis {
+                AxisMarks(values: [0, 0.5, 1.0]) { value in
+                    AxisValueLabel {
+                        if let v = value.as(Double.self) {
+                            Text(v.formatted(.percent.precision(.fractionLength(0))))
+                                .font(.nexusCaption2)
+                        }
+                    }
+                    AxisGridLine()
                 }
             }
+            .frame(height: 160)
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Budget utilization chart")
     }
-}
 
-// MARK: - Completed Budgets
-
-private extension BudgetView {
-    var completedBudgetsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Inactive Budgets")
-                .font(.nexusHeadline)
-                .foregroundStyle(.secondary)
-
-            ForEach(completedBudgets) { budget in
-                completedBudgetRow(budget)
-            }
+    func chartBarColor(for status: BudgetStatus) -> Color {
+        switch status {
+        case .onTrack: .nexusGreen
+        case .warning: .nexusOrange
+        case .exceeded: .nexusRed
+        case .completed: .nexusBlue
         }
     }
 
-    func completedBudgetRow(_ budget: BudgetModel) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: budget.category.icon)
-                .foregroundStyle(.secondary)
-
-            Text(budget.name)
-                .font(.nexusSubheadline)
-
-            Spacer()
-
-            Button("Activate") {
-                budget.isActive = true
-            }
-            .font(.nexusCaption)
-            .foregroundStyle(Color.nexusPurple)
-        }
-        .padding(12)
-        .background {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.nexusSurface)
-        }
-    }
-}
-
-// MARK: - Insights Section
-
-private extension BudgetView {
-    var insightsSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Insights")
-                .font(.nexusHeadline)
-                .foregroundStyle(.secondary)
-
-            insightsGrid
-        }
-    }
-
-    var insightsGrid: some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-            insightCard(
-                icon: "chart.bar.fill",
-                title: "Best Category",
-                value: bestPerformingCategory?.rawValue.capitalized ?? "N/A",
-                color: .nexusGreen
-            )
-
-            insightCard(
-                icon: "exclamationmark.triangle.fill",
-                title: "Needs Attention",
-                value: worstPerformingCategory?.rawValue.capitalized ?? "All Good!",
-                color: worstPerformingCategory != nil ? .nexusOrange : .nexusGreen
-            )
-
-            insightCard(
-                icon: "calendar",
-                title: "Days Left",
-                value: "\(activeBudgetsList.first?.daysRemaining ?? 0)",
-                color: .nexusBlue
-            )
-
-            insightCard(
-                icon: "percent",
-                title: "Avg Utilization",
-                value: String(format: "%.0f%%", averageUtilization * 100),
-                color: .nexusPurple
-            )
-        }
-    }
-
-    func insightCard(icon: String, title: String, value: String, color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 20))
-                .foregroundStyle(color)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.nexusCaption)
-                    .foregroundStyle(.secondary)
-
-                Text(value)
-                    .font(.nexusHeadline)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background { insightCardBackground }
-    }
-
-    var insightCardBackground: some View {
-        RoundedRectangle(cornerRadius: 16)
-            .fill(Color.nexusSurface)
-            .overlay {
-                RoundedRectangle(cornerRadius: 16)
-                    .strokeBorder(Color.nexusBorder, lineWidth: 1)
-            }
+    func progressTint(_ progress: Double) -> Color {
+        if progress >= 1.0 { return .nexusRed }
+        if progress >= 0.8 { return .nexusOrange }
+        return .nexusGreen
     }
 }
 
@@ -452,7 +447,6 @@ private extension BudgetView {
     func budgetStatus(for budget: BudgetModel) -> BudgetStatus {
         let spent = spentAmount(for: budget)
         let ratio = spent / budget.effectiveBudget
-
         if ratio >= 1.0 { return .exceeded }
         if ratio >= budget.alertThreshold { return .warning }
         return .onTrack
@@ -489,7 +483,7 @@ private extension BudgetView {
     }
 }
 
-// MARK: - Helper Methods
+// MARK: - Currency Helper
 
 private extension BudgetView {
     func convertToBase(_ amount: Double, from currencyCode: String) -> Double {
@@ -497,23 +491,10 @@ private extension BudgetView {
               let rates = exchangeRates else { return amount }
         return currencyService.convert(amount: amount, from: fromCurrency, to: baseCurrency, rates: rates)
     }
-
-    func formatCurrency(_ amount: Double) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = preferredCurrency
-        formatter.maximumFractionDigits = 0
-        return formatter.string(from: NSNumber(value: amount)) ?? "$0"
-    }
-
-    func categoryColor(_ category: TransactionCategory) -> Color {
-        TransactionCategoryColorMapper.color(for: category.color)
-    }
 }
 
 // MARK: - Preview
 
 #Preview {
     BudgetView()
-        .preferredColorScheme(.dark)
 }

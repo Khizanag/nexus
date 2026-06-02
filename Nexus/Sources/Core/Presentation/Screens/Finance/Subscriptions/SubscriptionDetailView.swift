@@ -9,24 +9,24 @@ struct SubscriptionDetailView: View {
     @State private var showEditSheet = false
     @State private var showDeleteConfirmation = false
     @State private var showPaymentConfirmation = false
+    @State private var hapticTrigger = false
+
+    // MARK: - Body
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 20) {
-                    headerCard
-                    statusCard
-                    actionsCard
-                    detailsCard
-
-                    if let payments = subscription.payments, !payments.isEmpty {
-                        paymentHistoryCard(payments: payments.sorted { $0.paidDate > $1.paidDate })
-                    }
-
-                    dangerZone
+            List {
+                headerSection
+                statusSection
+                actionsSection
+                detailsSection
+                if let payments = subscription.payments, !payments.isEmpty {
+                    paymentHistorySection(payments.sorted { $0.paidDate > $1.paidDate })
                 }
-                .padding(20)
+                dangerSection
             }
+            .listStyle(.insetGrouped)
+            .scrollEdgeEffectStyle(.soft, for: .top)
             .background(Color.nexusBackground)
             .navigationTitle(subscription.name)
             .navigationBarTitleDisplayMode(.inline)
@@ -35,281 +35,235 @@ struct SubscriptionDetailView: View {
                     Button("Done") { dismiss() }
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        showEditSheet = true
-                    } label: {
-                        Text("Edit")
-                    }
+                    Button("Edit") { showEditSheet = true }
                 }
             }
             .sheet(isPresented: $showEditSheet) {
                 EditSubscriptionSheet(subscription: subscription)
             }
             .confirmationDialog("Mark as Paid?", isPresented: $showPaymentConfirmation, titleVisibility: .visible) {
-                Button("Record Payment") {
-                    markAsPaid()
-                }
-                Button("Cancel", role: .cancel) { }
+                Button("Record Payment") { markAsPaid() }
+                Button("Cancel", role: .cancel) {}
             } message: {
                 Text("This will record a payment of \(subscription.formattedAmount) and advance the due date to \(subscription.calculateNextDueDate().formatted(date: .abbreviated, time: .omitted))")
             }
             .confirmationDialog("Delete Subscription?", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
-                Button("Delete", role: .destructive) {
-                    deleteSubscription()
-                }
-                Button("Cancel", role: .cancel) { }
+                Button("Delete", role: .destructive) { deleteSubscription() }
+                Button("Cancel", role: .cancel) {}
             } message: {
                 Text("This will permanently delete this subscription and all payment history.")
             }
+            .sensoryFeedback(.impact(weight: .medium), trigger: hapticTrigger)
         }
     }
 
-    // MARK: - Header Card
+    // MARK: - Header
 
-    private var headerCard: some View {
-        VStack(spacing: 16) {
-            ZStack {
-                Circle()
-                    .fill(categoryColor.opacity(0.15))
-                    .frame(width: 80, height: 80)
+    private var headerSection: some View {
+        Section {
+            VStack(spacing: DesignSystem.Spacing.md) {
+                ZStack {
+                    Circle()
+                        .fill(categoryColor.opacity(0.15))
+                        .frame(width: 80, height: 80)
+                    Image(systemName: subscription.icon)
+                        .font(.system(size: 32, weight: .semibold))
+                        .foregroundStyle(categoryColor)
+                        .accessibilityHidden(true)
+                }
 
-                Image(systemName: subscription.icon)
-                    .font(.system(size: 32, weight: .semibold))
-                    .foregroundStyle(categoryColor)
+                VStack(spacing: DesignSystem.Spacing.xxs) {
+                    Text(subscription.formattedAmount)
+                        .font(.nexusDisplayNumber(.title))
+
+                    Text(subscription.billingCycle.displayName)
+                        .font(.nexusSubheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                if subscription.isInFreeTrial, let daysLeft = subscription.freeTrialDaysLeft {
+                    HStack(spacing: DesignSystem.Spacing.xs) {
+                        Image(systemName: "gift.fill").accessibilityHidden(true)
+                        Text("Free trial: \(daysLeft) days left")
+                    }
+                    .font(.nexusCaption)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, DesignSystem.Spacing.sm)
+                    .padding(.vertical, DesignSystem.Spacing.xs)
+                    .background { Capsule().fill(Color.nexusGreen) }
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, DesignSystem.Spacing.md)
+            .listRowBackground(Color.nexusSurface)
+        }
+    }
+
+    // MARK: - Status
+
+    private var statusSection: some View {
+        Section {
+            LabeledContent("Next Due") {
+                Text(subscription.nextDueDate.formatted(date: .abbreviated, time: .omitted))
+                    .foregroundStyle(dueDateColor)
+            }
+            .accessibilityLabel("Next due, \(subscription.nextDueDate.formatted(date: .abbreviated, time: .omitted))")
+
+            LabeledContent("Status") {
+                Text(subscription.statusText)
+                    .foregroundStyle(statusColor)
             }
 
-            VStack(spacing: 4) {
-                Text(subscription.formattedAmount)
-                    .font(.system(size: 36, weight: .bold, design: .rounded))
+            LabeledContent("Monthly") {
+                Text(subscription.formattedMonthlyAmount)
+            }
 
-                Text(subscription.billingCycle.displayName)
-                    .font(.nexusSubheadline)
+            LabeledContent("Yearly") {
+                Text(formattedYearly)
                     .foregroundStyle(.secondary)
             }
-
-            if subscription.isInFreeTrial, let daysLeft = subscription.freeTrialDaysLeft {
-                HStack(spacing: 6) {
-                    Image(systemName: "gift.fill")
-                    Text("Free trial: \(daysLeft) days left")
-                }
-                .font(.nexusCaption)
-                .fontWeight(.medium)
-                .foregroundStyle(.white)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background {
-                    Capsule().fill(Color.nexusGreen)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(24)
-        .background {
-            RoundedRectangle(cornerRadius: 20)
-                .fill(Color.nexusSurface)
         }
     }
 
-    // MARK: - Status Card
+    // MARK: - Actions
 
-    private var statusCard: some View {
-        VStack(spacing: 16) {
-            HStack {
-                StatusItem(
-                    icon: "calendar",
-                    title: "Next Due",
-                    value: subscription.nextDueDate.formatted(date: .abbreviated, time: .omitted),
-                    color: dueDateColor
-                )
+    private var actionsSection: some View {
+        Section {
+            GlassEffectContainer(spacing: DesignSystem.Spacing.sm) {
+                Button {
+                    showPaymentConfirmation = true
+                } label: {
+                    Label("Mark Paid", systemImage: "checkmark.circle.fill")
+                }
+                .buttonStyle(.glass)
+                .disabled(subscription.isPaused || !subscription.isActive)
+                .tint(.nexusGreen)
 
-                Spacer()
+                Button {
+                    togglePause()
+                } label: {
+                    Label(subscription.isPaused ? "Resume" : "Pause", systemImage: subscription.isPaused ? "play.fill" : "pause.fill")
+                }
+                .buttonStyle(.glass)
+                .disabled(!subscription.isActive)
+                .tint(.nexusOrange)
 
-                StatusItem(
-                    icon: "clock",
-                    title: "Status",
-                    value: subscription.statusText,
-                    color: statusColor
-                )
-            }
-
-            Divider().background(Color.nexusBorder)
-
-            HStack {
-                StatusItem(
-                    icon: "arrow.clockwise",
-                    title: "Monthly",
-                    value: subscription.formattedMonthlyAmount,
-                    color: .primary
-                )
-
-                Spacer()
-
-                StatusItem(
-                    icon: "calendar.badge.clock",
-                    title: "Yearly",
-                    value: formatYearly(subscription.yearlyEquivalent),
-                    color: .secondary
-                )
-            }
-        }
-        .padding(20)
-        .background {
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.nexusSurface)
-        }
-    }
-
-    // MARK: - Actions Card
-
-    private var actionsCard: some View {
-        HStack(spacing: 12) {
-            ActionButton(
-                icon: "checkmark.circle.fill",
-                title: "Mark Paid",
-                color: .nexusGreen,
-                disabled: subscription.isPaused || !subscription.isActive
-            ) {
-                showPaymentConfirmation = true
-            }
-
-            ActionButton(
-                icon: subscription.isPaused ? "play.fill" : "pause.fill",
-                title: subscription.isPaused ? "Resume" : "Pause",
-                color: .nexusOrange,
-                disabled: !subscription.isActive
-            ) {
-                togglePause()
-            }
-
-            if let urlString = subscription.url, let url = URL(string: urlString) {
-                Link(destination: url) {
-                    VStack(spacing: 8) {
-                        Image(systemName: "safari.fill")
-                            .font(.system(size: 20))
-                        Text("Manage")
-                            .font(.nexusCaption)
-                            .fontWeight(.medium)
+                if let urlString = subscription.url, let url = URL(string: urlString) {
+                    Link(destination: url) {
+                        Label("Manage", systemImage: "safari.fill")
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background {
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.nexusPurple.opacity(0.15))
-                    }
-                    .foregroundStyle(Color.nexusPurple)
+                    .buttonStyle(.glass)
+                    .tint(.nexusPurple)
                 }
             }
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets(top: DesignSystem.Spacing.xs, leading: DesignSystem.Spacing.md, bottom: DesignSystem.Spacing.xs, trailing: DesignSystem.Spacing.md))
         }
     }
 
-    // MARK: - Details Card
+    // MARK: - Details
 
-    private var detailsCard: some View {
-        VStack(spacing: 0) {
-            DetailRow(label: "Category", value: subscription.category.displayName, icon: subscription.category.icon)
-            Divider().background(Color.nexusBorder).padding(.leading, 44)
+    private var detailsSection: some View {
+        Section("Details") {
+            LabeledContent {
+                Text(subscription.category.displayName)
+            } label: {
+                Label("Category", systemImage: subscription.category.icon)
+            }
 
-            DetailRow(label: "Started", value: subscription.startDate.formatted(date: .abbreviated, time: .omitted), icon: "calendar")
-            Divider().background(Color.nexusBorder).padding(.leading, 44)
+            LabeledContent {
+                Text(subscription.startDate.formatted(date: .abbreviated, time: .omitted))
+            } label: {
+                Label("Started", systemImage: "calendar")
+            }
 
-            DetailRow(label: "Reminder", value: "\(subscription.reminderDaysBefore) days before", icon: "bell.fill")
+            LabeledContent {
+                Text("\(subscription.reminderDaysBefore) days before")
+            } label: {
+                Label("Reminder", systemImage: "bell.fill")
+            }
 
             if !subscription.notes.isEmpty {
-                Divider().background(Color.nexusBorder).padding(.leading, 44)
-                DetailRow(label: "Notes", value: subscription.notes, icon: "note.text")
+                LabeledContent {
+                    Text(subscription.notes)
+                        .multilineTextAlignment(.trailing)
+                } label: {
+                    Label("Notes", systemImage: "note.text")
+                }
             }
 
             if let url = subscription.url {
-                Divider().background(Color.nexusBorder).padding(.leading, 44)
-                DetailRow(label: "Website", value: url, icon: "link")
+                LabeledContent {
+                    Text(url)
+                        .multilineTextAlignment(.trailing)
+                        .lineLimit(1)
+                } label: {
+                    Label("Website", systemImage: "link")
+                }
             }
-        }
-        .padding(.vertical, 8)
-        .background {
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.nexusSurface)
         }
     }
 
     // MARK: - Payment History
 
-    private func paymentHistoryCard(payments: [SubscriptionPaymentModel]) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+    private func paymentHistorySection(_ payments: [SubscriptionPaymentModel]) -> some View {
+        Section {
+            ForEach(payments.prefix(10)) { payment in
+                HStack(spacing: DesignSystem.Spacing.sm) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                        .accessibilityHidden(true)
+
+                    Text(payment.paidDate.formatted(date: .abbreviated, time: .omitted))
+                        .font(.nexusSubheadline)
+
+                    Spacer()
+
+                    Text(payment.amount.formatted(.currency(code: payment.currency)))
+                        .font(.nexusSubheadline)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.secondary)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("\(payment.paidDate.formatted(date: .abbreviated, time: .omitted)), \(payment.amount.formatted(.currency(code: payment.currency)))")
+            }
+        } header: {
             HStack {
                 Text("Payment History")
-                    .font(.nexusHeadline)
                 Spacer()
                 Text("\(payments.count) payments")
                     .font(.nexusCaption)
                     .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 4)
-
-            VStack(spacing: 0) {
-                ForEach(payments.prefix(10)) { payment in
-                    PaymentRow(payment: payment)
-
-                    if payment.id != payments.prefix(10).last?.id {
-                        Divider().background(Color.nexusBorder).padding(.leading, 44)
-                    }
-                }
-            }
-            .background {
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color.nexusSurface)
+                    .fontWeight(.regular)
             }
         }
     }
 
-    // MARK: - Danger Zone
+    // MARK: - Danger
 
-    private var dangerZone: some View {
-        VStack(spacing: 12) {
+    private var dangerSection: some View {
+        Section {
             if subscription.isActive {
-                Button {
+                Button(role: .destructive) {
                     cancelSubscription()
                 } label: {
-                    HStack {
-                        Image(systemName: "xmark.circle.fill")
-                        Text("Cancel Subscription")
-                    }
-                    .font(.nexusSubheadline)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.orange)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background {
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.orange.opacity(0.1))
-                    }
+                    Label("Cancel Subscription", systemImage: "xmark.circle.fill")
                 }
+                .foregroundStyle(.orange)
             }
 
-            Button {
+            Button(role: .destructive) {
                 showDeleteConfirmation = true
             } label: {
-                HStack {
-                    Image(systemName: "trash.fill")
-                    Text("Delete Subscription")
-                }
-                .font(.nexusSubheadline)
-                .fontWeight(.medium)
-                .foregroundStyle(.red)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.red.opacity(0.1))
-                }
+                Label("Delete Subscription", systemImage: "trash.fill")
             }
         }
     }
 
     // MARK: - Helpers
 
-    private var categoryColor: Color {
-        Color.named(subscription.color)
-    }
+    private var categoryColor: Color { Color.named(subscription.color) }
 
     private var dueDateColor: Color {
         if subscription.isOverdue { return .red }
@@ -321,29 +275,26 @@ struct SubscriptionDetailView: View {
         switch subscription.statusText {
         case "Overdue": return .red
         case "Due Today", "Due Soon": return .orange
-        case "Paused": return .gray
-        case "Cancelled": return .gray
+        case "Paused", "Cancelled": return .gray
         case "Free Trial": return .green
         default: return .green
         }
     }
 
-    private func formatYearly(_ amount: Double) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = subscription.currency
-        if subscription.currency == "GEL" { formatter.currencySymbol = "₾" }
-        return formatter.string(from: NSNumber(value: amount)) ?? "\(subscription.currency) \(amount)"
+    private var formattedYearly: String {
+        subscription.yearlyEquivalent.formatted(.currency(code: subscription.currency))
     }
 
     private func markAsPaid() {
         subscription.markAsPaid()
         try? modelContext.save()
+        hapticTrigger.toggle()
     }
 
     private func togglePause() {
         subscription.isPaused.toggle()
         try? modelContext.save()
+        hapticTrigger.toggle()
     }
 
     private func cancelSubscription() {
@@ -355,121 +306,6 @@ struct SubscriptionDetailView: View {
         modelContext.delete(subscription)
         try? modelContext.save()
         dismiss()
-    }
-}
-
-// MARK: - Supporting Views
-
-private struct StatusItem: View {
-    let icon: String
-    let title: String
-    let value: String
-    let color: Color
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.system(size: 10))
-                Text(title)
-            }
-            .font(.nexusCaption)
-            .foregroundStyle(.secondary)
-
-            Text(value)
-                .font(.nexusSubheadline)
-                .fontWeight(.semibold)
-                .foregroundStyle(color)
-        }
-    }
-}
-
-private struct ActionButton: View {
-    let icon: String
-    let title: String
-    let color: Color
-    var disabled: Bool = false
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.system(size: 20))
-                Text(title)
-                    .font(.nexusCaption)
-                    .fontWeight(.medium)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .background {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(color.opacity(disabled ? 0.05 : 0.15))
-            }
-            .foregroundStyle(disabled ? Color.gray.opacity(0.5) : color)
-        }
-        .disabled(disabled)
-    }
-}
-
-private struct DetailRow: View {
-    let label: String
-    let value: String
-    let icon: String
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 14))
-                .foregroundStyle(.secondary)
-                .frame(width: 24)
-
-            Text(label)
-                .font(.nexusSubheadline)
-                .foregroundStyle(.secondary)
-
-            Spacer()
-
-            Text(value)
-                .font(.nexusSubheadline)
-                .foregroundStyle(.primary)
-                .multilineTextAlignment(.trailing)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-    }
-}
-
-private struct PaymentRow: View {
-    let payment: SubscriptionPaymentModel
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 16))
-                .foregroundStyle(.green)
-                .frame(width: 24)
-
-            Text(payment.paidDate.formatted(date: .abbreviated, time: .omitted))
-                .font(.nexusSubheadline)
-                .foregroundStyle(.primary)
-
-            Spacer()
-
-            Text(formattedAmount)
-                .font(.system(size: 14, weight: .medium, design: .rounded))
-                .foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-    }
-
-    private var formattedAmount: String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = payment.currency
-        if payment.currency == "GEL" { formatter.currencySymbol = "₾" }
-        return formatter.string(from: NSNumber(value: payment.amount)) ?? "\(payment.currency) \(payment.amount)"
     }
 }
 
@@ -548,4 +384,3 @@ struct EditSubscriptionSheet: View {
         }
     }
 }
-

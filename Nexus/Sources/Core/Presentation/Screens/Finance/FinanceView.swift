@@ -41,6 +41,7 @@ private extension FinanceView {
             Button { showAddTransaction = true } label: {
                 Image(systemName: "plus")
             }
+            .accessibilityLabel("Add transaction")
         }
     }
 }
@@ -52,138 +53,185 @@ private extension FinanceView {
         ScrollView {
             VStack(spacing: 0) {
                 quickActionsSection
-                    .padding(.bottom, 24)
+                    .padding(.bottom, DesignSystem.Spacing.lg)
 
                 SectionDivider()
                 featuresSection
-                    .padding(.vertical, 20)
+                    .padding(.vertical, DesignSystem.Spacing.md)
 
                 SectionDivider()
                 toolsSection
-                    .padding(.vertical, 20)
+                    .padding(.vertical, DesignSystem.Spacing.md)
 
                 SectionDivider()
                 recentTransactionsSection
-                    .padding(.vertical, 20)
+                    .padding(.vertical, DesignSystem.Spacing.md)
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, DesignSystem.Spacing.md)
             .padding(.bottom, 80)
         }
+        .scrollEdgeEffectStyle(.soft, for: .top)
     }
 }
 
-// MARK: - Quick Actions Section
+// MARK: - Quick Actions
 
 private extension FinanceView {
     var quickActionsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
             Text("Quick Actions")
                 .font(.nexusHeadline)
                 .foregroundStyle(.secondary)
+                .padding(.top, DesignSystem.Spacing.md)
 
-            quickActionsRow
+            GlassEffectContainer(spacing: DesignSystem.Spacing.sm) {
+                quickActionButton(
+                    title: "Add",
+                    subtitle: "Transaction",
+                    icon: "plus.circle.fill",
+                    color: .nexusGreen,
+                    action: { showAddTransaction = true }
+                )
+                quickActionButton(
+                    title: "View",
+                    subtitle: "Transactions",
+                    icon: "list.bullet.rectangle",
+                    color: .nexusBlue,
+                    action: { showTransactions = true }
+                )
+                quickActionButton(
+                    title: "Manage",
+                    subtitle: "Budgets",
+                    icon: "chart.pie.fill",
+                    color: .nexusPurple,
+                    action: { showBudgets = true }
+                )
+            }
         }
-        .padding(.top, 16)
     }
 
-    var quickActionsRow: some View {
-        HStack(spacing: 12) {
-            QuickActionButton(
-                title: "Add",
-                subtitle: "Transaction",
-                icon: "plus.circle.fill",
-                color: .nexusGreen
-            ) {
-                showAddTransaction = true
+    func quickActionButton(
+        title: String,
+        subtitle: String,
+        icon: String,
+        color: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(spacing: DesignSystem.Spacing.xs) {
+                Image(systemName: icon)
+                    .font(.system(size: DesignSystem.Size.Icon.md, weight: .semibold))
+                    .foregroundStyle(color)
+                VStack(spacing: 2) {
+                    Text(title)
+                        .font(.nexusCaption)
+                        .fontWeight(.semibold)
+                    Text(subtitle)
+                        .font(.nexusCaption2)
+                        .foregroundStyle(.secondary)
+                }
             }
-
-            QuickActionButton(
-                title: "View",
-                subtitle: "Transactions",
-                icon: "list.bullet.rectangle",
-                color: .nexusBlue
-            ) {
-                showTransactions = true
-            }
-
-            QuickActionButton(
-                title: "Manage",
-                subtitle: "Budgets",
-                icon: "chart.pie.fill",
-                color: .nexusPurple
-            ) {
-                showBudgets = true
-            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, DesignSystem.Spacing.md)
         }
+        .buttonStyle(.glass)
+        .accessibilityLabel("\(title) \(subtitle)")
     }
 }
 
-// MARK: - Features Section
+// MARK: - Features
 
 private extension FinanceView {
     var featuresSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
             Text("Features")
                 .font(.nexusHeadline)
                 .foregroundStyle(.secondary)
 
-            featureCards
+            VStack(spacing: DesignSystem.Spacing.xs) {
+                featureCard(
+                    icon: "repeat.circle.fill",
+                    title: "Subscriptions",
+                    subtitle: "Track recurring payments",
+                    color: .nexusOrange,
+                    action: { showSubscriptions = true }
+                )
+                featureCard(
+                    icon: "house.fill",
+                    title: "House & Utilities",
+                    subtitle: "Manage property expenses",
+                    color: .nexusTeal,
+                    action: { showHouse = true }
+                )
+                featureCard(
+                    icon: "chart.line.uptrend.xyaxis",
+                    title: "Stocks & Investments",
+                    subtitle: "Monitor your portfolio",
+                    color: .nexusGreen,
+                    action: { showStocks = true }
+                )
+                featureCard(
+                    icon: "chart.pie.fill",
+                    title: "Budgets",
+                    subtitle: budgetSubtitle,
+                    color: .nexusPurple,
+                    action: { showBudgets = true }
+                )
+            }
         }
     }
 
-    var featureCards: some View {
-        VStack(spacing: 10) {
-            FeatureCard(
-                icon: "repeat.circle.fill",
-                title: "Subscriptions",
-                subtitle: "Track recurring payments",
-                color: .nexusOrange
-            ) {
-                showSubscriptions = true
-            }
+    func featureCard(
+        icon: String,
+        title: String,
+        subtitle: String,
+        color: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: DesignSystem.Spacing.md) {
+                Image(systemName: icon)
+                    .font(.system(size: DesignSystem.Size.Icon.md))
+                    .foregroundStyle(color)
+                    .frame(width: DesignSystem.Size.Button.compact, height: DesignSystem.Size.Button.compact)
+                    .background(color.opacity(0.15), in: Circle())
+                    .accessibilityHidden(true)
 
-            FeatureCard(
-                icon: "house.fill",
-                title: "House & Utilities",
-                subtitle: "Manage property expenses",
-                color: .nexusTeal
-            ) {
-                showHouse = true
-            }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.nexusSubheadline)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.primary)
+                    Text(subtitle)
+                        .font(.nexusCaption)
+                        .foregroundStyle(.secondary)
+                }
 
-            FeatureCard(
-                icon: "chart.line.uptrend.xyaxis",
-                title: "Stocks & Investments",
-                subtitle: "Monitor your portfolio",
-                color: .nexusGreen
-            ) {
-                showStocks = true
-            }
+                Spacer()
 
-            FeatureCard(
-                icon: "chart.pie.fill",
-                title: "Budgets",
-                subtitle: budgetSubtitle,
-                color: .nexusPurple
-            ) {
-                showBudgets = true
+                Image(systemName: "chevron.right")
+                    .font(.system(size: DesignSystem.Size.Icon.sm, weight: .semibold))
+                    .foregroundStyle(.tertiary)
             }
+            .padding(DesignSystem.Spacing.sm)
         }
+        .buttonStyle(.glass)
+        .accessibilityLabel(title)
+        .accessibilityHint(subtitle)
     }
 
     var budgetSubtitle: String {
-        if budgets.isEmpty {
-            return "Create spending limits"
-        }
-        return "\(budgets.count) active budget\(budgets.count == 1 ? "" : "s")"
+        budgets.isEmpty
+            ? "Create spending limits"
+            : "\(budgets.count) active budget\(budgets.count == 1 ? "" : "s")"
     }
 }
 
-// MARK: - Tools Section
+// MARK: - Tools
 
 private extension FinanceView {
     var toolsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
             Text("Tools")
                 .font(.nexusHeadline)
                 .foregroundStyle(.secondary)
@@ -193,17 +241,25 @@ private extension FinanceView {
     }
 }
 
-// MARK: - Recent Transactions Section
+// MARK: - Recent Transactions
 
 private extension FinanceView {
     var recentTransactionsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
             recentTransactionsHeader
 
             if transactions.isEmpty {
-                emptyTransactionsState
+                ContentUnavailableView(
+                    "No Transactions Yet",
+                    systemImage: "creditcard",
+                    description: Text("Tap + to add your first transaction")
+                )
             } else {
-                transactionsList
+                VStack(spacing: DesignSystem.Spacing.xs) {
+                    ForEach(transactions.prefix(5)) { transaction in
+                        TransactionRow(transaction: transaction)
+                    }
+                }
             }
         }
     }
@@ -219,32 +275,8 @@ private extension FinanceView {
             Button("View All") { showTransactions = true }
                 .font(.nexusSubheadline)
                 .foregroundStyle(Color.nexusPurple)
+                .accessibilityLabel("View all transactions")
         }
-    }
-
-    var transactionsList: some View {
-        VStack(spacing: 8) {
-            ForEach(transactions.prefix(5)) { transaction in
-                TransactionRow(transaction: transaction)
-            }
-        }
-    }
-
-    var emptyTransactionsState: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "creditcard")
-                .font(.system(size: 40))
-                .foregroundStyle(.secondary)
-
-            Text("No Transactions Yet")
-                .font(.nexusHeadline)
-
-            Text("Tap + to add your first transaction")
-                .font(.nexusSubheadline)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 32)
     }
 }
 
@@ -269,127 +301,8 @@ private struct SheetModifier: ViewModifier {
     }
 }
 
-// MARK: - Quick Action Button
-
-private struct QuickActionButton: View {
-    let title: String
-    let subtitle: String
-    let icon: String
-    let color: Color
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            buttonContent
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var buttonContent: some View {
-        VStack(spacing: 8) {
-            iconView
-            textContent
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
-        .background { cardBackground }
-    }
-
-    private var iconView: some View {
-        Image(systemName: icon)
-            .font(.system(size: 24))
-            .foregroundStyle(color)
-    }
-
-    private var textContent: some View {
-        VStack(spacing: 2) {
-            Text(title)
-                .font(.nexusCaption)
-                .fontWeight(.semibold)
-            Text(subtitle)
-                .font(.nexusCaption2)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private var cardBackground: some View {
-        RoundedRectangle(cornerRadius: 12)
-            .fill(Color.nexusSurface)
-            .overlay {
-                RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(Color.nexusBorder, lineWidth: 1)
-            }
-    }
-}
-
-// MARK: - Feature Card
-
-private struct FeatureCard: View {
-    let icon: String
-    let title: String
-    let subtitle: String
-    let color: Color
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            cardContent
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var cardContent: some View {
-        HStack(spacing: 14) {
-            iconView
-            textContent
-            Spacer()
-            chevronIcon
-        }
-        .padding(14)
-        .background { cardBackground }
-    }
-
-    private var iconView: some View {
-        Image(systemName: icon)
-            .font(.system(size: 20))
-            .foregroundStyle(color)
-            .frame(width: 40, height: 40)
-            .background {
-                Circle()
-                    .fill(color.opacity(0.15))
-            }
-    }
-
-    private var textContent: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .font(.nexusSubheadline)
-                .fontWeight(.medium)
-            Text(subtitle)
-                .font(.nexusCaption)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private var chevronIcon: some View {
-        Image(systemName: "chevron.right")
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(.tertiary)
-    }
-
-    private var cardBackground: some View {
-        RoundedRectangle(cornerRadius: 14)
-            .fill(Color.nexusSurface)
-            .overlay {
-                RoundedRectangle(cornerRadius: 14)
-                    .strokeBorder(Color.nexusBorder, lineWidth: 1)
-            }
-    }
-}
-
 // MARK: - Preview
 
 #Preview {
     FinanceView()
-        .preferredColorScheme(.dark)
 }

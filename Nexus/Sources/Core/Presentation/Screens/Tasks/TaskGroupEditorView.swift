@@ -80,12 +80,12 @@ struct TaskGroupEditorView: View {
                     HStack(spacing: 12) {
                         ZStack {
                             Circle()
-                                .fill((Color(hex: selectedColor) ?? .nexusPurple).opacity(0.15))
+                                .fill((Color(hex: selectedColor)).opacity(0.15))
                                 .frame(width: 44, height: 44)
 
                             Image(systemName: selectedIcon)
                                 .font(.system(size: 20, weight: .semibold))
-                                .foregroundStyle(Color(hex: selectedColor) ?? .nexusPurple)
+                                .foregroundStyle(Color(hex: selectedColor))
                         }
 
                         VStack(alignment: .leading, spacing: 2) {
@@ -153,21 +153,21 @@ private extension TaskGroupEditorView {
             ZStack {
                 Circle()
                     .fill(selectedIcon == icon
-                        ? (Color(hex: selectedColor) ?? .nexusPurple).opacity(0.2)
+                        ? (Color(hex: selectedColor)).opacity(0.2)
                         : Color.nexusSurface
                     )
                     .frame(width: 48, height: 48)
 
                 if selectedIcon == icon {
                     Circle()
-                        .strokeBorder(Color(hex: selectedColor) ?? .nexusPurple, lineWidth: 2)
+                        .strokeBorder(Color(hex: selectedColor), lineWidth: 2)
                         .frame(width: 48, height: 48)
                 }
 
                 Image(systemName: icon)
                     .font(.system(size: 20))
                     .foregroundStyle(selectedIcon == icon
-                        ? (Color(hex: selectedColor) ?? .nexusPurple)
+                        ? (Color(hex: selectedColor))
                         : .secondary
                     )
             }
@@ -176,7 +176,7 @@ private extension TaskGroupEditorView {
     }
 
     func colorButton(_ colorHex: String) -> some View {
-        let color = Color(hex: colorHex) ?? .nexusPurple
+        let color = Color(hex: colorHex)
 
         return Button {
             withAnimation(.spring(response: 0.2)) {

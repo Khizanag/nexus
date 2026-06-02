@@ -143,7 +143,7 @@ private extension PersonEditorView {
     }
 
     func colorButton(_ colorHex: String) -> some View {
-        let color = Color(hex: colorHex) ?? .nexusPurple
+        let color = Color(hex: colorHex)
 
         return Button {
             withAnimation(.spring(response: 0.2)) {
@@ -193,7 +193,7 @@ private extension PersonEditorView {
     var previewAvatar: some View {
         ZStack {
             Circle()
-                .fill(Color(hex: selectedColor) ?? .nexusPurple)
+                .fill(Color(hex: selectedColor))
                 .frame(width: 50, height: 50)
 
             Text(previewInitials)

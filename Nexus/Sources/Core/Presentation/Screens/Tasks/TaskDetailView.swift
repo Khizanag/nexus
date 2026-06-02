@@ -12,23 +12,21 @@ struct TaskDetailView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    headerSection
-                    detailsSection
-                    if !task.notes.isEmpty {
-                        notesSection
-                    }
-                    if let url = task.url, !url.isEmpty {
-                        linkSection(url)
-                    }
-                    if let assignees = task.assignees, !assignees.isEmpty {
-                        assigneesSection(assignees)
-                    }
-                    metadataSection
+            List {
+                headerSection
+                detailsSection
+                if !task.notes.isEmpty {
+                    notesSection
                 }
-                .padding(20)
+                if let url = task.url, !url.isEmpty {
+                    linkSection(url)
+                }
+                if let assignees = task.assignees, !assignees.isEmpty {
+                    assigneesSection(assignees)
+                }
+                metadataSection
             }
+            .listStyle(.insetGrouped)
             .background(Color.nexusBackground)
             .navigationTitle("Task Details")
             .navigationBarTitleDisplayMode(.inline)
@@ -48,13 +46,11 @@ private extension TaskDetailView {
         ToolbarItem(placement: .topBarLeading) {
             Button("Done") { dismiss() }
         }
-
         ToolbarItem(placement: .topBarTrailing) {
             Button {
                 showEditor = true
             } label: {
-                Text("Edit")
-                    .fontWeight(.medium)
+                Text("Edit").fontWeight(.medium)
             }
         }
     }
@@ -64,8 +60,8 @@ private extension TaskDetailView {
 
 private extension TaskDetailView {
     var headerSection: some View {
-        VStack(spacing: 16) {
-            HStack(spacing: 14) {
+        Section {
+            HStack(spacing: DesignSystem.Spacing.sm) {
                 completionIndicator
                 VStack(alignment: .leading, spacing: 6) {
                     titleText
@@ -73,33 +69,28 @@ private extension TaskDetailView {
                 }
                 Spacer()
             }
+            .padding(.vertical, DesignSystem.Spacing.xxs)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(headerAccessibilityLabel)
         }
-        .padding(20)
-        .background { sectionBackground }
     }
 
     var completionIndicator: some View {
         ZStack {
             if task.isCompleted {
                 Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.nexusGreen, Color.nexusGreen.opacity(0.8)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+                    .fill(Color.nexusGreen)
                     .frame(width: 32, height: 32)
-
                 Image(systemName: "checkmark")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(.white)
+                    .font(.nexusCaption.weight(.bold))
+                    .foregroundStyle(Color.nexusOnAccent)
             } else {
                 Circle()
                     .strokeBorder(priorityColor, lineWidth: 3)
                     .frame(width: 32, height: 32)
             }
         }
+        .accessibilityHidden(true)
     }
 
     var titleText: some View {
@@ -113,36 +104,41 @@ private extension TaskDetailView {
     var statusRow: some View {
         HStack(spacing: 8) {
             priorityBadge
-            if task.isCompleted {
-                completedBadge
-            }
+            if task.isCompleted { completedBadge }
         }
     }
 
     var priorityBadge: some View {
         HStack(spacing: 4) {
             Image(systemName: priorityIcon)
-                .font(.system(size: 10, weight: .semibold))
+                .font(.nexusCaption2.weight(.semibold))
             Text(task.priority.rawValue.capitalized)
-                .font(.system(size: 11, weight: .medium))
+                .font(.nexusCaption2.weight(.medium))
         }
         .foregroundStyle(priorityColor)
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .background(Capsule().fill(priorityColor.opacity(0.12)))
+        .accessibilityLabel("\(task.priority.rawValue.capitalized) priority")
     }
 
     var completedBadge: some View {
         HStack(spacing: 4) {
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 10, weight: .semibold))
+                .font(.nexusCaption2.weight(.semibold))
             Text("Completed")
-                .font(.system(size: 11, weight: .medium))
+                .font(.nexusCaption2.weight(.medium))
         }
         .foregroundStyle(Color.nexusGreen)
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .background(Capsule().fill(Color.nexusGreen.opacity(0.12)))
+        .accessibilityLabel("Completed")
+    }
+
+    var headerAccessibilityLabel: String {
+        let status = task.isCompleted ? "Completed" : "\(task.priority.rawValue.capitalized) priority"
+        return "\(task.title), \(status)"
     }
 }
 
@@ -150,67 +146,57 @@ private extension TaskDetailView {
 
 private extension TaskDetailView {
     var detailsSection: some View {
-        VStack(spacing: 0) {
+        Section("Details") {
             if let dueDate = task.dueDate {
-                detailRow(
-                    icon: "calendar",
-                    title: "Due Date",
-                    value: formatDate(dueDate),
-                    color: dueDateColor(dueDate)
-                )
-                Divider().padding(.leading, 52)
+                LabeledContent {
+                    Text(formatDate(dueDate))
+                        .font(.nexusSubheadline)
+                        .foregroundStyle(dueDateColor(dueDate))
+                } label: {
+                    Label("Due Date", systemImage: "calendar")
+                        .foregroundStyle(dueDateColor(dueDate))
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Due Date: \(formatDate(dueDate))")
             }
 
             if let reminderDate = task.reminderDate {
-                detailRow(
-                    icon: "bell.fill",
-                    title: "Reminder",
-                    value: formatDateTime(reminderDate),
-                    color: .nexusPurple
-                )
-                Divider().padding(.leading, 52)
+                LabeledContent {
+                    Text(formatDateTime(reminderDate))
+                        .font(.nexusSubheadline)
+                } label: {
+                    Label("Reminder", systemImage: "bell.fill")
+                        .foregroundStyle(Color.nexusPurple)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Reminder: \(formatDateTime(reminderDate))")
             }
 
             if let group = task.group {
-                detailRow(
-                    icon: group.icon,
-                    title: "Project",
-                    value: group.name,
-                    color: Color(hex: group.colorHex) ?? .nexusPurple
-                )
+                LabeledContent {
+                    Text(group.name)
+                        .font(.nexusSubheadline)
+                } label: {
+                    Label(
+                        "Project",
+                        systemImage: group.icon
+                    )
+                    .foregroundStyle(Color(hex: group.colorHex))
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Project: \(group.name)")
             } else {
-                detailRow(
-                    icon: "tray.fill",
-                    title: "Project",
-                    value: "Inbox",
-                    color: .nexusBlue
-                )
+                LabeledContent {
+                    Text("Inbox")
+                        .font(.nexusSubheadline)
+                } label: {
+                    Label("Project", systemImage: "tray.fill")
+                        .foregroundStyle(Color.nexusBlue)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Project: Inbox")
             }
         }
-        .background { sectionBackground }
-    }
-
-    func detailRow(icon: String, title: String, value: String, color: Color) -> some View {
-        HStack(spacing: 14) {
-            Image(systemName: icon)
-                .font(.system(size: 18))
-                .foregroundStyle(color)
-                .frame(width: 32)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.nexusCaption)
-                    .foregroundStyle(.secondary)
-
-                Text(value)
-                    .font(.nexusSubheadline)
-                    .fontWeight(.medium)
-            }
-
-            Spacer()
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 14)
     }
 }
 
@@ -218,15 +204,12 @@ private extension TaskDetailView {
 
 private extension TaskDetailView {
     var notesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            sectionTitle("Notes")
-
+        Section("Notes") {
             Text(task.notes)
                 .font(.nexusBody)
                 .foregroundStyle(.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(16)
-                .background { sectionBackground }
+                .accessibilityLabel("Notes: \(task.notes)")
         }
     }
 }
@@ -235,19 +218,18 @@ private extension TaskDetailView {
 
 private extension TaskDetailView {
     func linkSection(_ urlString: String) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            sectionTitle("Link")
-
+        Section("Link") {
             Button {
                 if let url = URL(string: urlString) {
                     UIApplication.shared.open(url)
                 }
             } label: {
-                HStack(spacing: 12) {
+                HStack(spacing: DesignSystem.Spacing.sm) {
                     Image(systemName: "link")
-                        .font(.system(size: 18))
+                        .font(.nexusHeadline)
                         .foregroundStyle(Color.nexusBlue)
-                        .frame(width: 32)
+                        .frame(width: DesignSystem.Size.Icon.lg)
+                        .accessibilityHidden(true)
 
                     Text(urlString)
                         .font(.nexusSubheadline)
@@ -257,13 +239,13 @@ private extension TaskDetailView {
                     Spacer()
 
                     Image(systemName: "arrow.up.right")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.nexusCaption.weight(.semibold))
                         .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
                 }
-                .padding(16)
-                .background { sectionBackground }
             }
-            .buttonStyle(.plain)
+            .accessibilityLabel("Open link: \(urlString)")
+            .accessibilityAddTraits(.isLink)
         }
     }
 }
@@ -272,54 +254,46 @@ private extension TaskDetailView {
 
 private extension TaskDetailView {
     func assigneesSection(_ assignees: [PersonModel]) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            sectionTitle("Assignees")
-
-            VStack(spacing: 0) {
-                ForEach(Array(assignees.enumerated()), id: \.element.id) { index, person in
-                    assigneeRow(person)
-
-                    if index < assignees.count - 1 {
-                        Divider().padding(.leading, 66)
-                    }
-                }
+        Section("Assignees") {
+            ForEach(assignees) { person in
+                assigneeRow(person)
             }
-            .background { sectionBackground }
         }
     }
 
     func assigneeRow(_ person: PersonModel) -> some View {
-        HStack(spacing: 14) {
+        HStack(spacing: DesignSystem.Spacing.sm) {
             personAvatar(person)
             personInfo(person)
             Spacer()
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(personAccessibilityLabel(person))
     }
 
     func personAvatar(_ person: PersonModel) -> some View {
         Text(person.initials)
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(.white)
-            .frame(width: 36, height: 36)
-            .background(Circle().fill(Color(hex: person.colorHex) ?? .nexusPurple))
+            .font(.nexusFootnote.weight(.semibold))
+            .foregroundStyle(Color.nexusOnAccent)
+            .frame(width: DesignSystem.Size.Avatar.sm + 8, height: DesignSystem.Size.Avatar.sm + 8)
+            .background(Circle().fill(Color(hex: person.colorHex)))
+            .accessibilityHidden(true)
     }
 
     func personInfo(_ person: PersonModel) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
                 Text(person.name)
-                    .font(.nexusSubheadline)
-                    .fontWeight(.medium)
+                    .font(.nexusSubheadline.weight(.medium))
 
                 if person.isLinkedToContact {
                     Text("Contacts")
-                        .font(.system(size: 9, weight: .medium))
+                        .font(.nexusCaption2.weight(.medium))
                         .foregroundStyle(Color.nexusBlue)
                         .padding(.horizontal, 5)
                         .padding(.vertical, 2)
                         .background(Capsule().fill(Color.nexusBlue.opacity(0.15)))
+                        .accessibilityLabel("linked to Contacts")
                 }
             }
 
@@ -334,56 +308,41 @@ private extension TaskDetailView {
             }
         }
     }
+
+    func personAccessibilityLabel(_ person: PersonModel) -> String {
+        var parts = [person.name]
+        if let email = person.email, !email.isEmpty { parts.append(email) }
+        else if let phone = person.phone, !phone.isEmpty { parts.append(phone) }
+        if person.isLinkedToContact { parts.append("linked to Contacts") }
+        return parts.joined(separator: ", ")
+    }
 }
 
 // MARK: - Metadata Section
 
 private extension TaskDetailView {
     var metadataSection: some View {
-        VStack(spacing: 8) {
-            metadataRow("Created", date: task.createdAt)
-            metadataRow("Updated", date: task.updatedAt)
+        Section {
+            LabeledContent("Created", value: formatDateTime(task.createdAt))
+                .font(.nexusCaption)
+                .foregroundStyle(.tertiary)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Created: \(formatDateTime(task.createdAt))")
+
+            LabeledContent("Updated", value: formatDateTime(task.updatedAt))
+                .font(.nexusCaption)
+                .foregroundStyle(.tertiary)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Updated: \(formatDateTime(task.updatedAt))")
+
             if let completedAt = task.completedAt {
-                metadataRow("Completed", date: completedAt)
+                LabeledContent("Completed", value: formatDateTime(completedAt))
+                    .font(.nexusCaption)
+                    .foregroundStyle(.tertiary)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Completed: \(formatDateTime(completedAt))")
             }
         }
-        .padding(.top, 8)
-    }
-
-    func metadataRow(_ label: String, date: Date) -> some View {
-        HStack {
-            Text(label)
-                .font(.nexusCaption)
-                .foregroundStyle(.tertiary)
-
-            Spacer()
-
-            Text(formatDateTime(date))
-                .font(.nexusCaption)
-                .foregroundStyle(.tertiary)
-        }
-    }
-}
-
-// MARK: - Helper Views
-
-private extension TaskDetailView {
-    func sectionTitle(_ title: String) -> some View {
-        Text(title)
-            .font(.nexusCaption)
-            .fontWeight(.semibold)
-            .foregroundStyle(.secondary)
-            .textCase(.uppercase)
-            .tracking(0.5)
-    }
-
-    var sectionBackground: some View {
-        RoundedRectangle(cornerRadius: 16)
-            .fill(Color.nexusSurface)
-            .overlay {
-                RoundedRectangle(cornerRadius: 16)
-                    .strokeBorder(Color.nexusBorder, lineWidth: 1)
-            }
     }
 }
 
@@ -418,11 +377,9 @@ private extension TaskDetailView {
     }
 
     func formatDate(_ date: Date) -> String {
-        if Calendar.current.isDateInToday(date) {
-            return "Today"
-        } else if Calendar.current.isDateInTomorrow(date) {
-            return "Tomorrow"
-        } else if date < Date() {
+        if Calendar.current.isDateInToday(date) { return "Today" }
+        if Calendar.current.isDateInTomorrow(date) { return "Tomorrow" }
+        if date < Date() {
             let days = Calendar.current.dateComponents([.day], from: date, to: Date()).day ?? 0
             return days == 1 ? "1 day overdue" : "\(days) days overdue"
         }
@@ -438,5 +395,4 @@ private extension TaskDetailView {
 
 #Preview {
     TaskDetailView(task: TaskModel(title: "Sample Task", notes: "Some notes here", priority: .high))
-        .preferredColorScheme(.dark)
 }

@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import Charts
 
 struct TransactionsView: View {
     @Environment(\.modelContext) private var modelContext
@@ -13,6 +14,7 @@ struct TransactionsView: View {
     @State private var rangeEndDate: Date = Date()
     @State private var showDateRangePicker = false
     @State private var exchangeRates: ExchangeRates?
+    @State private var searchText = ""
 
     private let currencyService: CurrencyService = DefaultCurrencyService()
 
@@ -20,19 +22,20 @@ struct TransactionsView: View {
 
     var body: some View {
         NavigationStack {
-            scrollContent
+            mainContent
                 .background(Color.nexusBackground)
                 .navigationTitle("Transactions")
+                .searchable(text: $searchText, prompt: "Search transactions")
                 .toolbar { toolbarContent }
                 .sheet(isPresented: $showAddTransaction) { TransactionEditorView(transaction: nil) }
-                .sheet(item: $selectedTransaction) { transaction in TransactionEditorView(transaction: transaction) }
+                .sheet(item: $selectedTransaction) { TransactionEditorView(transaction: $0) }
                 .sheet(isPresented: $showDateRangePicker) {
                     DateRangePickerSheet(startDate: $rangeStartDate, endDate: $rangeEndDate)
                         .presentationDetents([.medium])
                         .presentationDragIndicator(.visible)
                 }
                 .task { await fetchExchangeRates() }
-                .onChange(of: preferredCurrency) { Task { await fetchExchangeRates() } }
+                .onChange(of: preferredCurrency) { _, _ in Task { await fetchExchangeRates() } }
         }
     }
 }
@@ -46,6 +49,7 @@ private extension TransactionsView {
             Button { showAddTransaction = true } label: {
                 Image(systemName: "plus")
             }
+            .accessibilityLabel("Add transaction")
         }
     }
 }
@@ -53,192 +57,120 @@ private extension TransactionsView {
 // MARK: - Main Content
 
 private extension TransactionsView {
-    var scrollContent: some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                periodSelector
-                summaryCard
-                transactionsList
-            }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 80)
+    var mainContent: some View {
+        List {
+            periodSelectorSection
+            summarySection
+            chartSection
+            transactionsSection
         }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .scrollEdgeEffectStyle(.soft, for: .top)
     }
 }
 
-// MARK: - Period Selector
+// MARK: - Period Selector Section
 
 private extension TransactionsView {
-    var periodSelector: some View {
-        VStack(spacing: 12) {
-            periodButtons
-            dateRangeDisplay
-        }
-    }
+    var periodSelectorSection: some View {
+        Section {
+            VStack(spacing: DesignSystem.Spacing.sm) {
+                Picker("Period", selection: $selectedPeriod) {
+                    ForEach(TimePeriod.allCases.filter { $0 != .range }) { period in
+                        Text(period.title).tag(period)
+                    }
+                    Text("Range").tag(TimePeriod.range)
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: selectedPeriod) { _, new in
+                    if new == .range { showDateRangePicker = true }
+                }
 
-    var periodButtons: some View {
-        GeometryReader { geometry in
-            let tabWidth = geometry.size.width / CGFloat(TimePeriod.allCases.count)
-
-            ZStack(alignment: .leading) {
-                selectionIndicator(tabWidth: tabWidth, height: geometry.size.height)
-
-                HStack(spacing: 0) {
-                    ForEach(TimePeriod.allCases) { period in
-                        periodTab(period, width: tabWidth, height: geometry.size.height)
+                if selectedPeriod == .range {
+                    Button {
+                        showDateRangePicker = true
+                    } label: {
+                        HStack(spacing: DesignSystem.Spacing.xs) {
+                            Image(systemName: "calendar")
+                                .foregroundStyle(Color.nexusGreen)
+                            Text(formatDateRange(start: rangeStartDate, end: rangeEndDate))
+                                .font(.nexusSubheadline)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: DesignSystem.Size.Icon.sm, weight: .semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .foregroundStyle(.primary)
+                    .accessibilityLabel("Change date range")
+                    .accessibilityValue(formatDateRange(start: rangeStartDate, end: rangeEndDate))
+                } else {
+                    HStack(spacing: DesignSystem.Spacing.xs) {
+                        Image(systemName: "calendar")
+                            .foregroundStyle(Color.nexusGreen)
+                        Text(formatDateRange(start: currentPeriodDates.start, end: currentPeriodDates.end))
+                            .font(.nexusSubheadline)
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
-            .gesture(periodDragGesture(tabWidth: tabWidth))
+            .padding(.vertical, DesignSystem.Spacing.xs)
+            .listRowBackground(Color.nexusSurface)
         }
-        .frame(height: 36)
-        .padding(4)
-        .background { Capsule().fill(Color.nexusSurface) }
-    }
-
-    func selectionIndicator(tabWidth: CGFloat, height: CGFloat) -> some View {
-        Capsule()
-            .fill(Color.nexusGreen)
-            .frame(width: tabWidth - 4, height: height - 8)
-            .offset(x: CGFloat(TimePeriod.allCases.firstIndex(of: selectedPeriod) ?? 0) * tabWidth + 2)
-            .animation(.spring(response: 0.35, dampingFraction: 0.7), value: selectedPeriod)
-    }
-
-    func periodTab(_ period: TimePeriod, width: CGFloat, height: CGFloat) -> some View {
-        Text(period.title)
-            .font(.nexusCaption)
-            .fontWeight(selectedPeriod == period ? .semibold : .regular)
-            .foregroundStyle(selectedPeriod == period ? .white : .secondary)
-            .frame(width: width, height: height)
-            .contentShape(Rectangle())
-            .onTapGesture {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
-                    selectedPeriod = period
-                }
-                if period == .range { showDateRangePicker = true }
-            }
-    }
-
-    func periodDragGesture(tabWidth: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 0)
-            .onChanged { value in
-                let index = Int(value.location.x / tabWidth)
-                let clampedIndex = max(0, min(index, TimePeriod.allCases.count - 1))
-                let newPeriod = TimePeriod.allCases[clampedIndex]
-                if newPeriod != selectedPeriod {
-                    withAnimation(.spring(response: 0.25, dampingFraction: 0.7)) {
-                        selectedPeriod = newPeriod
-                    }
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                }
-            }
-            .onEnded { value in
-                let index = Int(value.location.x / tabWidth)
-                let clampedIndex = max(0, min(index, TimePeriod.allCases.count - 1))
-                if TimePeriod.allCases[clampedIndex] == .range { showDateRangePicker = true }
-            }
-    }
-
-    var dateRangeDisplay: some View {
-        let dates = currentPeriodDates
-        return Group {
-            if selectedPeriod == .range {
-                Button { showDateRangePicker = true } label: {
-                    dateRangeBadge(start: dates.start, end: dates.end, showChevron: true)
-                }
-                .buttonStyle(.plain)
-            } else {
-                dateRangeBadge(start: dates.start, end: dates.end, showChevron: false)
-            }
-        }
-    }
-
-    func dateRangeBadge(start: Date, end: Date, showChevron: Bool) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: "calendar")
-                .foregroundStyle(Color.nexusGreen)
-
-            Text(formatDateRange(start: start, end: end))
-                .font(.nexusSubheadline)
-
-            if showChevron {
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background { dateRangeBadgeBackground }
-    }
-
-    var dateRangeBadgeBackground: some View {
-        RoundedRectangle(cornerRadius: 12)
-            .fill(Color.nexusSurface)
-            .overlay {
-                RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(Color.nexusBorder, lineWidth: 1)
-            }
+        .listSectionSeparator(.hidden)
     }
 }
 
-// MARK: - Summary Card
+// MARK: - Summary Section
 
 private extension TransactionsView {
-    var summaryCard: some View {
-        VStack(spacing: 16) {
-            balanceHeader
-            incomeExpenseRow
-            if hasMultipleCurrencies {
-                currencyBreakdownSection
+    var summarySection: some View {
+        Section {
+            VStack(spacing: DesignSystem.Spacing.md) {
+                balanceRow
+                Divider()
+                incomeExpenseRow
+                if hasMultipleCurrencies {
+                    Divider()
+                    currencyBreakdownContent
+                }
             }
+            .padding(.vertical, DesignSystem.Spacing.xs)
+            .listRowBackground(Color.nexusSurface)
         }
-        .frame(maxWidth: .infinity)
-        .padding(20)
-        .background { summaryCardBackground }
+        .listSectionSeparator(.hidden)
     }
 
-    var summaryCardBackground: some View {
-        RoundedRectangle(cornerRadius: 20)
-            .fill(Color.nexusSurface)
-            .overlay {
-                RoundedRectangle(cornerRadius: 20)
-                    .strokeBorder(Color.nexusBorder, lineWidth: 1)
-            }
-    }
-
-    var balanceHeader: some View {
+    var balanceRow: some View {
         VStack(spacing: 4) {
-            HStack(spacing: 6) {
+            HStack(spacing: DesignSystem.Spacing.xxs) {
                 Text("Balance")
                     .font(.nexusSubheadline)
                     .foregroundStyle(.secondary)
-
                 if hasMultipleCurrencies {
                     Text("(\(baseCurrency.rawValue))")
                         .font(.nexusCaption)
                         .foregroundStyle(.tertiary)
                 }
             }
-
-            Text(formatCurrency(balance))
-                .font(.system(size: 36, weight: .bold, design: .rounded))
+            Text(balance.formatted(.currency(code: preferredCurrency)))
+                .font(.nexusDisplayNumber(.title))
                 .foregroundStyle(balance >= 0 ? Color.nexusGreen : Color.nexusRed)
+                .accessibilityLabel("Balance: \(balance.formatted(.currency(code: preferredCurrency)))")
         }
+        .frame(maxWidth: .infinity)
     }
 
     var incomeExpenseRow: some View {
-        HStack(spacing: 24) {
+        HStack(spacing: DesignSystem.Spacing.lg) {
             summaryItem(
                 icon: "arrow.down.circle.fill",
                 label: "Income",
                 amount: totalIncome,
                 color: .nexusGreen
             )
-
-            Divider()
-                .frame(height: 40)
-
+            Divider().frame(height: 40)
             summaryItem(
                 icon: "arrow.up.circle.fill",
                 label: "Expenses",
@@ -246,6 +178,7 @@ private extension TransactionsView {
                 color: .nexusRed
             )
         }
+        .frame(maxWidth: .infinity)
     }
 
     func summaryItem(icon: String, label: String, amount: Double, color: Color) -> some View {
@@ -257,92 +190,194 @@ private extension TransactionsView {
                     .foregroundStyle(.secondary)
             }
             .font(.nexusCaption)
-
-            Text(formatCurrency(amount))
+            Text(amount.formatted(.currency(code: preferredCurrency)))
                 .font(.nexusHeadline)
                 .foregroundStyle(color)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(label): \(amount.formatted(.currency(code: preferredCurrency)))")
     }
 
-    var currencyBreakdownSection: some View {
-        VStack(spacing: 12) {
-            Divider()
-                .background(Color.nexusBorder)
+    var currencyBreakdownContent: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
+            Text("By Currency")
+                .font(.nexusCaption)
+                .foregroundStyle(.secondary)
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("By Currency")
-                    .font(.nexusCaption)
-                    .foregroundStyle(.secondary)
+            ForEach(currencyBreakdown, id: \.currency) { item in
+                let currencyBalance = item.income - item.expense
+                HStack {
+                    HStack(spacing: DesignSystem.Spacing.xxs) {
+                        Text(item.currency.flag)
+                        Text(item.currency.rawValue)
+                            .font(.nexusSubheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Text(item.currency.format(currencyBalance))
+                        .font(.nexusSubheadline)
+                        .fontWeight(.medium)
+                        .foregroundStyle(currencyBalance >= 0 ? Color.nexusGreen : Color.nexusRed)
+                }
+            }
+        }
+    }
+}
 
-                ForEach(currencyBreakdown, id: \.currency) { item in
-                    currencyBreakdownRow(item)
+// MARK: - Chart Section
+
+private extension TransactionsView {
+    var chartSection: some View {
+        Section {
+            if periodTransactions.isEmpty {
+                EmptyView()
+            } else {
+                categoryChart
+                    .listRowBackground(Color.nexusSurface)
+            }
+        }
+        .listSectionSeparator(.hidden)
+    }
+
+    var categoryChart: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
+            Text("Breakdown")
+                .font(.nexusHeadline)
+                .foregroundStyle(.secondary)
+
+            Chart(categoryChartData, id: \.category) { item in
+                BarMark(
+                    x: .value("Amount", item.amount),
+                    y: .value("Category", item.label)
+                )
+                .foregroundStyle(item.color.gradient)
+                .cornerRadius(DesignSystem.CornerRadius.sm)
+                .annotation(position: .trailing) {
+                    Text(item.amount.formatted(.currency(code: preferredCurrency)))
+                        .font(.nexusCaption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .chartXAxis(.hidden)
+            .frame(height: CGFloat(categoryChartData.count) * 36)
+        }
+        .padding(.vertical, DesignSystem.Spacing.xs)
+    }
+
+    struct ChartItem {
+        let category: String
+        let label: String
+        let amount: Double
+        let color: Color
+    }
+
+    var categoryChartData: [ChartItem] {
+        let expensesByCategory = periodTransactions
+            .filter { $0.type == .expense }
+            .reduce(into: [TransactionCategory: Double]()) { acc, t in
+                acc[t.category, default: 0] += convertToBase(t.amount, from: t.currency)
+            }
+
+        return expensesByCategory
+            .sorted { $0.value > $1.value }
+            .prefix(6)
+            .map { category, amount in
+                ChartItem(
+                    category: category.rawValue,
+                    label: category.rawValue.capitalized,
+                    amount: amount,
+                    color: TransactionCategoryColorMapper.color(for: category.color)
+                )
+            }
+    }
+}
+
+// MARK: - Transactions Section
+
+private extension TransactionsView {
+    var transactionsSection: some View {
+        let grouped = groupedTransactions
+
+        return Group {
+            if isSearching && filteredTransactions.isEmpty {
+                Section {
+                    ContentUnavailableView.search(text: searchText)
+                        .listRowBackground(Color.clear)
+                }
+                .listSectionSeparator(.hidden)
+            } else if !isSearching && periodTransactions.isEmpty {
+                Section {
+                    ContentUnavailableView(
+                        "No Transactions",
+                        systemImage: "creditcard",
+                        description: Text("Tap + to add your first transaction")
+                    )
+                    .listRowBackground(Color.clear)
+                }
+                .listSectionSeparator(.hidden)
+            } else {
+                ForEach(grouped, id: \.date) { group in
+                    Section(header: Text(group.date.formatted(date: .complete, time: .omitted))
+                        .font(.nexusCaption)
+                        .foregroundStyle(.secondary)
+                    ) {
+                        ForEach(group.transactions) { transaction in
+                            TransactionRow(transaction: transaction)
+                                .listRowBackground(Color.nexusSurface)
+                                .listRowSeparator(.hidden)
+                                .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                                .onTapGesture { selectedTransaction = transaction }
+                                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                    Button(role: .destructive) {
+                                        modelContext.delete(transaction)
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+
+                                    Button {
+                                        selectedTransaction = transaction
+                                    } label: {
+                                        Label("Edit", systemImage: "pencil")
+                                    }
+                                    .tint(Color.nexusBlue)
+                                }
+                        }
+                    }
                 }
             }
         }
     }
 
-    func currencyBreakdownRow(_ item: (currency: Currency, income: Double, expense: Double)) -> some View {
-        let currencyBalance = item.income - item.expense
-        return HStack {
-            HStack(spacing: 6) {
-                Text(item.currency.flag)
-                    .font(.system(size: 16))
-                Text(item.currency.rawValue)
-                    .font(.nexusSubheadline)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-
-            Text(item.currency.format(currencyBalance))
-                .font(.nexusSubheadline)
-                .fontWeight(.medium)
-                .foregroundStyle(currencyBalance >= 0 ? Color.nexusGreen : Color.nexusRed)
-        }
+    var isSearching: Bool {
+        !searchText.isEmpty
     }
-}
 
-// MARK: - Transactions List
-
-private extension TransactionsView {
-    var transactionsList: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Transactions")
-                .font(.nexusHeadline)
-                .foregroundStyle(.secondary)
-
-            if periodTransactions.isEmpty {
-                emptyTransactionsState
-            } else {
-                transactionsListContent
-            }
+    var filteredTransactions: [TransactionModel] {
+        let query = searchText.lowercased()
+        return periodTransactions.filter { transaction in
+            transaction.title.lowercased().contains(query)
+                || transaction.category.rawValue.lowercased().contains(query)
+                || transaction.notes.lowercased().contains(query)
         }
     }
 
-    var transactionsListContent: some View {
-        LazyVStack(spacing: 8) {
-            ForEach(periodTransactions) { transaction in
-                TransactionRow(transaction: transaction)
-                    .onTapGesture { selectedTransaction = transaction }
-            }
-        }
+    var displayedTransactions: [TransactionModel] {
+        isSearching ? filteredTransactions : periodTransactions
     }
 
-    var emptyTransactionsState: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "creditcard")
-                .font(.system(size: 40))
-                .foregroundStyle(.secondary)
+    struct TransactionGroup {
+        let date: Date
+        let transactions: [TransactionModel]
+    }
 
-            Text("No Transactions")
-                .font(.nexusHeadline)
-
-            Text("Tap + to add your first transaction")
-                .font(.nexusSubheadline)
-                .foregroundStyle(.secondary)
+    var groupedTransactions: [TransactionGroup] {
+        let calendar = Calendar.current
+        let dict = Dictionary(grouping: displayedTransactions) { transaction in
+            calendar.startOfDay(for: transaction.date)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 40)
+        return dict
+            .sorted { $0.key > $1.key }
+            .map { TransactionGroup(date: $0.key, transactions: $0.value) }
     }
 }
 
@@ -390,9 +425,7 @@ private extension TransactionsView {
             .reduce(0) { $0 + convertToBase($1.amount, from: $1.currency) }
     }
 
-    var balance: Double {
-        totalIncome - totalExpense
-    }
+    var balance: Double { totalIncome - totalExpense }
 
     var currencyBreakdown: [(currency: Currency, income: Double, expense: Double)] {
         var breakdown: [String: (income: Double, expense: Double)] = [:]
@@ -440,28 +473,20 @@ private extension TransactionsView {
 
 private extension TransactionsView {
     func convertToBase(_ amount: Double, from currencyCode: String) -> Double {
-        guard let fromCurrency = Currency(rawValue: currencyCode),
-              let rates = exchangeRates else {
-            return amount
-        }
+        guard
+            let fromCurrency = Currency(rawValue: currencyCode),
+            let rates = exchangeRates
+        else { return amount }
         return currencyService.convert(amount: amount, from: fromCurrency, to: baseCurrency, rates: rates)
     }
 
-    func formatCurrency(_ amount: Double) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = preferredCurrency
-        return formatter.string(from: NSNumber(value: amount)) ?? "\(baseCurrency.symbol)0.00"
-    }
-
     func formatDateRange(start: Date, end: Date) -> String {
-        let formatter = DateFormatter()
         if Calendar.current.isDate(start, inSameDayAs: end) {
-            formatter.dateFormat = "EEEE, MMM d"
-            return formatter.string(from: start)
+            return start.formatted(Date.FormatStyle().weekday(.wide).month(.abbreviated).day())
         }
-        formatter.dateFormat = "MMM d"
-        return "\(formatter.string(from: start)) - \(formatter.string(from: end))"
+        let s = start.formatted(Date.FormatStyle().month(.abbreviated).day())
+        let e = end.formatted(Date.FormatStyle().month(.abbreviated).day())
+        return "\(s) – \(e)"
     }
 
     func fetchExchangeRates() async {
@@ -485,5 +510,4 @@ private extension TransactionsView {
 
 #Preview {
     TransactionsView()
-        .preferredColorScheme(.dark)
 }

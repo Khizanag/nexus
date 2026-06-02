@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import Charts
 
 struct BudgetDetailView: View {
     @Environment(\.modelContext) private var modelContext
@@ -10,75 +11,19 @@ struct BudgetDetailView: View {
 
     @State private var showAddExpense = false
 
-    private var spent: Double {
-        transactions.reduce(0) { $0 + $1.amount }
-    }
-
-    private var remaining: Double {
-        max(budget.effectiveBudget - spent, 0)
-    }
-
-    private var progress: Double {
-        budget.effectiveBudget > 0 ? spent / budget.effectiveBudget : 0
-    }
-
-    private var dailyBudget: Double {
-        remaining / Double(max(budget.daysRemaining, 1))
-    }
-
-    private var averageDaily: Double {
-        let calendar = Calendar.current
-        let daysPassed = calendar.dateComponents([.day], from: budget.currentPeriodStart, to: Date()).day ?? 1
-        return spent / Double(max(daysPassed, 1))
-    }
-
-    private var projectedTotal: Double {
-        averageDaily * Double(budget.daysRemaining) + spent
-    }
-
-    private var plannedExpenses: [PlannedExpenseModel] {
-        budget.plannedExpenses ?? []
-    }
-
-    private var plannedTotal: Double {
-        plannedExpenses.reduce(0) { $0 + $1.amount }
-    }
-
-    private var paidTotal: Double {
-        plannedExpenses.filter { $0.isPaid }.reduce(0) { $0 + $1.amount }
-    }
-
-    private var categoryColor: Color {
-        switch budget.category.color {
-        case "orange": .nexusOrange
-        case "blue": .nexusBlue
-        case "pink": .nexusPink
-        case "purple": .nexusPurple
-        case "red": .nexusRed
-        case "yellow": .yellow
-        case "brown": .brown
-        case "indigo": .indigo
-        case "teal": .nexusTeal
-        case "green": .nexusGreen
-        case "mint": .mint
-        case "cyan": .cyan
-        default: .nexusPurple
-        }
-    }
+    // MARK: - Body
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    headerSection
-                    progressCard
-                    statsGrid
-                    plannedExpensesSection
-                    projectionCard
-                    transactionsSection
-                }
-                .padding(20)
+            List {
+                progressSection
+                statsSection
+                projectionSection
+                plannedExpensesSection
+                transactionsSection
             }
+            .listStyle(.insetGrouped)
+            .scrollEdgeEffectStyle(.soft, for: .top)
             .background(Color.nexusBackground)
             .navigationTitle(budget.name)
             .navigationBarTitleDisplayMode(.inline)
@@ -95,111 +40,174 @@ struct BudgetDetailView: View {
     }
 }
 
-// MARK: - Header Section
+// MARK: - Progress Section
 
 private extension BudgetDetailView {
-    var headerSection: some View {
-        HStack(spacing: 16) {
-            Image(systemName: budget.category.icon)
-                .font(.system(size: 28))
-                .foregroundStyle(.white)
-                .frame(width: 64, height: 64)
-                .background {
-                    Circle().fill(categoryColor)
+    var progressSection: some View {
+        Section {
+            GlassCard(tint: categoryColor) {
+                VStack(spacing: DesignSystem.Spacing.md) {
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: DesignSystem.Spacing.xxs) {
+                            Text("Spent")
+                                .font(.nexusCaption)
+                                .foregroundStyle(.secondary)
+                            Text(spent.formatted(.currency(code: budget.currency)))
+                                .font(.nexusDisplayNumber(.title))
+                        }
+                        Spacer()
+                        BudgetProgressGauge(
+                            progress: progress,
+                            currency: budget.currency,
+                            spent: spent,
+                            total: budget.effectiveBudget,
+                            size: 80
+                        )
+                    }
+
+                    utilizationChart
                 }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(budget.category.rawValue.capitalized)
-                    .font(.nexusSubheadline)
-                    .foregroundStyle(.secondary)
-
-                Text(formatCurrency(budget.effectiveBudget))
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
-
-                Text(budget.period.displayName + " Budget")
-                    .font(.nexusCaption)
-                    .foregroundStyle(.tertiary)
             }
+            .listRowBackground(Color.clear)
+            .listRowInsets(.init(top: 0, leading: 0, bottom: 0, trailing: 0))
+        }
+    }
 
-            Spacer()
+    var utilizationChart: some View {
+        VStack(spacing: DesignSystem.Spacing.xxs) {
+            Chart {
+                BarMark(
+                    x: .value("Spent", spent),
+                    y: .value("Type", "Spent")
+                )
+                .foregroundStyle(progressColor)
+                .cornerRadius(DesignSystem.CornerRadius.sm)
+
+                BarMark(
+                    x: .value("Remaining", max(budget.effectiveBudget - spent, 0)),
+                    y: .value("Type", "Spent")
+                )
+                .foregroundStyle(Color.secondary.opacity(0.25))
+                .cornerRadius(DesignSystem.CornerRadius.sm)
+
+                if budget.alertThreshold < 1.0 {
+                    RuleMark(x: .value("Alert", budget.effectiveBudget * budget.alertThreshold))
+                        .lineStyle(StrokeStyle(lineWidth: 2, dash: [4, 3]))
+                        .foregroundStyle(Color.nexusOrange)
+                        .annotation(position: .top, alignment: .center) {
+                            Text("\(Int(budget.alertThreshold * 100))%")
+                                .font(.nexusCaption2)
+                                .foregroundStyle(Color.nexusOrange)
+                        }
+                }
+            }
+            .chartXScale(domain: 0...max(budget.effectiveBudget, spent))
+            .chartXAxis(.hidden)
+            .chartYAxis(.hidden)
+            .frame(height: 28)
+            .accessibilityLabel("Spending bar: \(spent.formatted(.currency(code: budget.currency))) of \(budget.effectiveBudget.formatted(.currency(code: budget.currency)))")
+
+            HStack {
+                Text(0.formatted(.currency(code: budget.currency).precision(.fractionLength(0))))
+                    .font(.nexusCaption2)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if budget.alertThreshold < 1.0 {
+                    Text("Alert: \(Int(budget.alertThreshold * 100))%")
+                        .font(.nexusCaption2)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                Text(budget.effectiveBudget.formatted(.currency(code: budget.currency).precision(.fractionLength(0))))
+                    .font(.nexusCaption2)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 }
 
-// MARK: - Progress Card
+// MARK: - Stats Section
 
 private extension BudgetDetailView {
-    var progressCard: some View {
-        VStack(spacing: 20) {
-            HStack(alignment: .bottom) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Spent")
-                        .font(.nexusCaption)
-                        .foregroundStyle(.white.opacity(0.7))
-
-                    Text(formatCurrency(spent))
-                        .font(.system(size: 36, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-                }
-
-                Spacer()
-
-                LargeProgressRing(
-                    progress: progress,
-                    color: categoryColor,
-                    size: 100
-                )
+    var statsSection: some View {
+        Section("Statistics") {
+            LabeledContent("Remaining") {
+                Text(remaining.formatted(.currency(code: budget.currency)))
+                    .foregroundStyle(remaining > 0 ? Color.nexusGreen : Color.nexusRed)
+                    .fontWeight(.medium)
             }
+            .listRowBackground(Color.nexusSurface)
 
-            VStack(spacing: 8) {
-                GeometryReader { geometry in
-                    ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.white.opacity(0.2))
-
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.white)
-                            .frame(width: geometry.size.width * min(progress, 1.0))
-
-                        if budget.alertThreshold < 1.0 {
-                            Rectangle()
-                                .fill(Color.white.opacity(0.5))
-                                .frame(width: 2)
-                                .offset(x: geometry.size.width * budget.alertThreshold)
-                        }
-                    }
-                }
-                .frame(height: 16)
-
-                HStack {
-                    Text(formatCurrency(0))
-                        .font(.nexusCaption2)
-                        .foregroundStyle(.white.opacity(0.6))
-
-                    Spacer()
-
-                    if budget.alertThreshold < 1.0 {
-                        Text("Alert: \(Int(budget.alertThreshold * 100))%")
-                            .font(.nexusCaption2)
-                            .foregroundStyle(.white.opacity(0.6))
-                    }
-
-                    Spacer()
-
-                    Text(formatCurrency(budget.effectiveBudget))
-                        .font(.nexusCaption2)
-                        .foregroundStyle(.white.opacity(0.6))
-                }
+            LabeledContent("Days Left") {
+                Text("\(budget.daysRemaining) days")
+                    .foregroundStyle(.secondary)
             }
+            .listRowBackground(Color.nexusSurface)
+
+            LabeledContent("Daily Limit") {
+                Text(dailyBudget.formatted(.currency(code: budget.currency)))
+                    .foregroundStyle(.secondary)
+            }
+            .listRowBackground(Color.nexusSurface)
+
+            LabeledContent("Avg Daily Spend") {
+                Text(averageDaily.formatted(.currency(code: budget.currency)))
+                    .foregroundStyle(averageDaily <= dailyBudget ? Color.nexusGreen : Color.nexusOrange)
+                    .fontWeight(.medium)
+            }
+            .listRowBackground(Color.nexusSurface)
+
+            LabeledContent("Period End") {
+                Text(budget.currentPeriodEnd.formatted(date: .abbreviated, time: .omitted))
+                    .foregroundStyle(.secondary)
+            }
+            .listRowBackground(Color.nexusSurface)
         }
-        .padding(24)
-        .background {
-            ConcentricRectangleBackground(
-                cornerRadius: 24,
-                layers: 6,
-                baseColor: categoryColor,
-                spacing: 6
-            )
+    }
+}
+
+// MARK: - Projection Section
+
+private extension BudgetDetailView {
+    var projectionSection: some View {
+        Section("Projection") {
+            LabeledContent("At Current Pace") {
+                Text(projectedTotal.formatted(.currency(code: budget.currency)))
+                    .foregroundStyle(projectedTotal > budget.effectiveBudget ? Color.nexusRed : Color.nexusGreen)
+                    .fontWeight(.medium)
+            }
+            .listRowBackground(Color.nexusSurface)
+
+            LabeledContent("Difference") {
+                let diff = abs(projectedTotal - budget.effectiveBudget)
+                let over = projectedTotal > budget.effectiveBudget
+                Text((over ? "+" : "-") + diff.formatted(.currency(code: budget.currency)))
+                    .foregroundStyle(over ? Color.nexusRed : Color.nexusGreen)
+                    .fontWeight(.medium)
+            }
+            .listRowBackground(Color.nexusSurface)
+
+            if projectedTotal > budget.effectiveBudget {
+                Label {
+                    Text("Reduce daily spending to \(dailyBudget.formatted(.currency(code: budget.currency))) to stay on budget")
+                        .font(.nexusCaption)
+                        .foregroundStyle(.secondary)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(Color.nexusOrange)
+                }
+                .listRowBackground(Color.nexusOrange.opacity(0.08))
+            } else {
+                Label {
+                    Text("You're on track to finish under budget")
+                        .font(.nexusCaption)
+                        .foregroundStyle(.secondary)
+                } icon: {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(Color.nexusGreen)
+                }
+                .listRowBackground(Color.nexusGreen.opacity(0.08))
+            }
         }
     }
 }
@@ -208,237 +216,45 @@ private extension BudgetDetailView {
 
 private extension BudgetDetailView {
     var plannedExpensesSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Image(systemName: "list.clipboard")
-                    .foregroundStyle(Color.nexusPurple)
-                Text("Planned Expenses")
-                    .font(.nexusHeadline)
-
-                Spacer()
-
-                Button {
-                    showAddExpense = true
-                } label: {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 24))
-                        .foregroundStyle(Color.nexusPurple)
-                }
-            }
-
+        Section {
             if plannedExpenses.isEmpty {
-                VStack(spacing: 12) {
-                    Image(systemName: "checklist")
-                        .font(.system(size: 32))
-                        .foregroundStyle(.secondary)
-
-                    Text("No planned expenses")
-                        .font(.nexusSubheadline)
-                        .foregroundStyle(.secondary)
-
-                    Text("Add recurring expenses like subscriptions to track your budget allocation")
-                        .font(.nexusCaption)
-                        .foregroundStyle(.tertiary)
-                        .multilineTextAlignment(.center)
-
-                    Button {
-                        showAddExpense = true
-                    } label: {
-                        Text("Add Expense")
-                            .font(.nexusSubheadline)
-                            .fontWeight(.medium)
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 10)
-                            .background {
-                                Capsule().fill(Color.nexusPurple)
-                            }
-                    }
-                    .padding(.top, 4)
+                ContentUnavailableView {
+                    Label("No Planned Expenses", systemImage: "checklist")
+                } description: {
+                    Text("Add recurring expenses like subscriptions to track budget allocation.")
+                } actions: {
+                    Button("Add Expense") { showAddExpense = true }
+                        .buttonStyle(.glass)
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 24)
+                .listRowBackground(Color.nexusSurface)
             } else {
                 PlannedExpensesSummaryCard(
                     plannedTotal: plannedTotal,
                     paidTotal: paidTotal,
                     budgetAmount: budget.effectiveBudget
                 )
+                .listRowBackground(Color.nexusSurface)
 
-                LazyVStack(spacing: 8) {
-                    ForEach(plannedExpenses.sorted { !$0.isPaid && $1.isPaid }) { expense in
-                        PlannedExpenseRow(expense: expense) {
-                            modelContext.delete(expense)
-                        }
+                ForEach(plannedExpenses.sorted { !$0.isPaid && $1.isPaid }) { expense in
+                    PlannedExpenseRow(expense: expense) {
+                        modelContext.delete(expense)
                     }
+                    .listRowBackground(Color.nexusSurface)
                 }
             }
-        }
-        .padding(16)
-        .background {
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.nexusSurface)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 16)
-                        .strokeBorder(Color.nexusBorder, lineWidth: 1)
-                }
-        }
-    }
-}
-
-// MARK: - Stats Grid
-
-private extension BudgetDetailView {
-    var statsGrid: some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-            statCard(
-                icon: "banknote",
-                title: "Remaining",
-                value: formatCurrency(remaining),
-                subtitle: "\(Int((1 - progress) * 100))% left",
-                color: remaining > 0 ? .nexusGreen : .nexusRed
-            )
-
-            statCard(
-                icon: "calendar",
-                title: "Days Left",
-                value: "\(budget.daysRemaining)",
-                subtitle: "until \(budget.currentPeriodEnd.formatted(date: .abbreviated, time: .omitted))",
-                color: .nexusBlue
-            )
-
-            statCard(
-                icon: "chart.bar",
-                title: "Daily Limit",
-                value: formatCurrency(dailyBudget),
-                subtitle: "to stay on budget",
-                color: .nexusPurple
-            )
-
-            statCard(
-                icon: "arrow.up.right",
-                title: "Avg Daily",
-                value: formatCurrency(averageDaily),
-                subtitle: "current pace",
-                color: averageDaily <= dailyBudget ? .nexusGreen : .nexusOrange
-            )
-        }
-    }
-
-    func statCard(icon: String, title: String, value: String, subtitle: String, color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 18))
-                .foregroundStyle(color)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.nexusCaption)
-                    .foregroundStyle(.secondary)
-
-                Text(value)
-                    .font(.nexusHeadline)
-
-                Text(subtitle)
-                    .font(.nexusCaption2)
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background {
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.nexusSurface)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 16)
-                        .strokeBorder(Color.nexusBorder, lineWidth: 1)
-                }
-        }
-    }
-}
-
-// MARK: - Projection Card
-
-private extension BudgetDetailView {
-    var projectionCard: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        } header: {
             HStack {
-                Image(systemName: "sparkles")
-                    .foregroundStyle(Color.nexusOrange)
-                Text("Projection")
-                    .font(.nexusHeadline)
-            }
-
-            HStack(spacing: 16) {
-                projectionItem(
-                    title: "At Current Pace",
-                    value: formatCurrency(projectedTotal),
-                    isOverBudget: projectedTotal > budget.effectiveBudget
-                )
-
-                Divider().frame(height: 50)
-
-                projectionItem(
-                    title: "Difference",
-                    value: formatCurrency(abs(projectedTotal - budget.effectiveBudget)),
-                    isOverBudget: projectedTotal > budget.effectiveBudget,
-                    showSign: true
-                )
-            }
-
-            if projectedTotal > budget.effectiveBudget {
-                HStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(Color.nexusOrange)
-
-                    Text("Reduce daily spending to \(formatCurrency(remaining / Double(max(budget.daysRemaining, 1)))) to stay on budget")
-                        .font(.nexusCaption)
-                        .foregroundStyle(.secondary)
+                Text("Planned Expenses")
+                Spacer()
+                Button {
+                    showAddExpense = true
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .foregroundStyle(Color.nexusPurple)
                 }
-                .padding(12)
-                .background {
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.nexusOrange.opacity(0.1))
-                }
-            } else {
-                HStack(spacing: 8) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Color.nexusGreen)
-
-                    Text("You're on track to finish under budget!")
-                        .font(.nexusCaption)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(12)
-                .background {
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.nexusGreen.opacity(0.1))
-                }
+                .accessibilityLabel("Add planned expense")
             }
         }
-        .padding(16)
-        .background {
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.nexusSurface)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 16)
-                        .strokeBorder(Color.nexusBorder, lineWidth: 1)
-                }
-        }
-    }
-
-    func projectionItem(title: String, value: String, isOverBudget: Bool, showSign: Bool = false) -> some View {
-        VStack(spacing: 4) {
-            Text(title)
-                .font(.nexusCaption)
-                .foregroundStyle(.secondary)
-
-            Text((showSign ? (isOverBudget ? "+" : "-") : "") + value)
-                .font(.nexusHeadline)
-                .foregroundStyle(isOverBudget ? Color.nexusRed : Color.nexusGreen)
-        }
-        .frame(maxWidth: .infinity)
     }
 }
 
@@ -446,56 +262,39 @@ private extension BudgetDetailView {
 
 private extension BudgetDetailView {
     var transactionsSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        Section {
+            if transactions.isEmpty {
+                ContentUnavailableView("No Transactions", systemImage: "tray")
+                    .listRowBackground(Color.nexusSurface)
+            } else {
+                ForEach(transactions) { transaction in
+                    transactionRow(transaction)
+                        .listRowBackground(Color.nexusSurface)
+                }
+            }
+        } header: {
             HStack {
                 Text("Transactions")
-                    .font(.nexusHeadline)
-                    .foregroundStyle(.secondary)
-
                 Spacer()
-
                 Text("\(transactions.count) items")
                     .font(.nexusCaption)
                     .foregroundStyle(.tertiary)
-            }
-
-            if transactions.isEmpty {
-                VStack(spacing: 12) {
-                    Image(systemName: "tray")
-                        .font(.system(size: 32))
-                        .foregroundStyle(.secondary)
-
-                    Text("No transactions yet")
-                        .font(.nexusSubheadline)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 32)
-            } else {
-                LazyVStack(spacing: 8) {
-                    ForEach(transactions) { transaction in
-                        transactionRow(transaction)
-                    }
-                }
             }
         }
     }
 
     func transactionRow(_ transaction: TransactionModel) -> some View {
-        HStack(spacing: 12) {
-            Circle()
-                .fill(categoryColor.opacity(0.15))
-                .frame(width: 40, height: 40)
-                .overlay {
-                    Image(systemName: transaction.category.icon)
-                        .font(.system(size: 14))
-                        .foregroundStyle(categoryColor)
-                }
+        HStack(spacing: DesignSystem.Spacing.sm) {
+            Image(systemName: transaction.category.icon)
+                .font(.nexusSubheadline)
+                .foregroundStyle(categoryColor)
+                .frame(width: DesignSystem.Size.Avatar.sm, height: DesignSystem.Size.Avatar.sm)
+                .background(categoryColor.opacity(0.12), in: Circle())
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(transaction.title)
                     .font(.nexusSubheadline)
-
                 Text(transaction.date.formatted(date: .abbreviated, time: .shortened))
                     .font(.nexusCaption)
                     .foregroundStyle(.secondary)
@@ -503,77 +302,68 @@ private extension BudgetDetailView {
 
             Spacer()
 
-            Text(formatCurrency(transaction.amount))
+            Text(transaction.amount.formatted(.currency(code: budget.currency)))
                 .font(.nexusHeadline)
                 .foregroundStyle(Color.nexusRed)
         }
-        .padding(12)
-        .background {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.nexusSurface)
-        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(transaction.title), \(transaction.amount.formatted(.currency(code: budget.currency))), \(transaction.date.formatted(date: .abbreviated, time: .omitted))")
     }
 }
 
-// MARK: - Helpers
+// MARK: - Computed Properties
 
 private extension BudgetDetailView {
-    func formatCurrency(_ amount: Double) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = budget.currency
-        return formatter.string(from: NSNumber(value: amount)) ?? "$0"
-    }
-}
-
-// MARK: - Large Progress Ring
-
-private struct LargeProgressRing: View {
-    let progress: Double
-    let color: Color
-    var size: CGFloat = 100
-
-    private var clampedProgress: Double {
-        min(max(progress, 0), 1)
+    var spent: Double {
+        transactions.reduce(0) { $0 + $1.amount }
     }
 
-    private var ringColor: Color {
+    var remaining: Double {
+        max(budget.effectiveBudget - spent, 0)
+    }
+
+    var progress: Double {
+        budget.effectiveBudget > 0 ? spent / budget.effectiveBudget : 0
+    }
+
+    var dailyBudget: Double {
+        remaining / Double(max(budget.daysRemaining, 1))
+    }
+
+    var averageDaily: Double {
+        let calendar = Calendar.current
+        let daysPassed = calendar.dateComponents([.day], from: budget.currentPeriodStart, to: Date()).day ?? 1
+        return spent / Double(max(daysPassed, 1))
+    }
+
+    var projectedTotal: Double {
+        averageDaily * Double(budget.daysRemaining) + spent
+    }
+
+    var plannedExpenses: [PlannedExpenseModel] {
+        budget.plannedExpenses ?? []
+    }
+
+    var plannedTotal: Double {
+        plannedExpenses.reduce(0) { $0 + $1.amount }
+    }
+
+    var paidTotal: Double {
+        plannedExpenses.filter { $0.isPaid }.reduce(0) { $0 + $1.amount }
+    }
+
+    var categoryColor: Color {
+        TransactionCategoryColorMapper.color(for: budget.category.color)
+    }
+
+    var progressColor: Color {
         if progress >= 1.0 { return .nexusRed }
-        if progress >= 0.8 { return .nexusOrange }
-        return color
-    }
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .stroke(Color.white.opacity(0.2), lineWidth: 10)
-
-            Circle()
-                .trim(from: 0, to: clampedProgress)
-                .stroke(
-                    LinearGradient(
-                        colors: [ringColor, ringColor.opacity(0.6)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    style: StrokeStyle(lineWidth: 10, lineCap: .round)
-                )
-                .rotationEffect(.degrees(-90))
-                .animation(.spring(response: 0.8), value: progress)
-
-            VStack(spacing: 2) {
-                Text("\(Int(clampedProgress * 100))")
-                    .font(.system(size: size * 0.28, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
-
-                Text("% used")
-                    .font(.system(size: size * 0.1))
-                    .foregroundStyle(.white.opacity(0.7))
-            }
-        }
-        .frame(width: size, height: size)
+        if progress >= budget.alertThreshold { return .nexusOrange }
+        return .nexusGreen
     }
 }
+
+// MARK: - Preview
 
 #Preview {
     BudgetDetailView(
@@ -585,5 +375,4 @@ private struct LargeProgressRing: View {
         ),
         transactions: []
     )
-    .preferredColorScheme(.dark)
 }

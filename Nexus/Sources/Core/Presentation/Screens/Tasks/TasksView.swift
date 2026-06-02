@@ -21,16 +21,21 @@ struct TasksView: View {
     @State private var showGroupEditor = false
     @State private var editingGroup: TaskGroupModel?
     @State private var collapsedGroups: Set<UUID> = []
+    @State private var searchText = ""
+    @State private var toggleTrigger = false
+    @State private var lightTrigger = false
+    @State private var mediumTrigger = false
 
     private let inboxId = UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                mainContent
+            ZStack(alignment: .bottom) {
+                taskList
                 toastOverlay
             }
             .navigationTitle("Tasks")
+            .searchable(text: $searchText, placement: .navigationBarDrawer, prompt: "Search tasks")
             .toolbar { toolbarContent }
             .sheet(isPresented: $showNewTask) {
                 TaskEditorView(task: nil)
@@ -47,116 +52,189 @@ struct TasksView: View {
             .sheet(item: $editingGroup) { group in
                 TaskGroupEditorView(group: group)
             }
+            .sensoryFeedback(.impact(weight: .medium), trigger: toggleTrigger)
+            .sensoryFeedback(.impact(weight: .light), trigger: lightTrigger)
+            .sensoryFeedback(.impact(weight: .medium), trigger: mediumTrigger)
         }
     }
 }
 
-// MARK: - Main Content
+// MARK: - Main List
 
 private extension TasksView {
-    var mainContent: some View {
-        VStack(spacing: 0) {
-            filterBar
-            taskList
+    var taskList: some View {
+        List {
+            filterPicker
+                .listRowBackground(Color.clear)
+                .listRowInsets(.init())
+                .listRowSeparator(.hidden)
+
+            if searchResults.isEmpty && !searchText.isEmpty {
+                searchEmptyRow
+            } else if searchResults.isEmpty {
+                mainEmptyRow
+            } else {
+                taskSections
+            }
         }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
         .background(Color.nexusBackground)
     }
 
-    var taskList: some View {
-        ScrollView {
-            LazyVStack(spacing: 24) {
-                ForEach(groupedTasks, id: \.0) { title, tasks, group in
-                    sectionContent(title: title, tasks: tasks, group: group)
+    @ViewBuilder
+    var taskSections: some View {
+        if groupingMode == .project && selectedFilter == .all && searchText.isEmpty {
+            projectSections
+        } else if selectedFilter == .all && searchText.isEmpty {
+            switch groupingMode {
+            case .dueDate:
+                ForEach(groupByDueDate(filteredTasks), id: \.0) { title, tasks in
+                    namedSection(title: title, tasks: tasks)
                 }
-
-                if filteredTasks.isEmpty {
-                    emptyState
+            case .priority:
+                ForEach(groupByPriority(filteredTasks), id: \.0) { title, tasks in
+                    namedSection(title: title, tasks: tasks)
                 }
+            case .none, .project:
+                flatTasksSection(filteredTasks)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 16)
-            .padding(.bottom, 120)
+        } else {
+            flatTasksSection(searchResults)
         }
     }
 
     @ViewBuilder
-    func sectionContent(title: String, tasks: [TaskModel], group: TaskGroupModel?) -> some View {
-        if let group {
-            projectSection(group: group, tasks: tasks)
-        } else if title == "Inbox", groupingMode == .project {
-            inboxSection(tasks: tasks)
-        } else if !title.isEmpty {
-            taskGroupSection(title: title, tasks: tasks)
-        } else {
+    var projectSections: some View {
+        ForEach(taskGroups) { group in
+            let tasks = filteredTasks.filter { $0.group?.id == group.id }
+            if !tasks.isEmpty {
+                projectSection(group: group, tasks: tasks)
+            }
+        }
+        let inboxTasks = filteredTasks.filter { $0.group == nil }
+        if !inboxTasks.isEmpty {
+            inboxSection(tasks: inboxTasks)
+        }
+    }
+
+    func namedSection(title: String, tasks: [TaskModel]) -> some View {
+        Section(header: sectionHeaderLabel(title, count: tasks.count)) {
             ForEach(tasks) { task in
-                taskRowView(task)
+                taskRow(task)
+                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                        completeSwipeAction(task)
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        deleteSwipeAction(task)
+                    }
             }
         }
     }
-}
 
-// MARK: - Filter Bar
+    func flatTasksSection(_ tasks: [TaskModel]) -> some View {
+        Section {
+            ForEach(tasks) { task in
+                taskRow(task)
+                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                        completeSwipeAction(task)
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        deleteSwipeAction(task)
+                    }
+            }
+        }
+    }
 
-private extension TasksView {
-    var filterBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(TaskFilter.allCases) { filter in
-                    FilterChip(
-                        title: filter.title,
-                        isSelected: selectedFilter == filter,
-                        count: countForFilter(filter)
-                    ) {
-                        withAnimation(.spring(response: 0.3)) {
-                            selectedFilter = filter
-                        }
+    func projectSection(group: TaskGroupModel, tasks: [TaskModel]) -> some View {
+        let isExpanded = Binding(
+            get: { !collapsedGroups.contains(group.id) },
+            set: { expanded in
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                    if expanded {
+                        collapsedGroups.remove(group.id)
+                    } else {
+                        collapsedGroups.insert(group.id)
                     }
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
-        }
-        .background(Color.nexusBackground)
+        )
+        let groupColor = Color(hex: group.colorHex)
+
+        return Section(
+            isExpanded: isExpanded,
+            content: {
+                ForEach(tasks) { task in
+                    taskRow(task)
+                        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                            completeSwipeAction(task)
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            deleteSwipeAction(task)
+                        }
+                }
+            },
+            header: {
+                projectSectionHeader(group: group, tasks: tasks, color: groupColor)
+            }
+        )
     }
 
-    func countForFilter(_ filter: TaskFilter) -> Int {
-        switch filter {
-        case .all:
-            allTasks.filter { !$0.isCompleted }.count
-        case .today:
-            allTasks.filter { task in
-                guard let dueDate = task.dueDate else { return false }
-                return Calendar.current.isDateInToday(dueDate) && !task.isCompleted
-            }.count
-        case .upcoming:
-            allTasks.filter { task in
-                guard let dueDate = task.dueDate else { return false }
-                return dueDate > Date() && !task.isCompleted
-            }.count
-        case .completed:
-            allTasks.filter { $0.isCompleted }.count
-        }
+    func inboxSection(tasks: [TaskModel]) -> some View {
+        let isExpanded = Binding(
+            get: { !collapsedGroups.contains(inboxId) },
+            set: { expanded in
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                    if expanded {
+                        collapsedGroups.remove(inboxId)
+                    } else {
+                        collapsedGroups.insert(inboxId)
+                    }
+                }
+            }
+        )
+
+        return Section(
+            isExpanded: isExpanded,
+            content: {
+                ForEach(tasks) { task in
+                    taskRow(task)
+                        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                            completeSwipeAction(task)
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            deleteSwipeAction(task)
+                        }
+                }
+            },
+            header: {
+                inboxSectionHeader(tasks: tasks)
+            }
+        )
+    }
+
+    var searchEmptyRow: some View {
+        ContentUnavailableView.search(text: searchText)
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+    }
+
+    var mainEmptyRow: some View {
+        ContentUnavailableView(
+            emptyStateTitle,
+            systemImage: selectedFilter == .completed ? "checkmark.circle" : "checklist",
+            description: Text(emptyStateSubtitle)
+        )
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
     }
 }
 
-// MARK: - Sections
+// MARK: - Section Headers
 
 private extension TasksView {
-    @ViewBuilder
-    func taskGroupSection(title: String, tasks: [TaskModel]) -> some View {
-        if !tasks.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                sectionHeader(title: title, count: tasks.count)
-
-                ForEach(tasks) { task in
-                    taskRowView(task)
-                }
-            }
-        }
-    }
-
-    func sectionHeader(title: String, count: Int) -> some View {
-        HStack {
+    func sectionHeaderLabel(_ title: String, count: Int) -> some View {
+        HStack(spacing: DesignSystem.Spacing.xs) {
             Text(title)
                 .font(.nexusCaption)
                 .fontWeight(.semibold)
@@ -167,196 +245,183 @@ private extension TasksView {
             Text("\(count)")
                 .font(.nexusCaption2)
                 .foregroundStyle(.tertiary)
-                .padding(.horizontal, 6)
+                .padding(.horizontal, DesignSystem.Spacing.xxs + 2)
                 .padding(.vertical, 2)
                 .background(Capsule().fill(Color.nexusBorder))
         }
-        .padding(.horizontal, 4)
+        .padding(.horizontal, DesignSystem.Spacing.xxs)
     }
 
-    @ViewBuilder
-    func projectSection(group: TaskGroupModel, tasks: [TaskModel]) -> some View {
-        let isCollapsed = collapsedGroups.contains(group.id)
-        let groupColor = Color(hex: group.colorHex) ?? .nexusPurple
-
-        VStack(alignment: .leading, spacing: 0) {
-            projectHeader(group: group, tasks: tasks, isCollapsed: isCollapsed, color: groupColor)
-                .contextMenu {
-                    projectContextMenu(group: group)
-                }
-
-            if !isCollapsed, !tasks.isEmpty {
-                projectTasks(tasks)
+    func projectSectionHeader(group: TaskGroupModel, tasks: [TaskModel], color: Color) -> some View {
+        HStack(spacing: DesignSystem.Spacing.sm) {
+            ZStack {
+                Circle()
+                    .fill(color.opacity(0.15))
+                    .frame(width: DesignSystem.Size.Icon.badge, height: DesignSystem.Size.Icon.badge)
+                Image(systemName: group.icon)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(color)
             }
-        }
-    }
+            .accessibilityHidden(true)
 
-    func projectHeader(group: TaskGroupModel, tasks: [TaskModel], isCollapsed: Bool, color: Color) -> some View {
-        Button {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                toggleCollapsed(group.id)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(group.name)
+                    .font(.nexusHeadline)
+                    .foregroundStyle(.primary)
+                Text("\(tasks.count) task\(tasks.count == 1 ? "" : "s")")
+                    .font(.nexusCaption)
+                    .foregroundStyle(.secondary)
             }
-        } label: {
-            HStack(spacing: 0) {
-                accentBar(color: color)
-                projectHeaderContent(group: group, tasks: tasks, isCollapsed: isCollapsed, color: color)
-            }
-            .background { projectCardBackground(color: color) }
-            .overlay { projectCardBorder(color: color) }
-        }
-        .buttonStyle(.plain)
-    }
 
-    func accentBar(color: Color) -> some View {
-        RoundedRectangle(cornerRadius: 2)
-            .fill(color)
-            .frame(width: 4)
-            .padding(.vertical, 8)
-    }
-
-    func projectHeaderContent(group: TaskGroupModel, tasks: [TaskModel], isCollapsed: Bool, color: Color) -> some View {
-        HStack(spacing: 12) {
-            projectIcon(icon: group.icon, color: color)
-            projectInfo(name: group.name, taskCount: tasks.count)
             Spacer()
-            chevron(isCollapsed: isCollapsed, color: color)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 14)
-    }
-
-    func projectIcon(icon: String, color: Color) -> some View {
-        ZStack {
-            Circle()
-                .fill(color.opacity(0.15))
-                .frame(width: 40, height: 40)
-
-            Image(systemName: icon)
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(color)
+        .padding(.vertical, DesignSystem.Spacing.xs)
+        .contentShape(Rectangle())
+        .contextMenu {
+            Button {
+                editingGroup = group
+            } label: {
+                Label("Edit Project", systemImage: "pencil")
+            }
+            Button(role: .destructive) {
+                deleteGroup(group)
+            } label: {
+                Label("Delete Project", systemImage: "trash")
+            }
         }
+        .accessibilityLabel("\(group.name), \(tasks.count) task\(tasks.count == 1 ? "" : "s")")
     }
 
-    func projectInfo(name: String, taskCount: Int) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(name)
-                .font(.nexusHeadline)
-                .foregroundStyle(.primary)
+    func inboxSectionHeader(tasks: [TaskModel]) -> some View {
+        HStack(spacing: DesignSystem.Spacing.sm) {
+            ZStack {
+                Circle()
+                    .fill(Color.nexusBlue.opacity(0.15))
+                    .frame(width: DesignSystem.Size.Icon.badge, height: DesignSystem.Size.Icon.badge)
+                Image(systemName: "tray.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Color.nexusBlue)
+            }
+            .accessibilityHidden(true)
 
-            Text("\(taskCount) task\(taskCount == 1 ? "" : "s")")
-                .font(.nexusCaption)
-                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Inbox")
+                    .font(.nexusHeadline)
+                    .foregroundStyle(.primary)
+                Text("\(tasks.count) task\(tasks.count == 1 ? "" : "s")")
+                    .font(.nexusCaption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
         }
+        .padding(.vertical, DesignSystem.Spacing.xs)
+        .accessibilityLabel("Inbox, \(tasks.count) task\(tasks.count == 1 ? "" : "s")")
     }
+}
 
-    func chevron(isCollapsed: Bool, color: Color) -> some View {
-        Image(systemName: "chevron.right")
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(color.opacity(0.6))
-            .rotationEffect(.degrees(isCollapsed ? 0 : 90))
-    }
+// MARK: - Swipe Actions
 
-    func projectCardBackground(color: Color) -> some View {
-        RoundedRectangle(cornerRadius: 16)
-            .fill(Color.nexusSurface)
-            .shadow(color: color.opacity(0.08), radius: 8, x: 0, y: 4)
-    }
-
-    func projectCardBorder(color: Color) -> some View {
-        RoundedRectangle(cornerRadius: 16)
-            .strokeBorder(
-                LinearGradient(
-                    colors: [color.opacity(0.3), color.opacity(0.1)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
-                lineWidth: 1
+private extension TasksView {
+    func completeSwipeAction(_ task: TaskModel) -> some View {
+        Button {
+            toggleTask(task)
+        } label: {
+            Label(
+                task.isCompleted ? "Restore" : "Complete",
+                systemImage: task.isCompleted ? "arrow.uturn.backward" : "checkmark.circle"
             )
+        }
+        .tint(task.isCompleted ? Color.nexusOrange : Color.nexusGreen)
     }
 
-    @ViewBuilder
-    func projectContextMenu(group: TaskGroupModel) -> some View {
-        Button {
-            editingGroup = group
-        } label: {
-            Label("Edit Project", systemImage: "pencil")
-        }
-
+    func deleteSwipeAction(_ task: TaskModel) -> some View {
         Button(role: .destructive) {
-            deleteGroup(group)
+            deleteTask(task)
         } label: {
-            Label("Delete Project", systemImage: "trash")
+            Label("Delete", systemImage: "trash")
         }
     }
+}
 
-    func projectTasks(_ tasks: [TaskModel]) -> some View {
-        VStack(spacing: 10) {
-            ForEach(tasks) { task in
-                taskRowView(task)
+// MARK: - Filter Picker
+
+private extension TasksView {
+    var filterPicker: some View {
+        Picker("Filter", selection: $selectedFilter) {
+            ForEach(TaskFilter.allCases) { filter in
+                Text(filter.title).tag(filter)
             }
         }
-        .padding(.top, 12)
-        .padding(.leading, 4)
-        .transition(.opacity.combined(with: .move(edge: .top)))
-    }
-
-    @ViewBuilder
-    func inboxSection(tasks: [TaskModel]) -> some View {
-        let isCollapsed = collapsedGroups.contains(inboxId)
-
-        VStack(alignment: .leading, spacing: 0) {
-            inboxHeader(tasks: tasks, isCollapsed: isCollapsed)
-
-            if !isCollapsed, !tasks.isEmpty {
-                projectTasks(tasks)
-            }
-        }
-    }
-
-    func inboxHeader(tasks: [TaskModel], isCollapsed: Bool) -> some View {
-        Button {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                toggleCollapsed(inboxId)
-            }
-        } label: {
-            HStack(spacing: 0) {
-                accentBar(color: Color.nexusBlue)
-                inboxHeaderContent(tasks: tasks, isCollapsed: isCollapsed)
-            }
-            .background { projectCardBackground(color: Color.nexusBlue) }
-            .overlay { projectCardBorder(color: Color.nexusBlue) }
-        }
-        .buttonStyle(.plain)
-    }
-
-    func inboxHeaderContent(tasks: [TaskModel], isCollapsed: Bool) -> some View {
-        HStack(spacing: 12) {
-            projectIcon(icon: "tray.fill", color: Color.nexusBlue)
-            projectInfo(name: "Inbox", taskCount: tasks.count)
-            Spacer()
-            chevron(isCollapsed: isCollapsed, color: Color.nexusBlue)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 14)
+        .pickerStyle(.segmented)
+        .padding(.horizontal, DesignSystem.Spacing.md)
+        .padding(.vertical, DesignSystem.Spacing.xs)
     }
 }
 
 // MARK: - Task Row
 
 private extension TasksView {
-    @ViewBuilder
-    func taskRowView(_ task: TaskModel) -> some View {
-        TaskRow(
-            task: task,
-            isRecentlyChanged: recentlyChangedTaskId == task.id,
-            isLeaving: taskIsLeaving && recentlyChangedTaskId == task.id,
-            onToggle: { toggleTask(task) }
-        )
-        .onTapGesture {
+    func taskRow(_ task: TaskModel) -> some View {
+        Button {
             viewingTask = task
+        } label: {
+            TaskRow(
+                task: task,
+                isRecentlyChanged: recentlyChangedTaskId == task.id,
+                isLeaving: taskIsLeaving && recentlyChangedTaskId == task.id,
+                onToggle: { toggleTask(task) }
+            )
         }
+        .buttonStyle(.plain)
+        .listRowBackground(rowBackground(for: task))
+        .listRowSeparator(.hidden)
+        .listRowInsets(EdgeInsets(
+            top: DesignSystem.Spacing.xxs,
+            leading: DesignSystem.Spacing.md,
+            bottom: DesignSystem.Spacing.xxs,
+            trailing: DesignSystem.Spacing.md
+        ))
         .contextMenu {
             taskContextMenu(task)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(rowAccessibilityLabel(task))
+        .accessibilityValue(task.isCompleted ? "Completed" : "Not completed")
+        .accessibilityHint("Double tap to view details")
+    }
+
+    func rowBackground(for task: TaskModel) -> some View {
+        let highlight = task.isCompleted ? Color.nexusGreen : Color.nexusOrange
+        let isChanged = recentlyChangedTaskId == task.id
+        return RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.card, style: .continuous)
+            .fill(isChanged ? highlight.opacity(0.08) : Color.nexusSurface)
+            .overlay {
+                RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.card, style: .continuous)
+                    .strokeBorder(
+                        isChanged ? highlight.opacity(0.4) : priorityAccentColor(for: task).opacity(task.isCompleted ? 0 : 0.15),
+                        lineWidth: isChanged ? 1.5 : 1
+                    )
+            }
+    }
+
+    func rowAccessibilityLabel(_ task: TaskModel) -> String {
+        var parts = [task.title]
+        if !task.notes.isEmpty { parts.append(task.notes) }
+        if let due = task.dueDate {
+            parts.append("Due \(due.formatted(.dateTime.month(.abbreviated).day()))")
+        }
+        if task.priority == .urgent { parts.append("Urgent priority") }
+        else if task.priority == .high { parts.append("High priority") }
+        return parts.joined(separator: ", ")
+    }
+
+    func priorityAccentColor(for task: TaskModel) -> Color {
+        switch task.priority {
+        case .urgent: Color.nexusRed
+        case .high: Color.nexusOrange
+        case .medium: Color.nexusBlue
+        case .low: Color.nexusTextTertiary
         }
     }
 
@@ -456,129 +521,71 @@ private extension TasksView {
     }
 }
 
-// MARK: - Empty State
-
-private extension TasksView {
-    var emptyState: some View {
-        VStack(spacing: 16) {
-            Image(systemName: selectedFilter == .completed ? "checkmark.circle" : "checklist")
-                .font(.system(size: 48))
-                .foregroundStyle(.secondary)
-
-            Text(emptyStateTitle)
-                .font(.nexusTitle3)
-
-            Text(emptyStateSubtitle)
-                .font(.nexusSubheadline)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 60)
-    }
-
-    var emptyStateTitle: String {
-        switch selectedFilter {
-        case .all: "No Tasks"
-        case .today: "No Tasks Today"
-        case .upcoming: "No Upcoming Tasks"
-        case .completed: "No Completed Tasks"
-        }
-    }
-
-    var emptyStateSubtitle: String {
-        switch selectedFilter {
-        case .completed: "Complete some tasks to see them here"
-        default: "Tap + to add a new task"
-        }
-    }
-}
-
 // MARK: - Toast
 
 private extension TasksView {
     @ViewBuilder
     var toastOverlay: some View {
         if let message = toastMessage {
-            VStack {
-                Spacer()
-                statusToast(message: message, isCompletion: toastIsCompletion)
-                    .padding(.bottom, 20)
-            }
-            .transition(.asymmetric(
-                insertion: .move(edge: .bottom).combined(with: .opacity),
-                removal: .opacity.combined(with: .scale(scale: 0.9))
-            ))
-            .zIndex(100)
+            statusToast(message: message, isCompletion: toastIsCompletion)
+                .padding(.horizontal, DesignSystem.Spacing.md)
+                .padding(.bottom, DesignSystem.Spacing.lg)
+                .transition(.asymmetric(
+                    insertion: .move(edge: .bottom).combined(with: .opacity),
+                    removal: .opacity.combined(with: .scale(scale: 0.9))
+                ))
+                .zIndex(100)
         }
     }
 
     func statusToast(message: String, isCompletion: Bool) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DesignSystem.Spacing.sm) {
             toastIcon(isCompletion: isCompletion)
 
             VStack(alignment: .leading, spacing: 2) {
-                toastText(message: message)
-                toastStatus(isCompletion: isCompletion)
+                Text(message)
+                    .font(.nexusSubheadline)
+                    .fontWeight(.medium)
+                    .lineLimit(1)
+                Text(isCompletion ? "Completed" : "Restored")
+                    .font(.nexusCaption)
+                    .foregroundStyle(.secondary)
             }
 
             Spacer()
-
-            undoButton
+            undoButton(isCompletion: isCompletion)
         }
-        .padding(.leading, 16)
-        .padding(.trailing, 10)
-        .padding(.vertical, 12)
-        .background { toastBackground(isCompletion: isCompletion) }
-        .padding(.horizontal, 16)
+        .padding(.leading, DesignSystem.Spacing.md)
+        .padding(.trailing, DesignSystem.Spacing.xs)
+        .padding(.vertical, DesignSystem.Spacing.sm)
+        .glassBackground(
+            in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.lg, style: .continuous),
+            tint: isCompletion ? Color.nexusGreen : Color.nexusOrange
+        )
     }
 
     func toastIcon(isCompletion: Bool) -> some View {
         Image(systemName: isCompletion ? "checkmark.circle.fill" : "arrow.uturn.backward.circle.fill")
-            .font(.system(size: 24))
+            .font(.title2)
             .foregroundStyle(isCompletion ? Color.nexusGreen : Color.nexusOrange)
     }
 
-    func toastText(message: String) -> some View {
-        Text(message)
-            .font(.nexusSubheadline)
-            .fontWeight(.medium)
-            .lineLimit(1)
-    }
-
-    func toastStatus(isCompletion: Bool) -> some View {
-        Text(isCompletion ? "Completed" : "Restored")
-            .font(.nexusCaption)
-            .foregroundStyle(.secondary)
-    }
-
-    var undoButton: some View {
+    func undoButton(isCompletion: Bool) -> some View {
         Button {
             undoTaskChange()
         } label: {
             Text("Undo")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
+                .font(.nexusSubheadline)
+                .fontWeight(.semibold)
+                .foregroundStyle(Color.nexusOnAccent)
+                .padding(.horizontal, DesignSystem.Spacing.md)
+                .padding(.vertical, DesignSystem.Spacing.xs)
                 .background(
                     Capsule()
-                        .fill(toastIsCompletion ? Color.nexusGreen : Color.nexusOrange)
+                        .fill(isCompletion ? Color.nexusGreen : Color.nexusOrange)
                 )
         }
         .buttonStyle(.plain)
-    }
-
-    func toastBackground(isCompletion: Bool) -> some View {
-        RoundedRectangle(cornerRadius: 20)
-            .fill(.ultraThinMaterial)
-            .overlay {
-                RoundedRectangle(cornerRadius: 20)
-                    .strokeBorder(
-                        (isCompletion ? Color.nexusGreen : Color.nexusOrange).opacity(0.3),
-                        lineWidth: 1
-                    )
-            }
-            .shadow(color: .black.opacity(0.25), radius: 20, x: 0, y: 8)
     }
 }
 
@@ -605,6 +612,8 @@ private extension TasksView {
         } label: {
             Image(systemName: "line.3.horizontal.decrease.circle")
         }
+        .buttonStyle(.glass)
+        .accessibilityLabel("Filter and group options")
     }
 
     var groupBySection: some View {
@@ -646,17 +655,13 @@ private extension TasksView {
                 Image(systemName: "checkmark")
                     .foregroundStyle(.blue)
             }
-
             Text(sort.title)
-
             Spacer()
-
             if sortMode == sort {
                 Image(systemName: sortAscending ? "arrow.up" : "arrow.down")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-
             Image(systemName: sort.icon)
                 .foregroundStyle(.secondary)
         }
@@ -686,6 +691,8 @@ private extension TasksView {
         } label: {
             Image(systemName: "plus")
         }
+        .buttonStyle(.glass)
+        .accessibilityLabel("New task")
     }
 }
 
@@ -693,41 +700,47 @@ private extension TasksView {
 
 private extension TasksView {
     var filteredTasks: [TaskModel] {
-        let filtered: [TaskModel]
+        let base: [TaskModel]
         switch selectedFilter {
         case .all:
-            filtered = allTasks.filter { !$0.isCompleted }
+            base = allTasks.filter { !$0.isCompleted }
         case .today:
-            filtered = allTasks.filter { task in
+            base = allTasks.filter { task in
                 guard let dueDate = task.dueDate else { return false }
                 return Calendar.current.isDateInToday(dueDate) && !task.isCompleted
             }
         case .upcoming:
-            filtered = allTasks.filter { task in
+            base = allTasks.filter { task in
                 guard let dueDate = task.dueDate else { return false }
                 return dueDate > Date() && !task.isCompleted
             }
         case .completed:
-            filtered = allTasks.filter { $0.isCompleted }
+            base = allTasks.filter { $0.isCompleted }
         }
-
-        return sortTasks(filtered)
+        return sortTasks(base)
     }
 
-    var groupedTasks: [(String, [TaskModel], TaskGroupModel?)] {
-        guard selectedFilter == .all else {
-            return [("", filteredTasks, nil)]
+    var searchResults: [TaskModel] {
+        guard !searchText.isEmpty else { return filteredTasks }
+        return filteredTasks.filter { task in
+            task.title.localizedCaseInsensitiveContains(searchText) ||
+            task.notes.localizedCaseInsensitiveContains(searchText)
         }
+    }
 
-        switch groupingMode {
-        case .none:
-            return [("", filteredTasks, nil)]
-        case .dueDate:
-            return groupByDueDate(filteredTasks).map { ($0.0, $0.1, nil) }
-        case .priority:
-            return groupByPriority(filteredTasks).map { ($0.0, $0.1, nil) }
-        case .project:
-            return groupByProject(filteredTasks)
+    var emptyStateTitle: String {
+        switch selectedFilter {
+        case .all: "No Tasks"
+        case .today: "No Tasks Today"
+        case .upcoming: "No Upcoming Tasks"
+        case .completed: "No Completed Tasks"
+        }
+    }
+
+    var emptyStateSubtitle: String {
+        switch selectedFilter {
+        case .completed: "Complete some tasks to see them here"
+        default: "Tap + to add a new task"
         }
     }
 }
@@ -735,14 +748,6 @@ private extension TasksView {
 // MARK: - Actions
 
 private extension TasksView {
-    func toggleCollapsed(_ id: UUID) {
-        if collapsedGroups.contains(id) {
-            collapsedGroups.remove(id)
-        } else {
-            collapsedGroups.insert(id)
-        }
-    }
-
     func deleteGroup(_ group: TaskGroupModel) {
         withAnimation(.spring(response: 0.3)) {
             modelContext.delete(group)
@@ -753,8 +758,7 @@ private extension TasksView {
         let wasCompleted = task.isCompleted
         let taskTitle = task.title
 
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-
+        toggleTrigger.toggle()
         recentlyChangedTaskId = task.id
         recentlyChangedTask = task
         taskIsLeaving = false
@@ -843,7 +847,7 @@ private extension TasksView {
     func undoTaskChange() {
         guard let task = recentlyChangedTask else { return }
 
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        mediumTrigger.toggle()
 
         withAnimation(.spring(response: 0.4)) {
             toastMessage = nil
@@ -858,7 +862,6 @@ private extension TasksView {
                 task.completedAt = nil
                 task.updatedAt = .now
             }
-
             if task.reminderDate != nil {
                 Task {
                     await DefaultTaskNotificationService.shared.scheduleReminder(for: task)
@@ -870,13 +873,12 @@ private extension TasksView {
                 task.completedAt = .now
                 task.updatedAt = .now
             }
-
             DefaultTaskNotificationService.shared.cancelReminder(for: task)
         }
     }
 
     func duplicateTask(_ task: TaskModel) {
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        lightTrigger.toggle()
 
         let newTask = TaskModel(
             title: task.title,
@@ -892,7 +894,7 @@ private extension TasksView {
     }
 
     func changePriority(_ task: TaskModel, to priority: TaskPriority) {
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        lightTrigger.toggle()
 
         withAnimation(.spring(response: 0.3)) {
             task.priority = priority
@@ -901,7 +903,7 @@ private extension TasksView {
     }
 
     func moveToProject(_ task: TaskModel, project: TaskGroupModel?) {
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        lightTrigger.toggle()
 
         withAnimation(.spring(response: 0.3)) {
             task.group = project
@@ -910,7 +912,7 @@ private extension TasksView {
     }
 
     func deleteTask(_ task: TaskModel) {
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        mediumTrigger.toggle()
 
         DefaultTaskNotificationService.shared.cancelReminder(for: task)
 
@@ -960,9 +962,7 @@ private extension TasksView {
                 noDate.append(task)
                 continue
             }
-
             let dueDay = calendar.startOfDay(for: dueDate)
-
             if dueDay < today {
                 overdue.append(task)
             } else if calendar.isDateInToday(dueDate) {
@@ -983,7 +983,6 @@ private extension TasksView {
         if !thisWeek.isEmpty { result.append(("This Week", thisWeek)) }
         if !later.isEmpty { result.append(("Later", later)) }
         if !noDate.isEmpty { result.append(("No Due Date", noDate)) }
-
         return result
     }
 
@@ -1007,25 +1006,6 @@ private extension TasksView {
         if !high.isEmpty { result.append(("High Priority", high)) }
         if !medium.isEmpty { result.append(("Medium Priority", medium)) }
         if !low.isEmpty { result.append(("Low Priority", low)) }
-
-        return result
-    }
-
-    func groupByProject(_ tasks: [TaskModel]) -> [(String, [TaskModel], TaskGroupModel?)] {
-        var result: [(String, [TaskModel], TaskGroupModel?)] = []
-
-        for group in taskGroups {
-            let groupTasks = tasks.filter { $0.group?.id == group.id }
-            if !groupTasks.isEmpty {
-                result.append((group.name, groupTasks, group))
-            }
-        }
-
-        let ungroupedTasks = tasks.filter { $0.group == nil }
-        if !ungroupedTasks.isEmpty {
-            result.append(("Inbox", ungroupedTasks, nil))
-        }
-
         return result
     }
 }
@@ -1042,7 +1022,7 @@ private enum TaskFilter: String, CaseIterable, Identifiable {
         case .all: "All"
         case .today: "Today"
         case .upcoming: "Upcoming"
-        case .completed: "Completed"
+        case .completed: "Done"
         }
     }
 }
@@ -1098,6 +1078,8 @@ private struct TaskRow: View {
     let isLeaving: Bool
     let onToggle: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     @State private var checkmarkScale: CGFloat = 1.0
     @State private var showCelebration = false
     @State private var showStrikethrough = false
@@ -1107,14 +1089,19 @@ private struct TaskRow: View {
             priorityBar
             contentRow
         }
-        .background { rowBackground }
-        .overlay { celebrationOverlay }
-        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.card, style: .continuous))
         .scaleEffect(isLeaving ? 0.92 : (isRecentlyChanged ? 1.02 : 1.0))
         .opacity(isLeaving ? 0.6 : 1.0)
         .offset(y: isLeaving ? (task.isCompleted ? 8 : -8) : 0)
-        .animation(.spring(response: 0.5, dampingFraction: 0.7), value: isRecentlyChanged)
-        .animation(.spring(response: 0.6, dampingFraction: 0.75), value: isLeaving)
+        .animation(
+            reduceMotion ? .none : .spring(response: 0.5, dampingFraction: 0.7),
+            value: isRecentlyChanged
+        )
+        .animation(
+            reduceMotion ? .none : .spring(response: 0.6, dampingFraction: 0.75),
+            value: isLeaving
+        )
+        .overlay(alignment: .center) { celebrationOverlay }
         .onChange(of: task.isCompleted) { _, newValue in
             if !newValue {
                 showStrikethrough = false
@@ -1131,18 +1118,19 @@ private extension TaskRow {
         RoundedRectangle(cornerRadius: 2)
             .fill(task.isCompleted ? Color.nexusGreen.opacity(0.5) : priorityAccentColor)
             .frame(width: 3)
-            .padding(.vertical, 10)
+            .padding(.vertical, DesignSystem.Spacing.xs)
+            .accessibilityHidden(true)
     }
 
     var contentRow: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: DesignSystem.Spacing.md) {
             checkmarkButton
             taskContent
-            Spacer(minLength: 8)
+            Spacer(minLength: DesignSystem.Spacing.xs)
             trailingContent
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 14)
+        .padding(.horizontal, DesignSystem.Spacing.md)
+        .padding(.vertical, DesignSystem.Spacing.md)
     }
 
     var checkmarkButton: some View {
@@ -1157,6 +1145,8 @@ private extension TaskRow {
             .scaleEffect(checkmarkScale)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(task.isCompleted ? "Mark incomplete" : "Mark complete")
+        .accessibilityAddTraits(.isButton)
     }
 
     var completedCheckmark: some View {
@@ -1192,7 +1182,7 @@ private extension TaskRow {
     }
 
     var taskContent: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.xxs + 2) {
             titleText
             notesText
             badgesRow
@@ -1205,7 +1195,7 @@ private extension TaskRow {
             .fontWeight(.medium)
             .foregroundStyle(task.isCompleted ? .secondary : .primary)
             .strikethrough(task.isCompleted || showStrikethrough, color: .secondary)
-            .animation(.easeInOut(duration: 0.4), value: showStrikethrough)
+            .animation(reduceMotion ? .none : .easeInOut(duration: 0.4), value: showStrikethrough)
             .lineLimit(2)
     }
 
@@ -1223,19 +1213,16 @@ private extension TaskRow {
     @ViewBuilder
     var badgesRow: some View {
         if hasBadges {
-            HStack(spacing: 8) {
+            HStack(spacing: DesignSystem.Spacing.xs) {
                 if let dueDate = task.dueDate {
                     dueDateBadge(dueDate)
                 }
-
                 if task.reminderDate != nil {
                     reminderBadge
                 }
-
                 if task.url != nil {
                     urlBadge
                 }
-
                 if let assignees = task.assignees, !assignees.isEmpty {
                     assigneesBadge(assignees)
                 }
@@ -1244,12 +1231,13 @@ private extension TaskRow {
     }
 
     var trailingContent: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: DesignSystem.Spacing.xs) {
             if isLeaving {
                 Image(systemName: task.isCompleted ? "arrow.down.circle.fill" : "arrow.up.circle.fill")
                     .font(.system(size: 16))
                     .foregroundStyle(highlightColor.opacity(0.8))
                     .transition(.scale.combined(with: .opacity))
+                    .accessibilityHidden(true)
             }
 
             if task.priority == .urgent {
@@ -1261,6 +1249,7 @@ private extension TaskRow {
             Image(systemName: "chevron.right")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.tertiary)
+                .accessibilityHidden(true)
         }
     }
 
@@ -1269,33 +1258,15 @@ private extension TaskRow {
             .font(.system(size: 12, weight: .semibold))
             .foregroundStyle(color)
             .opacity(task.isCompleted ? 0.4 : 1)
-    }
-
-    var rowBackground: some View {
-        RoundedRectangle(cornerRadius: 14)
-            .fill(isRecentlyChanged ? highlightColor.opacity(0.08) : Color.nexusSurface)
-            .shadow(
-                color: isRecentlyChanged ? highlightColor.opacity(0.15) : Color.black.opacity(0.08),
-                radius: isRecentlyChanged ? 8 : 4,
-                x: 0,
-                y: 2
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 14)
-                    .strokeBorder(
-                        isRecentlyChanged
-                            ? highlightColor.opacity(0.4)
-                            : priorityAccentColor.opacity(task.isCompleted ? 0 : 0.15),
-                        lineWidth: isRecentlyChanged ? 1.5 : 1
-                    )
-            }
+            .accessibilityHidden(true)
     }
 
     @ViewBuilder
     var celebrationOverlay: some View {
-        if showCelebration, task.isCompleted {
+        if showCelebration, task.isCompleted, !reduceMotion {
             CelebrationParticles()
                 .allowsHitTesting(false)
+                .accessibilityHidden(true)
         }
     }
 }
@@ -1311,50 +1282,46 @@ private extension TaskRow {
     }
 
     func dueDateBadge(_ dueDate: Date) -> some View {
-        HStack(spacing: 4) {
+        HStack(spacing: DesignSystem.Spacing.xxs) {
             Image(systemName: dueDateIcon(dueDate))
                 .font(.system(size: 10, weight: .semibold))
             Text(formatDueDate(dueDate))
                 .font(.system(size: 11, weight: .medium))
         }
         .foregroundStyle(dueDateColor(dueDate))
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background {
-            Capsule().fill(dueDateColor(dueDate).opacity(0.12))
-        }
+        .padding(.horizontal, DesignSystem.Spacing.xs)
+        .padding(.vertical, DesignSystem.Spacing.xxs)
+        .background { Capsule().fill(dueDateColor(dueDate).opacity(0.12)) }
         .opacity(task.isCompleted ? 0.5 : 1)
+        .accessibilityLabel("Due \(formatDueDate(dueDate))")
     }
 
     var reminderBadge: some View {
         Image(systemName: "bell.fill")
             .font(.system(size: 9, weight: .semibold))
             .foregroundStyle(Color.nexusPurple)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 4)
-            .background {
-                Capsule().fill(Color.nexusPurple.opacity(0.12))
-            }
+            .padding(.horizontal, DesignSystem.Spacing.xxs + 2)
+            .padding(.vertical, DesignSystem.Spacing.xxs)
+            .background { Capsule().fill(Color.nexusPurple.opacity(0.12)) }
             .opacity(task.isCompleted ? 0.5 : 1)
+            .accessibilityLabel("Reminder set")
     }
 
     var urlBadge: some View {
         Image(systemName: "link")
             .font(.system(size: 9, weight: .semibold))
             .foregroundStyle(Color.nexusBlue)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 4)
-            .background {
-                Capsule().fill(Color.nexusBlue.opacity(0.12))
-            }
+            .padding(.horizontal, DesignSystem.Spacing.xxs + 2)
+            .padding(.vertical, DesignSystem.Spacing.xxs)
+            .background { Capsule().fill(Color.nexusBlue.opacity(0.12)) }
             .opacity(task.isCompleted ? 0.5 : 1)
+            .accessibilityLabel("Has link")
     }
 
     func assigneesBadge(_ assignees: [PersonModel]) -> some View {
         HStack(spacing: -4) {
             ForEach(Array(assignees.prefix(2))) { person in
-                let avatarColor = Color(hex: person.colorHex) ?? .nexusPurple
-
+                let avatarColor = Color(hex: person.colorHex)
                 Text(person.initials)
                     .font(.system(size: 8, weight: .semibold))
                     .foregroundStyle(.white)
@@ -1376,7 +1343,6 @@ private extension TaskRow {
             if assignees.count > 2 {
                 let overflowCount = assignees.count - 2
                 let displayText = overflowCount > 99 ? "+99" : "+\(overflowCount)"
-
                 Text(displayText)
                     .font(.system(size: 7, weight: .semibold))
                     .foregroundStyle(.secondary)
@@ -1396,6 +1362,15 @@ private extension TaskRow {
             }
         }
         .opacity(task.isCompleted ? 0.5 : 1)
+        .accessibilityLabel(assigneesAccessibilityLabel(assignees))
+    }
+
+    func assigneesAccessibilityLabel(_ assignees: [PersonModel]) -> String {
+        let names = assignees.prefix(2).map { $0.initials }.joined(separator: ", ")
+        if assignees.count > 2 {
+            return "\(names) and \(assignees.count - 2) more"
+        }
+        return names
     }
 }
 
@@ -1416,35 +1391,25 @@ private extension TaskRow {
     }
 
     func dueDateIcon(_ date: Date) -> String {
-        if Calendar.current.isDateInToday(date) {
-            return "sun.max.fill"
-        } else if date < Date() {
-            return "exclamationmark.circle.fill"
-        } else if Calendar.current.isDateInTomorrow(date) {
-            return "sunrise.fill"
-        }
+        if Calendar.current.isDateInToday(date) { return "sun.max.fill" }
+        if date < Date() { return "exclamationmark.circle.fill" }
+        if Calendar.current.isDateInTomorrow(date) { return "sunrise.fill" }
         return "calendar"
     }
 
     func formatDueDate(_ date: Date) -> String {
-        if Calendar.current.isDateInToday(date) {
-            return "Today"
-        } else if Calendar.current.isDateInTomorrow(date) {
-            return "Tomorrow"
-        } else if date < Date() {
+        if Calendar.current.isDateInToday(date) { return "Today" }
+        if Calendar.current.isDateInTomorrow(date) { return "Tomorrow" }
+        if date < Date() {
             let days = Calendar.current.dateComponents([.day], from: date, to: Date()).day ?? 0
             return days == 1 ? "1 day ago" : "\(days) days ago"
-        } else {
-            return date.formatted(.dateTime.month(.abbreviated).day())
         }
+        return date.formatted(.dateTime.month(.abbreviated).day())
     }
 
     func dueDateColor(_ date: Date) -> Color {
-        if Calendar.current.isDateInToday(date) {
-            return .nexusOrange
-        } else if date < Date() {
-            return .nexusRed
-        }
+        if Calendar.current.isDateInToday(date) { return .nexusOrange }
+        if date < Date() { return .nexusRed }
         return .secondary
     }
 }
@@ -1454,16 +1419,20 @@ private extension TaskRow {
 private extension TaskRow {
     func handleToggle() {
         if !task.isCompleted {
-            withAnimation(.spring(response: 0.25, dampingFraction: 0.4)) {
+            withAnimation(reduceMotion ? .none : .spring(response: 0.25, dampingFraction: 0.4)) {
                 checkmarkScale = 1.4
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.5)) {
+                withAnimation(reduceMotion ? .none : .spring(response: 0.35, dampingFraction: 0.5)) {
                     checkmarkScale = 1.0
                 }
             }
-            showCelebration = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            if !reduceMotion {
+                showCelebration = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    showStrikethrough = true
+                }
+            } else {
                 showStrikethrough = true
             }
         }
@@ -1493,6 +1462,7 @@ private struct CelebrationParticles: View {
                 createParticles(in: geo.size)
             }
         }
+        .accessibilityHidden(true)
     }
 
     private func createParticles(in size: CGSize) {
@@ -1550,5 +1520,4 @@ private struct Particle: Identifiable {
 
 #Preview {
     TasksView()
-        .preferredColorScheme(.dark)
 }

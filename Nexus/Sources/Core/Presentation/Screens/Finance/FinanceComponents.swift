@@ -21,29 +21,25 @@ struct TransactionRow: View {
     let transaction: TransactionModel
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DesignSystem.Spacing.sm) {
             categoryIcon
             titleAndCategory
             Spacer()
             amountAndDate
         }
-        .padding(12)
-        .background {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.nexusSurface)
-        }
+        .padding(DesignSystem.Spacing.sm)
+        .background(Color.nexusSurface, in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.card, style: .continuous))
     }
 }
 
 private extension TransactionRow {
     var categoryIcon: some View {
         Image(systemName: transaction.category.icon)
-            .font(.system(size: 16))
+            .font(.system(size: DesignSystem.Size.Icon.sm))
             .foregroundStyle(categoryColor)
-            .frame(width: 40, height: 40)
-            .background {
-                Circle().fill(categoryColor.opacity(0.15))
-            }
+            .frame(width: DesignSystem.Size.Button.compact, height: DesignSystem.Size.Button.compact)
+            .background(categoryColor.opacity(0.15), in: Circle())
+            .accessibilityHidden(true)
     }
 
     var titleAndCategory: some View {
@@ -73,11 +69,8 @@ private extension TransactionRow {
 
     var formattedAmount: String {
         let prefix = transaction.type == .income ? "+" : "-"
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = transaction.currency
-        let amount = formatter.string(from: NSNumber(value: transaction.amount)) ?? "$0.00"
-        return "\(prefix)\(amount)"
+        let formatted = transaction.amount.formatted(.currency(code: transaction.currency))
+        return "\(prefix)\(formatted)"
     }
 }
 
@@ -90,13 +83,13 @@ struct DateRangePickerSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
+            VStack(spacing: DesignSystem.Spacing.lg) {
                 datePickersRow
                 daysSelectedLabel
                 quickSelectGrid
                 Spacer()
             }
-            .padding(20)
+            .padding(DesignSystem.Spacing.md)
             .background(Color.nexusBackground)
             .navigationTitle("Select Date Range")
             .navigationBarTitleDisplayMode(.inline)
@@ -119,14 +112,12 @@ private extension DateRangePickerSheet {
             Spacer()
             endDatePicker
         }
-        .padding(16)
-        .background {
-            RoundedRectangle(cornerRadius: 12).fill(Color.nexusSurface)
-        }
+        .padding(DesignSystem.Spacing.md)
+        .background(Color.nexusSurface, in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md, style: .continuous))
     }
 
     var startDatePicker: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
             Text("Start Date")
                 .font(.nexusCaption)
                 .foregroundStyle(.secondary)
@@ -138,7 +129,7 @@ private extension DateRangePickerSheet {
     }
 
     var endDatePicker: some View {
-        VStack(alignment: .trailing, spacing: 8) {
+        VStack(alignment: .trailing, spacing: DesignSystem.Spacing.xs) {
             Text("End Date")
                 .font(.nexusCaption)
                 .foregroundStyle(.secondary)
@@ -157,13 +148,13 @@ private extension DateRangePickerSheet {
     }
 
     var quickSelectGrid: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: DesignSystem.Spacing.sm) {
             Text("Quick Select")
                 .font(.nexusCaption)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: DesignSystem.Spacing.sm) {
                 quickSelectButton("Last 7 Days", days: 7)
                 quickSelectButton("Last 14 Days", days: 14)
                 quickSelectButton("Last 30 Days", days: 30)
@@ -181,13 +172,10 @@ private extension DateRangePickerSheet {
                 .font(.nexusSubheadline)
                 .fontWeight(.medium)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .background {
-                    RoundedRectangle(cornerRadius: 10).fill(Color.nexusSurfaceSecondary)
-                }
-                .foregroundStyle(.primary)
+                .padding(.vertical, DesignSystem.Spacing.sm)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.glass)
+        .accessibilityLabel("Select last \(days) days")
     }
 }
 

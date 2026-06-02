@@ -95,7 +95,6 @@ private extension TaskEditorView {
         ToolbarItem(placement: .topBarLeading) {
             Button("Cancel") { dismiss() }
         }
-
         ToolbarItem(placement: .topBarTrailing) {
             Button("Save") { saveTask() }
                 .fontWeight(.semibold)
@@ -143,7 +142,7 @@ private extension TaskEditorView {
 
     var urlSection: some View {
         Section {
-            HStack(spacing: 12) {
+            HStack(spacing: DesignSystem.Spacing.sm) {
                 urlIcon
                 urlTextField
                 urlClearButton
@@ -153,9 +152,10 @@ private extension TaskEditorView {
 
     var urlIcon: some View {
         Image(systemName: "link")
-            .font(.system(size: 16))
+            .font(.nexusSubheadline)
             .foregroundStyle(url.isEmpty ? Color.gray.opacity(0.5) : Color.nexusBlue)
             .frame(width: 24)
+            .accessibilityHidden(true)
     }
 
     var urlTextField: some View {
@@ -174,31 +174,33 @@ private extension TaskEditorView {
                 url = ""
             } label: {
                 Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 16))
+                    .font(.nexusSubheadline)
                     .foregroundStyle(.tertiary)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Clear URL")
         }
     }
 
     var prioritySection: some View {
         Section {
             Picker("Priority", selection: $priority) {
-                ForEach(TaskPriority.allCases, id: \.self) { priority in
-                    priorityOption(priority)
+                ForEach(TaskPriority.allCases, id: \.self) { p in
+                    priorityOption(p)
                 }
             }
         }
     }
 
-    func priorityOption(_ priority: TaskPriority) -> some View {
+    func priorityOption(_ p: TaskPriority) -> some View {
         HStack {
             Circle()
-                .fill(colorForPriority(priority))
+                .fill(colorForPriority(p))
                 .frame(width: 8, height: 8)
-            Text(priority.rawValue.capitalized)
+                .accessibilityHidden(true)
+            Text(p.rawValue.capitalized)
         }
-        .tag(priority)
+        .tag(p)
     }
 
     var projectSection: some View {
@@ -252,19 +254,19 @@ private extension TaskEditorView {
             if let groupId = selectedGroupId,
                let group = taskGroups.first(where: { $0.id == groupId }) {
                 Image(systemName: group.icon)
-                    .font(.system(size: 14))
-                    .foregroundStyle(Color(hex: group.colorHex) ?? Color.nexusPurple)
+                    .font(.nexusSubheadline)
+                    .foregroundStyle(Color(hex: group.colorHex))
                 Text(group.name)
                     .foregroundStyle(.primary)
             } else {
                 Image(systemName: "tray.fill")
-                    .font(.system(size: 14))
+                    .font(.nexusSubheadline)
                     .foregroundStyle(Color.nexusBlue)
                 Text("Inbox")
                     .foregroundStyle(.primary)
             }
             Image(systemName: "chevron.up.chevron.down")
-                .font(.system(size: 10))
+                .font(.nexusCaption2)
                 .foregroundStyle(.secondary)
         }
     }
@@ -295,7 +297,7 @@ private extension TaskEditorView {
             }
 
             Image(systemName: "chevron.right")
-                .font(.system(size: 12))
+                .font(.nexusCaption.weight(.semibold))
                 .foregroundStyle(.tertiary)
         }
     }
@@ -304,9 +306,7 @@ private extension TaskEditorView {
         Section {
             Toggle("Due Date", isOn: $hasDueDate.animation())
                 .onChange(of: hasDueDate) { _, newValue in
-                    if newValue, dueDate == nil {
-                        dueDate = Date()
-                    }
+                    if newValue, dueDate == nil { dueDate = Date() }
                 }
 
             if hasDueDate {
@@ -330,9 +330,7 @@ private extension TaskEditorView {
         Section {
             Toggle("Reminder", isOn: $hasReminder.animation())
                 .onChange(of: hasReminder) { _, newValue in
-                    if newValue, reminderDate == nil {
-                        reminderDate = Date()
-                    }
+                    if newValue, reminderDate == nil { reminderDate = Date() }
                 }
 
             if hasReminder {
@@ -376,7 +374,7 @@ private extension TaskEditorView {
     var assigneeAvatars: some View {
         HStack(spacing: -8) {
             ForEach(Array(selectedAssignees.prefix(3))) { person in
-                personAvatar(person, size: 28)
+                personAvatar(person, size: DesignSystem.Size.Avatar.sm)
             }
 
             if selectedAssignees.count > 3 {
@@ -386,11 +384,11 @@ private extension TaskEditorView {
     }
 
     func personAvatar(_ person: PersonModel, size: CGFloat) -> some View {
-        let avatarColor = Color(hex: person.colorHex) ?? .nexusPurple
+        let avatarColor = Color(hex: person.colorHex)
 
         return Text(person.initials)
             .font(.system(size: size * 0.4, weight: .semibold))
-            .foregroundStyle(.white)
+            .foregroundStyle(Color.nexusOnAccent)
             .frame(width: size, height: size)
             .background(Circle().fill(avatarColor))
             .overlay(
@@ -412,12 +410,11 @@ private extension TaskEditorView {
         let displayText = overflowCount > 99 ? "+99" : "+\(overflowCount)"
 
         return Text(displayText)
-            .font(.system(size: 9, weight: .semibold))
+            .font(.nexusCaption2.weight(.semibold))
             .foregroundStyle(.secondary)
-            .frame(width: 28, height: 28)
+            .frame(width: DesignSystem.Size.Avatar.sm, height: DesignSystem.Size.Avatar.sm)
             .background(
-                Circle()
-                    .fill(.ultraThinMaterial)
+                Circle().fill(.ultraThinMaterial)
             )
             .overlay(
                 Circle()
@@ -452,8 +449,8 @@ private extension TaskEditorView {
         }
     }
 
-    func colorForPriority(_ priority: TaskPriority) -> Color {
-        switch priority {
+    func colorForPriority(_ p: TaskPriority) -> Color {
+        switch p {
         case .low: .secondary
         case .medium: .nexusBlue
         case .high: .nexusOrange
@@ -462,9 +459,7 @@ private extension TaskEditorView {
     }
 
     func handleOnAppear() {
-        if task == nil {
-            focusedField = .title
-        }
+        if task == nil { focusedField = .title }
     }
 }
 
@@ -556,6 +551,7 @@ struct PeoplePickerSheet: View {
     @State private var contactsAccessDenied = false
     @State private var searchText = ""
     @State private var viewingTasksForPerson: PersonModel?
+    @State private var selectionFeedback = false
 
     var body: some View {
         NavigationStack {
@@ -593,6 +589,7 @@ struct PeoplePickerSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+        .sensoryFeedback(.selection, trigger: selectionFeedback)
     }
 }
 
@@ -626,16 +623,16 @@ private extension PeoplePickerSheet {
             Button {
                 requestContactsAccess()
             } label: {
-                HStack(spacing: 12) {
+                HStack(spacing: DesignSystem.Spacing.sm) {
                     Image(systemName: "person.crop.circle.badge.plus")
-                        .font(.system(size: 20))
+                        .font(.nexusTitle3)
                         .foregroundStyle(Color.nexusBlue)
-                        .frame(width: 36)
+                        .frame(width: DesignSystem.Size.Icon.badge)
+                        .accessibilityHidden(true)
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Import from Contacts")
-                            .font(.nexusSubheadline)
-                            .fontWeight(.medium)
+                            .font(.nexusSubheadline.weight(.medium))
                             .foregroundStyle(.primary)
 
                         Text("Add people from your address book")
@@ -646,8 +643,9 @@ private extension PeoplePickerSheet {
                     Spacer()
 
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 12))
+                        .font(.nexusCaption.weight(.semibold))
                         .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
                 }
                 .contentShape(Rectangle())
             }
@@ -656,9 +654,7 @@ private extension PeoplePickerSheet {
     }
 
     var filteredPeople: [PersonModel] {
-        if searchText.isEmpty {
-            return allPeople
-        }
+        if searchText.isEmpty { return allPeople }
         return allPeople.filter { person in
             person.name.localizedCaseInsensitiveContains(searchText) ||
             person.email?.localizedCaseInsensitiveContains(searchText) == true ||
@@ -673,18 +669,17 @@ private extension PeoplePickerSheet {
             }
             .onDelete(perform: deletePeople)
         } header: {
-            if !allPeople.isEmpty {
-                Text("People")
-            }
+            if !allPeople.isEmpty { Text("People") }
         }
     }
 
     var emptyState: some View {
         Section {
-            VStack(spacing: 16) {
+            VStack(spacing: DesignSystem.Spacing.md) {
                 Image(systemName: "person.2")
-                    .font(.system(size: 40))
+                    .font(.nexusTitle)
                     .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
 
                 Text("No People Yet")
                     .font(.nexusHeadline)
@@ -697,7 +692,7 @@ private extension PeoplePickerSheet {
                 addPersonButton
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 40)
+            .padding(.vertical, DesignSystem.Spacing.xxl)
         }
         .listRowBackground(Color.clear)
     }
@@ -710,42 +705,46 @@ private extension PeoplePickerSheet {
             }
         } label: {
             Label("Add Manually", systemImage: "plus")
-                .font(.nexusSubheadline)
-                .fontWeight(.semibold)
-                .foregroundStyle(.white)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
+                .font(.nexusSubheadline.weight(.semibold))
+                .foregroundStyle(Color.nexusOnAccent)
+                .padding(.horizontal, DesignSystem.Spacing.lg)
+                .padding(.vertical, DesignSystem.Spacing.sm)
                 .background(Capsule().fill(Color.nexusPurple))
         }
     }
 
     func personRow(_ person: PersonModel) -> some View {
-        HStack(spacing: 12) {
-            personAvatar(person)
-            personInfo(person)
-            Spacer()
-            selectionIndicator(person)
+        Button {
+            toggleSelection(person)
+        } label: {
+            HStack(spacing: DesignSystem.Spacing.sm) {
+                personAvatar(person)
+                personInfo(person)
+                Spacer()
+                selectionIndicator(person)
+            }
+            .contentShape(Rectangle())
         }
-        .contentShape(Rectangle())
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(personAccessibilityLabel(person))
+        .accessibilityAddTraits(selectedIds.contains(person.id) ? [.isSelected] : [])
         .contextMenu {
             personContextMenu(person)
-        }
-        .onTapGesture {
-            toggleSelection(person)
         }
     }
 
     func personAvatar(_ person: PersonModel) -> some View {
         ZStack(alignment: .bottomTrailing) {
             Text(person.initials)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 36, height: 36)
-                .background(Circle().fill(Color(hex: person.colorHex) ?? .nexusPurple))
+                .font(.nexusFootnote.weight(.semibold))
+                .foregroundStyle(Color.nexusOnAccent)
+                .frame(width: DesignSystem.Size.Icon.badge, height: DesignSystem.Size.Icon.badge)
+                .background(Circle().fill(Color(hex: person.colorHex)))
 
             if person.isLinkedToContact {
                 Image(systemName: "person.crop.circle.fill")
-                    .font(.system(size: 14))
+                    .font(.nexusFootnote)
                     .foregroundStyle(Color.nexusBlue)
                     .background(
                         Circle()
@@ -755,25 +754,24 @@ private extension PeoplePickerSheet {
                     .offset(x: 2, y: 2)
             }
         }
+        .accessibilityHidden(true)
     }
 
     func personInfo(_ person: PersonModel) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
                 Text(person.name)
-                    .font(.nexusSubheadline)
-                    .fontWeight(.medium)
+                    .font(.nexusSubheadline.weight(.medium))
                     .foregroundStyle(.primary)
 
                 if person.isLinkedToContact {
                     Text("Contacts")
-                        .font(.system(size: 9, weight: .medium))
+                        .font(.nexusCaption2.weight(.medium))
                         .foregroundStyle(Color.nexusBlue)
                         .padding(.horizontal, 5)
                         .padding(.vertical, 2)
                         .background(
-                            Capsule()
-                                .fill(Color.nexusBlue.opacity(0.15))
+                            Capsule().fill(Color.nexusBlue.opacity(0.15))
                         )
                 }
             }
@@ -800,12 +798,13 @@ private extension PeoplePickerSheet {
                 .opacity(isSelected ? 0 : 1)
 
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 22))
+                .font(.nexusTitle3)
                 .foregroundStyle(Color.nexusGreen)
                 .scaleEffect(isSelected ? 1 : 0.5)
                 .opacity(isSelected ? 1 : 0)
         }
         .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isSelected)
+        .accessibilityHidden(true)
     }
 
     @ViewBuilder
@@ -834,6 +833,15 @@ private extension PeoplePickerSheet {
             Label("Delete Person", systemImage: "trash")
         }
     }
+
+    func personAccessibilityLabel(_ person: PersonModel) -> String {
+        var parts = [person.name]
+        if let email = person.email, !email.isEmpty { parts.append(email) }
+        else if let phone = person.phone, !phone.isEmpty { parts.append(phone) }
+        let state = selectedIds.contains(person.id) ? "Selected" : "Not selected"
+        parts.append(state)
+        return parts.joined(separator: ", ")
+    }
 }
 
 // MARK: - PeoplePickerSheet Actions
@@ -844,16 +852,10 @@ private extension PeoplePickerSheet {
     }
 
     func toggleSelection(_ person: PersonModel) {
-        let isCurrentlySelected = selectedIds.contains(person.id)
-
-        if isCurrentlySelected {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        } else {
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-        }
+        selectionFeedback.toggle()
 
         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-            if isCurrentlySelected {
+            if selectedIds.contains(person.id) {
                 selectedIds.remove(person.id)
             } else {
                 selectedIds.insert(person.id)
@@ -870,7 +872,6 @@ private extension PeoplePickerSheet {
     }
 
     func deletePerson(_ person: PersonModel) {
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         selectedIds.remove(person.id)
         modelContext.delete(person)
     }
@@ -880,7 +881,7 @@ private extension PeoplePickerSheet {
             let status = await ContactsService.requestAccess()
             await MainActor.run {
                 switch status {
-                case .authorized:
+                case .authorized, .limited:
                     showContactsPicker = true
                 case .denied, .restricted:
                     contactsAccessDenied = true
@@ -917,5 +918,4 @@ private extension PeoplePickerSheet {
 
 #Preview {
     TaskEditorView(task: nil)
-        .preferredColorScheme(.dark)
 }

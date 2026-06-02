@@ -73,7 +73,7 @@ private extension PersonTasksView {
             .font(.system(size: 32, weight: .semibold))
             .foregroundStyle(.white)
             .frame(width: 80, height: 80)
-            .background(Circle().fill(Color(hex: person.colorHex) ?? .nexusPurple))
+            .background(Circle().fill(Color(hex: person.colorHex)))
     }
 
     var tasksList: some View {
